@@ -6,6 +6,10 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/clients (US-07/08/09):** Clientes — `ClientViewSet` en `/api/clients/`
+  (crear, editar, listar) con modelo `Client` propiedad por cuenta y aislamiento
+  multi-tenant. Nombre obligatorio ("El nombre del cliente es obligatorio") y correo
+  con formato válido ("El correo no tiene un formato válido").
 - **apps/catalog (US-04/05/06):** Catálogo de tarifas — `TariffViewSet` en
   `/api/tariffs/` (crear, editar, listar) con modelo `Tariff` propiedad por cuenta.
   Aislamiento multi-tenant (cada cuenta ve solo sus tarifas), validación de precio
