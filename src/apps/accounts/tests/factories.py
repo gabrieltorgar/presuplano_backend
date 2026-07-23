@@ -10,6 +10,7 @@ class UserFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = User
+        skip_postgeneration_save = True
 
     phone = factory.Sequence(lambda n: f"55100000{n:03d}")
     is_phone_verified = True
