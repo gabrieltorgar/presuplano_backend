@@ -6,6 +6,12 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/quotes (US-10/11/12/13):** Cotizaciones — `QuoteViewSet` en `/api/quotes/`
+  con `Quote` + `QuoteItem`. Total automático desde las partidas; cada partida
+  **congela** nombre/unidad/precio de la tarifa al cotizar (histórico de precio,
+  US-05). Crear valida partidas y cantidad > 0; editar borrador recalcula el total
+  y se bloquea tras generar el documento; acción `generate-document/` idempotente
+  ("No se puede generar… sin partidas"); listado aislado por cuenta.
 - **apps/clients (US-07/08/09):** Clientes — `ClientViewSet` en `/api/clients/`
   (crear, editar, listar) con modelo `Client` propiedad por cuenta y aislamiento
   multi-tenant. Nombre obligatorio ("El nombre del cliente es obligatorio") y correo

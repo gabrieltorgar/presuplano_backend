@@ -9,4 +9,5 @@ urlpatterns = [
     path("auth/", include("apps.accounts.urls")),
     path("", include("apps.catalog.urls")),
     path("", include("apps.clients.urls")),
+    path("", include("apps.quotes.urls")),
 ]
