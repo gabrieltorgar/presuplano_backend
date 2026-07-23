@@ -9,7 +9,7 @@ from pathlib import Path
 def main() -> None:
     """Run administrative tasks."""
     # PYTHONPATH root is src/
-    src_path = Path(__file__).resolve().parent / "src"
+    src_path = Path(__file__).resolve().parent
     if str(src_path) not in sys.path:
         sys.path.insert(0, str(src_path))
 

@@ -10,7 +10,7 @@ from pathlib import Path
 import environ
 
 # BASE_DIR = repo root (parents: settings.py -> core -> src -> repo)
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
     DEBUG=(bool, True),
@@ -95,7 +95,7 @@ ROOT_URLCONF = "core.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "src" / "templates"],
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -109,7 +109,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "core.wsgi.application"
-ASGI_APPLICATION = "core.asgi.application"
 
 DATABASES = {"default": env.db("DATABASE_URL")}
 
@@ -152,5 +151,4 @@ CORS_ALLOW_CREDENTIALS = True
 
 # STATIC/MEDIA + security + logging + storages (media on R2 in production)
 from .env import *  # noqa: E402,F403
-from .logging_config import LOGGING  # noqa: E402,F401
 from .settings_storages import *  # noqa: E402,F403
