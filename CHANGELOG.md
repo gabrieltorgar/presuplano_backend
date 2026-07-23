@@ -6,6 +6,11 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/payments (US-18/19/20):** Pagos — `Payment` y `PaymentViewSet` en
+  `/api/payments/`. Registrar pago total o parcial validando monto > 0 y que no
+  supere el **saldo pendiente** (= avanzado − pagado); resumen de cobros
+  (`summary/`) con total pagado y saldo; comprobante (`voucher/`) del último pago
+  con su saldo resultante ("No hay pagos para generar un comprobante" si no hay).
 - **apps/projects (US-14/15/16/17):** Proyecto y avances — `Project`, `Progress` y
   `Evidence`. Iniciar proyecto desde una cotización documentada (`/api/projects/`);
   registrar avance por **cantidad o porcentaje** normalizado, con validación de

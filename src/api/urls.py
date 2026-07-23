@@ -11,4 +11,5 @@ urlpatterns = [
     path("", include("apps.clients.urls")),
     path("", include("apps.quotes.urls")),
     path("", include("apps.projects.urls")),
+    path("", include("apps.payments.urls")),
 ]
