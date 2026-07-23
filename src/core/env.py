@@ -10,7 +10,7 @@ from pathlib import Path
 import environ
 
 _env = environ.Env()
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[1]
 
 # Mirror settings.DEBUG: safe by default (False) on Vercel, True locally.
 _ON_VERCEL = _env.bool("VERCEL", default=False)
