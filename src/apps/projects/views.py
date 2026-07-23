@@ -15,7 +15,12 @@ from apps.projects.serializers import (
     ProjectSerializer,
     StartProjectSerializer,
 )
-from apps.projects.services import add_evidence, register_progress, start_project
+from apps.projects.services import (
+    add_evidence,
+    finalize_project,
+    register_progress,
+    start_project,
+)
 
 
 class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
@@ -42,6 +47,13 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         entry = register_progress(project=project, **serializer.validated_data)
         return Response(ProgressSerializer(entry).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def finalize(self, request: Request, pk: str | None = None) -> Response:
+        project = self.get_object()
+        confirm = bool(request.data.get("confirm", False))
+        summary = finalize_project(project=project, confirm=confirm)
+        return Response(summary)
 
 
 class ProgressViewSet(viewsets.ReadOnlyModelViewSet):

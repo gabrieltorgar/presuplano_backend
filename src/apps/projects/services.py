@@ -98,3 +98,61 @@ def add_evidence(*, progress: Progress, image) -> Evidence:
     if image.size > MAX_IMAGE_BYTES:
         raise ValidationError("La imagen supera el tamaño máximo permitido")
     return Evidence.objects.create(progress=progress, image=image)
+
+
+def build_project_summary(*, project: Project) -> dict:
+    """Build the closing summary document (work, dates, payments, totals)."""
+    # Local import avoids a circular import with the payments app.
+    from apps.payments.services import pending_balance, total_paid
+    from apps.projects.selectors import advanced_value, quoted_value
+
+    progresses = [
+        {
+            "date": progress.date,
+            "item": progress.quote_item.name,
+            "quantity": progress.quantity,
+            "earned_value": progress.earned_value,
+        }
+        for progress in project.progresses.all()
+    ]
+    payments = [
+        {"date": payment.date, "amount": payment.amount}
+        for payment in project.payments.all()
+    ]
+    return {
+        "status": project.status,
+        "client_name": project.quote.client.name,
+        "quoted_value": quoted_value(project),
+        "advanced_value": advanced_value(project),
+        "total_paid": total_paid(project),
+        "pending_balance": pending_balance(project),
+        "progresses": progresses,
+        "payments": payments,
+    }
+
+
+def finalize_project(*, project: Project, confirm: bool = False) -> dict:
+    """Finalize a project and produce its summary document.
+
+    If a pending balance remains and the caller has not confirmed, the project is
+    left open and a warning is raised (the client must confirm explicitly).
+
+    Raises:
+        ValidationError: project already finished, or pending balance without
+            explicit confirmation.
+    """
+    from apps.payments.services import pending_balance
+
+    if project.status == Project.Status.FINISHED:
+        raise ValidationError("El proyecto ya está finalizado")
+
+    pending = pending_balance(project)
+    if pending > 0 and not confirm:
+        raise ValidationError(
+            f"El proyecto tiene un saldo pendiente de cobro de {pending}"
+        )
+
+    project.status = Project.Status.FINISHED
+    project.save(update_fields=["status", "updated_at"])
+    logger.info("Project finalized", extra={"project_id": str(project.pk)})
+    return build_project_summary(project=project)

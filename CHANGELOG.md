@@ -6,6 +6,11 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/projects (US-21):** Cierre de proyecto — acción `finalize/` que finaliza el
+  proyecto y genera el **documento resumen** (avances con fechas, pagos y totales
+  cotizado/avanzado/pagado). Con saldo pendiente advierte "El proyecto tiene un saldo
+  pendiente de cobro de X" y solo finaliza con `confirm`; una vez finalizado bloquea
+  nuevos avances/pagos ("El proyecto está finalizado").
 - **apps/payments (US-18/19/20):** Pagos — `Payment` y `PaymentViewSet` en
   `/api/payments/`. Registrar pago total o parcial validando monto > 0 y que no
   supere el **saldo pendiente** (= avanzado − pagado); resumen de cobros
