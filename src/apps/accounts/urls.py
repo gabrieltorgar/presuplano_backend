@@ -2,10 +2,11 @@
 
 from django.urls import path
 
-from apps.accounts.views import RegisterView
+from apps.accounts.views import RegisterView, VerifyOtpView
 
 app_name = "accounts"
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
+    path("verify-otp/", VerifyOtpView.as_view(), name="verify-otp"),
 ]

@@ -26,6 +26,13 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
 
+class VerifyOtpSerializer(serializers.Serializer):
+    """Validates OTP verification input."""
+
+    phone = serializers.CharField(max_length=20)
+    code = serializers.CharField(max_length=6)
+
+
 class UserAccountSerializer(serializers.ModelSerializer):
     """Public representation of an account."""
 
