@@ -7,11 +7,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.serializers import (
+    LoginSerializer,
     RegisterSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
-from apps.accounts.services import register_user, verify_phone
+from apps.accounts.services import login_user, register_user, verify_phone
 
 
 class RegisterView(APIView):
@@ -38,3 +39,18 @@ class VerifyOtpView(APIView):
         serializer.is_valid(raise_exception=True)
         user = verify_phone(**serializer.validated_data)
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class LoginView(APIView):
+    """POST /api/auth/login/ — authenticate and return JWT tokens."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, tokens = login_user(**serializer.validated_data)
+        return Response(
+            {**tokens, "user": UserAccountSerializer(user).data},
+            status=status.HTTP_200_OK,
+        )

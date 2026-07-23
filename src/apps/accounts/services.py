@@ -5,7 +5,13 @@ import secrets
 
 from django.conf import settings
 from django.db import transaction
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import (
+    AuthenticationFailed,
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import Subscription, User
 
@@ -58,3 +64,25 @@ def verify_phone(*, phone: str, code: str) -> User:
     user.save(update_fields=["is_phone_verified", "updated_at"])
     logger.info("Phone verified", extra={"user_id": str(user.pk)})
     return user
+
+
+def login_user(*, phone: str, password: str) -> tuple[User, dict[str, str]]:
+    """Authenticate by phone + password and issue JWT tokens.
+
+    Credentials are checked before verification status so that a correct
+    password on an unverified account yields 403 (not 401).
+
+    Raises:
+        AuthenticationFailed: unknown phone or wrong password (401).
+        PermissionDenied: correct credentials but phone not verified (403).
+    """
+    user = User.objects.filter(phone=phone).first()
+    if user is None or not user.check_password(password):
+        raise AuthenticationFailed("Credenciales inválidas")
+    if not user.is_phone_verified:
+        raise PermissionDenied("Debes verificar tu teléfono antes de iniciar sesión")
+
+    refresh = RefreshToken.for_user(user)
+    tokens = {"access": str(refresh.access_token), "refresh": str(refresh)}
+    logger.info("Login succeeded", extra={"user_id": str(user.pk)})
+    return user, tokens

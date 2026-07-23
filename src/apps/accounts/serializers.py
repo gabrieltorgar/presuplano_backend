@@ -33,6 +33,13 @@ class VerifyOtpSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=6)
 
 
+class LoginSerializer(serializers.Serializer):
+    """Validates login input."""
+
+    phone = serializers.CharField(max_length=20)
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
 class UserAccountSerializer(serializers.ModelSerializer):
     """Public representation of an account."""
 

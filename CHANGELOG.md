@@ -6,6 +6,10 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/accounts (US-03):** Inicio de sesión — `POST /api/auth/login/` autentica por
+  teléfono y contraseña y devuelve tokens JWT (SimpleJWT). Verifica credenciales antes
+  que el estado del teléfono: contraseña incorrecta → 401 "Credenciales inválidas";
+  teléfono no verificado → 403 "Debes verificar tu teléfono antes de iniciar sesión".
 - **apps/accounts (US-02):** Verificación de teléfono — `POST /api/auth/verify-otp/`
   activa la cuenta comparando (constant-time) contra el código OTP universal del
   MVP. Rechaza código inválido ("Código de verificación inválido") y reverificación
