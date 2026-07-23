@@ -16,6 +16,7 @@ env = environ.Env(
     DEBUG=(bool, True),
     SECRET_KEY=(str, "dev-insecure-change-me"),
     ALLOWED_HOSTS=(list, ["*"]),
+    CSRF_TRUSTED_ORIGINS=(list, []),
     CORS_ALLOWED_ORIGINS=(list, ["http://localhost:5173"]),
     DATABASE_URL=(str, f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
     LOG_DIR=(str, str(BASE_DIR / "tmp" / "logs")),
@@ -28,9 +29,31 @@ _env_file = BASE_DIR / "src" / "core" / ".env"
 if _env_file.exists():
     environ.Env.read_env(str(_env_file))
 
-DEBUG = env("DEBUG")
+# Vercel injects VERCEL=1 in build and runtime; harden defaults there
+# (DEBUG off by default and the deployment's own hostnames trusted).
+ON_VERCEL = env.bool("VERCEL", default=False)
+
+DEBUG = env.bool("DEBUG", default=not ON_VERCEL)
 SECRET_KEY = env("SECRET_KEY")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
+
+# On Vercel, trust the deployment's own hostnames so ALLOWED_HOSTS, CSRF and the
+# admin login keep working on preview/production URLs without per-deploy config.
+_VERCEL_HOSTS = [
+    host
+    for host in (
+        env.str("VERCEL_URL", default=""),
+        env.str("VERCEL_BRANCH_URL", default=""),
+        env.str("VERCEL_PROJECT_PRODUCTION_URL", default=""),
+    )
+    if host
+]
+if _VERCEL_HOSTS:
+    ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS + _VERCEL_HOSTS))
+    CSRF_TRUSTED_ORIGINS = list(
+        dict.fromkeys(CSRF_TRUSTED_ORIGINS + [f"https://{h}" for h in _VERCEL_HOSTS])
+    )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -55,6 +78,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise serves static files (admin/DRF) from the serverless function;
+    # must sit right after SecurityMiddleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -103,6 +129,14 @@ USE_I18N = True
 USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Static files storage (WhiteNoise, compressed + manifest) ---
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # --- DRF ---
 REST_FRAMEWORK = {

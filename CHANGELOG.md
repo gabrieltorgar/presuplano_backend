@@ -5,6 +5,14 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 
 ## [Unreleased]
 
+### Fixed
+- **Deploy Vercel:** el backend no tenía entrypoint serverless, por lo que Vercel
+  no enrutaba nada (incluida la ruta `/admin/`) y no se corrían migraciones. Se
+  añadió `api/index.py` (WSGI), `vercel.json` con `buildCommand` que aplica
+  **migraciones** y `collectstatic`, y `requirements.txt` de runtime. **WhiteNoise**
+  sirve los estáticos del admin/DRF; `ALLOWED_HOSTS`/`CSRF_TRUSTED_ORIGINS` se
+  completan solos con los hostnames de Vercel (admin operativo en preview/prod).
+
 ### Added
 - **apps/projects (US-21):** Cierre de proyecto — acción `finalize/` que finaliza el
   proyecto y genera el **documento resumen** (avances con fechas, pagos y totales

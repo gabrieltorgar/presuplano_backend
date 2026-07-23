@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "uv sync && uv run python manage.py migrate --noinput && uv run python manage.py collectstatic --noinput",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+}
