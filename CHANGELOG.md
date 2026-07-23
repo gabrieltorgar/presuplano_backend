@@ -6,6 +6,11 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/catalog (US-04/05/06):** Catálogo de tarifas — `TariffViewSet` en
+  `/api/tariffs/` (crear, editar, listar) con modelo `Tariff` propiedad por cuenta.
+  Aislamiento multi-tenant (cada cuenta ve solo sus tarifas), validación de precio
+  positivo ("El precio debe ser mayor a 0" / "…un número mayor a 0") y nombre
+  obligatorio.
 - **apps/accounts (US-03):** Inicio de sesión — `POST /api/auth/login/` autentica por
   teléfono y contraseña y devuelve tokens JWT (SimpleJWT). Verifica credenciales antes
   que el estado del teléfono: contraseña incorrecta → 401 "Credenciales inválidas";
