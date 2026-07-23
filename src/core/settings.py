@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "django_filters",
+    "storages",
     # Local apps
     "apps.accounts",
     "apps.catalog",
@@ -130,14 +131,6 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- Static files storage (WhiteNoise, compressed + manifest) ---
-STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
-
 # --- DRF ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -157,6 +150,7 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
 
-# STATIC/MEDIA + security + logging
+# STATIC/MEDIA + security + logging + storages (media on R2 in production)
 from .env import *  # noqa: E402,F403
 from .logging_config import LOGGING  # noqa: E402,F401
+from .settings_storages import *  # noqa: E402,F403

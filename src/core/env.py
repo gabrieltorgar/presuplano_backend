@@ -12,11 +12,23 @@ import environ
 _env = environ.Env()
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-DEBUG = _env.bool("DEBUG", default=True)
+# Mirror settings.DEBUG: safe by default (False) on Vercel, True locally.
+_ON_VERCEL = _env.bool("VERCEL", default=False)
+DEBUG = _env.bool("DEBUG", default=not _ON_VERCEL)
 
-# --- Static & media ---
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+# --- Static ---
+# On Vercel (read-only fs) STATIC_ROOT must live under /tmp so an optional
+# collectstatic can write; WhiteNoise's finders (below) serve straight from the
+# apps' static dirs at request time, so it need not even exist.
+STATIC_URL = _env.str("STATIC_URL", default="static/")
+_default_static_root = "/tmp/static" if _ON_VERCEL else str(BASE_DIR / "staticfiles")  # noqa: S108
+STATIC_ROOT = _env.str("STATIC_ROOT", default=_default_static_root)
+STATICFILES_DIRS = [d for d in (BASE_DIR / "src" / "static",) if d.exists()]
+# WhiteNoise serves admin/DRF static from finders (no collectstatic dependency).
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = DEBUG
+
+# --- Media ---
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 

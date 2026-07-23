@@ -12,6 +12,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from common.models import TimestampedModel
+from common.uploads import evidence_upload_to
 
 
 class Project(TimestampedModel):
@@ -91,7 +92,7 @@ class Evidence(TimestampedModel):
         related_name="evidences",
         verbose_name=_("avance"),
     )
-    image = models.ImageField(upload_to="evidence/", verbose_name=_("imagen"))
+    image = models.ImageField(upload_to=evidence_upload_to, verbose_name=_("imagen"))
 
     class Meta:
         db_table = "projects_evidence"

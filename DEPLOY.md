@@ -45,14 +45,33 @@ El backend se despliega en **Vercel** como **función serverless de Python**
    ```
    Luego entra a `https://tu-backend.vercel.app/admin/`.
 
-## Importante — media (evidencias fotográficas)
+## Media (evidencias fotográficas) — Cloudflare R2
 
-El filesystem de Vercel es **de solo lectura** en runtime; las imágenes subidas
-(evidencias de avance, US-16) **no persisten** ahí. Para producción hay que
-guardar la media en un bucket **S3/Cloudflare R2** con `django-storages`
-(patrón usado en otros proyectos). Mientras no se configure, las subidas de
-imagen no se conservan entre invocaciones. El resto de la API (que solo usa la
-BD) funciona sin cambios.
+El filesystem de Vercel es **de solo lectura** en runtime, así que la media
+(evidencias de avance, US-16) se guarda en **Cloudflare R2** (S3-compatible) vía
+`django-storages`. Ya está integrado (`core/settings_storages.py`): R2 se activa
+**solo** con las credenciales presentes; sin ellas, dev/tests usan filesystem
+local sin credenciales. La media se aísla por cuenta: `evidence/<cuenta>/…`.
+
+Pasos para activarlo:
+
+1. En **Cloudflare R2**, crear un bucket (p. ej. `presuplano-media`) y un token
+   de API S3 (Access Key ID + Secret). Habilitar acceso público (subdominio
+   `*.r2.dev`) o un dominio propio para servir las imágenes.
+2. Cargar en Vercel (Production + Preview):
+
+| Variable | Valor |
+|---|---|
+| `R2_ACCOUNT_ID` | ID de cuenta de Cloudflare |
+| `R2_ACCESS_KEY_ID` | Access Key del token R2 |
+| `R2_SECRET_ACCESS_KEY` | Secret del token R2 |
+| `R2_BUCKET_NAME` | `presuplano-media` |
+| `R2_PUBLIC_URL` | host público (`https://<hash>.r2.dev` o tu dominio) |
+| `R2_ENDPOINT_URL` | *(opcional)* def. `https://<account_id>.r2.cloudflarestorage.com` |
+
+Con esas variables, `default_storage` apunta a R2 y las evidencias persisten
+entre invocaciones. Los estáticos del admin/DRF los sigue sirviendo WhiteNoise
+(no van a R2).
 
 ## Base de datos (Neon)
 

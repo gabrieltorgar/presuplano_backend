@@ -4,10 +4,19 @@ asgiref==3.12.1
     # via
     #   django
     #   django-cors-headers
+boto3==1.43.54
+    # via
+    #   django-storages
+    #   presuplano-backend
+botocore==1.43.54
+    # via
+    #   boto3
+    #   s3transfer
 django==5.2.16
     # via
     #   django-cors-headers
     #   django-filter
+    #   django-storages
     #   djangorestframework
     #   djangorestframework-simplejwt
     #   presuplano-backend
@@ -17,12 +26,18 @@ django-environ==0.12.1
     # via presuplano-backend
 django-filter==25.2
     # via presuplano-backend
+django-storages==1.14.6
+    # via presuplano-backend
 djangorestframework==3.16.1
     # via
     #   djangorestframework-simplejwt
     #   presuplano-backend
 djangorestframework-simplejwt==5.5.1
     # via presuplano-backend
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 pillow==11.3.0
     # via presuplano-backend
 psycopg==3.3.4
@@ -31,6 +46,12 @@ psycopg-binary==3.3.4 ; implementation_name != 'pypy'
     # via psycopg
 pyjwt==2.13.0
     # via djangorestframework-simplejwt
+python-dateutil==2.9.0.post0
+    # via botocore
+s3transfer==0.19.2
+    # via boto3
+six==1.17.0
+    # via python-dateutil
 sqlparse==0.5.5
     # via django
 typing-extensions==4.16.0 ; python_full_version < '3.13'
@@ -39,5 +60,7 @@ tzdata==2026.3 ; sys_platform == 'win32'
     # via
     #   django
     #   psycopg
+urllib3==2.7.0
+    # via botocore
 whitenoise==6.12.0
     # via presuplano-backend

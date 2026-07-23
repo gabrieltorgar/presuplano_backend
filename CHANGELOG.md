@@ -14,6 +14,11 @@ Todas las notas de cambios relevantes de la API. El formato sigue
   completan solos con los hostnames de Vercel (admin operativo en preview/prod).
 
 ### Added
+- **Media en Cloudflare R2:** `core/settings_storages.py` enruta la media
+  (evidencias, `ImageField`) a **R2** (S3 vía `django-storages`) cuando hay
+  credenciales; en dev/tests cae a filesystem local. La media se **aísla por
+  cuenta** (`evidence/<cuenta>/…`, `common/uploads.py`). Estáticos siguen en
+  WhiteNoise. Variables R2 documentadas en `.env.example` y `DEPLOY.md`.
 - **apps/projects (US-21):** Cierre de proyecto — acción `finalize/` que finaliza el
   proyecto y genera el **documento resumen** (avances con fechas, pagos y totales
   cotizado/avanzado/pagado). Con saldo pendiente advierte "El proyecto tiene un saldo
