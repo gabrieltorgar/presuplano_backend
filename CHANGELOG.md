@@ -6,6 +6,12 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 ## [Unreleased]
 
 ### Added
+- **apps/projects (US-14/15/16/17):** Proyecto y avances — `Project`, `Progress` y
+  `Evidence`. Iniciar proyecto desde una cotización documentada (`/api/projects/`);
+  registrar avance por **cantidad o porcentaje** normalizado, con validación de
+  exceso ("El avance supera la cantidad cotizada") y avance > 0; adjuntar evidencia
+  fotográfica (`/api/progresses/{id}/evidence/`) validando tipo imagen y tamaño;
+  resumen con valor cotizado, avanzado y **porcentaje de avance**.
 - **apps/quotes (US-10/11/12/13):** Cotizaciones — `QuoteViewSet` en `/api/quotes/`
   con `Quote` + `QuoteItem`. Total automático desde las partidas; cada partida
   **congela** nombre/unidad/precio de la tarifa al cotizar (histórico de precio,
