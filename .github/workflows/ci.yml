@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: presuplano
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/presuplano
+      SECRET_KEY: ci-secret-key-not-for-production-32chars
+      DEBUG: "True"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Install dependencies
+        run: uv sync
+      - name: Lint
+        run: uv run ruff check .
+      - name: Test with coverage
+        run: uv run pytest --cov=src --cov-fail-under=80
