@@ -29,8 +29,8 @@ WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
 
 # --- Media ---
-MEDIA_URL = env.str("MEDIA_URL", default="/media/")
-MEDIA_ROOT = env.str("MEDIA_ROOT", default=os.path.join(REPO_ROOT, "media"))
+MEDIA_URL = _env.str("MEDIA_URL", default="/media/")
+MEDIA_ROOT = _env.str("MEDIA_ROOT", default=os.path.join(REPO_ROOT, "media"))
 
 # --- Cookie security (always on) ---
 SESSION_COOKIE_HTTPONLY = True
