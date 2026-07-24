@@ -49,6 +49,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     advanced_value = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
+    progresses = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
@@ -61,7 +62,19 @@ class ProjectSerializer(serializers.ModelSerializer):
             "advanced_value",
             "progress_percentage",
             "items",
+            "progresses",
             "created_at",
+        ]
+
+    def get_progresses(self, obj: Project) -> list[dict]:
+        """Recorded advances (for the project status document)."""
+        return [
+            {
+                "date": str(progress.date),
+                "item": progress.quote_item.name,
+                "quantity": str(progress.quantity),
+            }
+            for progress in obj.progresses.all()
         ]
 
     def get_items(self, obj: Project) -> list[dict]:
