@@ -3,6 +3,14 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.2.0] — 2026-07-24
+
+### Changed
+- **apps/payments (refactor de convenciones):** la búsqueda de proyecto por
+  dueño se mueve de la vista a un selector (`selectors.get_owned_project`),
+  conforme a "no queries en vistas". Comportamiento preservado (75 tests, ruff
+  limpio, cobertura 95%).
+
 ## [1.1.0] — 2026-07-24
 
 Iteración v1.1: método de pago y anticipos, avances solo por cantidad con
