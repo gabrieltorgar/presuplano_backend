@@ -5,6 +5,7 @@ module-level ``app`` callable. The project uses a ``src/`` layout, so we put
 ``src`` on the import path before building the WSGI application, mirroring what
 ``manage.py`` does for local commands.
 """
+
 import os
 import sys
 from pathlib import Path
