@@ -23,6 +23,9 @@ class Tariff(TimestampedModel):
         verbose_name=_("propietario"),
     )
     name = models.CharField(max_length=150, verbose_name=_("nombre"))
+    description = models.TextField(
+        blank=True, default="", verbose_name=_("descripción")
+    )
     unit_type = models.CharField(
         max_length=20,
         choices=UnitType.choices,
@@ -31,6 +34,11 @@ class Tariff(TimestampedModel):
     )
     unit_price = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name=_("precio unitario")
+    )
+    in_catalog = models.BooleanField(
+        default=True,
+        verbose_name=_("en catálogo"),
+        help_text=_("Si es falso, la tarifa es única de una cotización."),
     )
 
     class Meta:

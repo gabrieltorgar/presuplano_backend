@@ -11,12 +11,13 @@ from apps.payments.selectors import list_payments_for_owner
 from apps.payments.serializers import PaymentInputSerializer, PaymentSerializer
 from apps.payments.services import (
     build_voucher,
-    pending_balance,
+    credit_balance,
+    receivable_balance,
     register_payment,
     total_paid,
 )
 from apps.projects.models import Project
-from apps.projects.selectors import advanced_value
+from apps.projects.selectors import advanced_value, quoted_value
 
 
 class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
@@ -49,8 +50,11 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(
             {
                 "advanced_value": advanced_value(project),
+                "quoted_value": quoted_value(project),
                 "total_paid": total_paid(project),
-                "pending_balance": pending_balance(project),
+                "pending_balance": receivable_balance(project),
+                "credit_balance": credit_balance(project),
+                "client_name": project.quote.client.name,
                 "payments": PaymentSerializer(payments, many=True).data,
             }
         )

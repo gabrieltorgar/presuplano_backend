@@ -96,7 +96,7 @@ class TestStartProject:
 
 @pytest.mark.django_db
 class TestRegisterProgress:
-    """US-15: register progress by quantity or percentage."""
+    """US-15: register progress by quantity (percentage removed in v1.1)."""
 
     def _url(self, project) -> str:
         return f"{PROJECTS_URL}{project.id}/progress/"
@@ -115,8 +115,8 @@ class TestRegisterProgress:
         assert response.status_code == status.HTTP_201_CREATED
         assert Decimal(response.data["earned_value"]) == Decimal("2100.00")
 
-    def test_progress_by_percentage(self, authenticated_client, user) -> None:
-        """Flujo principal - Avance por porcentaje."""
+    def test_progress_requires_quantity(self, authenticated_client, user) -> None:
+        """Refinamiento v1.1 - El avance por porcentaje ya no se acepta."""
         project, muro_item, _z = make_project(user)
         payload = {
             "quote_item": str(muro_item.id),
@@ -126,13 +126,29 @@ class TestRegisterProgress:
 
         response = authenticated_client.post(self._url(project), payload)
 
-        assert response.status_code == status.HTTP_201_CREATED
-        assert Decimal(response.data["earned_value"]) == Decimal("2100.00")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_progress_exceeding_quoted_returns_400(
+    def test_project_items_expose_pending_quantity(
         self, authenticated_client, user
     ) -> None:
-        """Caso alternativo - Avance supera lo cotizado."""
+        """Refinamiento v1.1 - El proyecto expone la cantidad pendiente por partida."""
+        project, muro_item, _z = make_project(user)
+        register_progress(
+            project=project,
+            quote_item=muro_item,
+            quantity=Decimal("6"),
+            date=date(2026, 1, 10),
+        )
+
+        response = authenticated_client.get(f"{PROJECTS_URL}{project.id}/")
+
+        items = {i["id"]: i for i in response.data["items"]}
+        assert Decimal(items[str(muro_item.id)]["pending_quantity"]) == Decimal("4.00")
+
+    def test_progress_exceeding_pending_returns_400(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso alternativo - Avance supera la cantidad pendiente."""
         project, muro_item, _z = make_project(user)
         register_progress(
             project=project,
@@ -149,7 +165,7 @@ class TestRegisterProgress:
         response = authenticated_client.post(self._url(project), payload)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "supera la cantidad cotizada" in str(response.data)
+        assert "supera la cantidad pendiente" in str(response.data)
 
     def test_progress_zero_returns_400(self, authenticated_client, user) -> None:
         """Caso de borde - Avance en cero."""
@@ -241,6 +257,26 @@ class TestProjectProgressSummary:
         assert Decimal(response.data["quoted_value"]) == Decimal("5100.00")
         assert Decimal(response.data["advanced_value"]) == Decimal("2100.00")
         assert 40 < float(response.data["progress_percentage"]) < 42
+
+    def test_project_exposes_progresses_list(
+        self, authenticated_client, user
+    ) -> None:
+        """US-23 - El proyecto expone la lista de avances (fecha, ítem, cantidad)."""
+        project, muro_item, _z = make_project(user)
+        register_progress(
+            project=project,
+            quote_item=muro_item,
+            quantity=Decimal("6"),
+            date=date(2026, 1, 10),
+        )
+
+        response = authenticated_client.get(f"{PROJECTS_URL}{project.id}/")
+
+        progresses = response.data["progresses"]
+        assert len(progresses) == 1
+        assert progresses[0]["item"] == "Muro de tablaroca"
+        assert Decimal(progresses[0]["quantity"]) == Decimal("6.00")
+        assert progresses[0]["date"] == "2026-01-10"
 
     def test_summary_without_progress(self, authenticated_client, user) -> None:
         """Caso alternativo - Proyecto sin avances."""

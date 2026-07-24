@@ -3,6 +3,32 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.1.0] — 2026-07-24
+
+Iteración v1.1: método de pago y anticipos, avances solo por cantidad con
+cantidad pendiente por partida, tarifas con descripción y tarifa única de
+cotización, y renovación de sesión JWT.
+
+### Added
+- **apps/accounts (US-03):** endpoint `POST /api/auth/refresh/` y tiempos de
+  token configurables (`SIMPLE_JWT`: acceso 60 min, refresh 30 días) para
+  renovar la sesión sin cerrarla.
+- **apps/catalog (US-04):** campo `description` (opcional) en `Tariff`.
+- **apps/catalog (US-22):** campo `in_catalog` en `Tariff`; el listado del
+  catálogo excluye las tarifas únicas de cotización (`in_catalog=false`).
+- **apps/payments (US-18):** campo `method` en `Payment` (efectivo/transferencia).
+- **apps/projects (US-15):** `ProjectSerializer.items` con `pending_quantity`.
+- **apps/projects (US-23):** `ProjectSerializer.progresses` (fecha, ítem,
+  cantidad) para el documento de estado del proyecto.
+
+### Changed
+- **apps/payments (US-18/20):** `register_payment` ya no topa el pago por el
+  saldo (permite anticipos); el resumen expone `pending_balance` como saldo por
+  cobrar = máx(cotizado − pagado, 0), `credit_balance` (saldo a favor) y el
+  método por pago. `pending_balance` avanzado−pagado se conserva para el cierre.
+- **apps/projects (US-15):** `register_progress` acepta solo cantidad (se elimina
+  el porcentaje) y valida contra la cantidad pendiente de la partida.
+
 ## [Unreleased]
 
 ### Fixed
