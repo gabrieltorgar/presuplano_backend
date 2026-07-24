@@ -58,7 +58,8 @@ class TestRegisterPayment:
             f"{PAYMENTS_URL}summary/", {"project": str(project.id)}
         )
         assert Decimal(summary.data["total_paid"]) == Decimal("1000.00")
-        assert Decimal(summary.data["pending_balance"]) == Decimal("1100.00")
+        # Saldo por cobrar sobre el total cotizado (5100 − 1000).
+        assert Decimal(summary.data["pending_balance"]) == Decimal("4100.00")
 
     def test_payment_beyond_advance_is_allowed(
         self, authenticated_client, user
@@ -168,8 +169,8 @@ class TestPaymentSummary:
     """US-20: consult payments and pending balance."""
 
     def test_summary_with_payments(self, authenticated_client, user) -> None:
-        """Flujo principal - Estado de cobros con saldo."""
-        project = make_project_with_advance(user)  # advanced 2100
+        """Flujo principal - Estado de cobros con método y saldo por cobrar."""
+        project = make_project_with_advance(user)  # quoted 5100
         register_payment(
             owner=user, project=project, amount=Decimal("1000"), date=date(2026, 1, 15)
         )
@@ -179,25 +180,27 @@ class TestPaymentSummary:
         )
 
         assert Decimal(response.data["total_paid"]) == Decimal("1000.00")
-        assert Decimal(response.data["pending_balance"]) == Decimal("1100.00")
+        assert Decimal(response.data["pending_balance"]) == Decimal("4100.00")
+        assert Decimal(response.data["credit_balance"]) == Decimal("0")
+        assert response.data["payments"][0]["method"] == "cash"
         assert len(response.data["payments"]) == 1
 
     def test_summary_without_payments(self, authenticated_client, user) -> None:
         """Caso alternativo - Proyecto sin pagos."""
-        project = make_project_with_advance(user)  # advanced 2100
+        project = make_project_with_advance(user)  # quoted 5100
 
         response = authenticated_client.get(
             f"{PAYMENTS_URL}summary/", {"project": str(project.id)}
         )
 
         assert Decimal(response.data["total_paid"]) == Decimal("0")
-        assert Decimal(response.data["pending_balance"]) == Decimal("2100.00")
+        assert Decimal(response.data["pending_balance"]) == Decimal("5100.00")
 
     def test_summary_fully_paid(self, authenticated_client, user) -> None:
         """Caso de borde - Proyecto totalmente pagado."""
-        project = make_project_with_advance(user)  # advanced 2100
+        project = make_project_with_advance(user)  # quoted 5100
         register_payment(
-            owner=user, project=project, amount=Decimal("2100"), date=date(2026, 1, 15)
+            owner=user, project=project, amount=Decimal("5100"), date=date(2026, 1, 15)
         )
 
         response = authenticated_client.get(
@@ -205,3 +208,19 @@ class TestPaymentSummary:
         )
 
         assert Decimal(response.data["pending_balance"]) == Decimal("0")
+
+    def test_summary_credit_balance_when_overpaid(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde v1.1 - Saldo a favor cuando lo pagado supera lo cotizado."""
+        project = make_project_with_advance(user)  # quoted 5100
+        register_payment(
+            owner=user, project=project, amount=Decimal("5300"), date=date(2026, 1, 15)
+        )
+
+        response = authenticated_client.get(
+            f"{PAYMENTS_URL}summary/", {"project": str(project.id)}
+        )
+
+        assert Decimal(response.data["pending_balance"]) == Decimal("0")
+        assert Decimal(response.data["credit_balance"]) == Decimal("200.00")

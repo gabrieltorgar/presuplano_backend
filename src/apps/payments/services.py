@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.payments.models import Payment
 from apps.projects.models import Project
-from apps.projects.selectors import advanced_value
+from apps.projects.selectors import advanced_value, quoted_value
 
 logger = logging.getLogger("apps")
 
@@ -19,8 +19,19 @@ def total_paid(project: Project) -> Decimal:
 
 
 def pending_balance(project: Project) -> Decimal:
-    """Pending balance = advanced (earned) value − total paid."""
+    """Advanced-vs-paid balance (used by project closure). Can be negative when
+    the client has paid ahead of the executed work."""
     return advanced_value(project) - total_paid(project)
+
+
+def receivable_balance(project: Project) -> Decimal:
+    """Amount still to collect on the whole quote: max(quoted − paid, 0)."""
+    return max(quoted_value(project) - total_paid(project), Decimal("0"))
+
+
+def credit_balance(project: Project) -> Decimal:
+    """Overpayment credit (saldo a favor): max(paid − quoted, 0)."""
+    return max(total_paid(project) - quoted_value(project), Decimal("0"))
 
 
 @transaction.atomic
