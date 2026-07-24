@@ -97,6 +97,23 @@ class TestRegisterTariff:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "El nombre es obligatorio" in str(response.data)
 
+    def test_create_unique_tariff_not_in_catalog(
+        self, authenticated_client, user
+    ) -> None:
+        """US-22 - Tarifa creada solo para la cotización (in_catalog=False)."""
+        payload = {
+            "name": "Detalle especial",
+            "unit_type": Tariff.UnitType.UNIT,
+            "unit_price": "500",
+            "in_catalog": False,
+        }
+
+        response = authenticated_client.post(TARIFFS_URL, payload)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["in_catalog"] is False
+        assert Tariff.objects.get(name="Detalle especial").in_catalog is False
+
     def test_register_without_auth_returns_401(self, api_client) -> None:
         payload = {"name": "X", "unit_type": "square_meter", "unit_price": "10"}
         response = api_client.post(TARIFFS_URL, payload)
@@ -163,6 +180,19 @@ class TestListTariffs:
         names = {t["name"] for t in response.data}
         assert names == {"Muro de tablaroca"}
         assert "Piso porcelanato" not in names
+
+    def test_unique_tariff_hidden_from_catalog(
+        self, authenticated_client, user
+    ) -> None:
+        """US-22 - Una tarifa única (no en catálogo) no aparece en el listado."""
+        TariffFactory(owner=user, name="Muro de tablaroca")
+        TariffFactory(owner=user, name="Detalle único", in_catalog=False)
+
+        response = authenticated_client.get(TARIFFS_URL)
+
+        names = {t["name"] for t in response.data}
+        assert "Muro de tablaroca" in names
+        assert "Detalle único" not in names
 
     def test_list_includes_description(self, authenticated_client, user) -> None:
         """Refinamiento v1.1 - El catálogo expone la descripción."""

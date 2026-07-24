@@ -35,6 +35,11 @@ class Tariff(TimestampedModel):
     unit_price = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name=_("precio unitario")
     )
+    in_catalog = models.BooleanField(
+        default=True,
+        verbose_name=_("en catálogo"),
+        help_text=_("Si es falso, la tarifa es única de una cotización."),
+    )
 
     class Meta:
         db_table = "catalog_tariff"

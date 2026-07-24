@@ -33,6 +33,7 @@ class TariffSerializer(serializers.ModelSerializer):
             "description",
             "unit_type",
             "unit_price",
+            "in_catalog",
             "created_at",
             "updated_at",
         ]
