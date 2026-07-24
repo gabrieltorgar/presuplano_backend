@@ -25,13 +25,22 @@ def pending_balance(project: Project) -> Decimal:
 
 @transaction.atomic
 def register_payment(
-    *, owner, project: Project, amount: Decimal, date, quote_item=None
+    *,
+    owner,
+    project: Project,
+    amount: Decimal,
+    date,
+    quote_item=None,
+    method: str = Payment.Method.CASH,
 ) -> Payment:
-    """Register a total or partial payment against the project.
+    """Register a payment against the project (total, partial or advance).
+
+    Payments are not capped by the advanced value: an advance (anticipo) may be
+    registered before any work exists. If the accumulated paid exceeds the quoted
+    total, the surplus is reflected as a credit balance (see selectors).
 
     Raises:
-        ValidationError: project not owned/finished, non-positive amount, or an
-            amount exceeding the pending balance.
+        ValidationError: project not owned/finished, or non-positive amount.
     """
     if project.owner_id != owner.id:
         raise ValidationError("Proyecto no encontrado.")
@@ -40,12 +49,13 @@ def register_payment(
     if amount <= 0:
         raise ValidationError("El monto del pago debe ser mayor a 0")
 
-    pending = pending_balance(project)
-    if amount > pending:
-        raise ValidationError(f"El pago supera el saldo pendiente ({pending})")
-
     payment = Payment.objects.create(
-        owner=owner, project=project, amount=amount, date=date, quote_item=quote_item
+        owner=owner,
+        project=project,
+        amount=amount,
+        date=date,
+        quote_item=quote_item,
+        method=method,
     )
     logger.info("Payment registered", extra={"payment_id": str(payment.pk)})
     return payment

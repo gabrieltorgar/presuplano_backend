@@ -15,6 +15,11 @@ class PaymentInputSerializer(serializers.Serializer):
         queryset=QuoteItem.objects.all(), required=False, allow_null=True
     )
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    method = serializers.ChoiceField(
+        choices=Payment.Method.choices,
+        required=False,
+        default=Payment.Method.CASH,
+    )
     date = serializers.DateField()
 
 
@@ -23,4 +28,12 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Payment
-        fields = ["id", "project", "quote_item", "amount", "date", "created_at"]
+        fields = [
+            "id",
+            "project",
+            "quote_item",
+            "amount",
+            "method",
+            "date",
+            "created_at",
+        ]

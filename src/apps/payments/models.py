@@ -8,7 +8,11 @@ from common.models import TimestampedModel
 
 
 class Payment(TimestampedModel):
-    """A payment received on a project (total or partial)."""
+    """A payment received on a project (total, partial or advance)."""
+
+    class Method(models.TextChoices):
+        CASH = "cash", _("Efectivo")
+        TRANSFER = "transfer", _("Transferencia")
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -32,6 +36,12 @@ class Payment(TimestampedModel):
     )
     amount = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name=_("monto")
+    )
+    method = models.CharField(
+        max_length=12,
+        choices=Method.choices,
+        default=Method.CASH,
+        verbose_name=_("método de pago"),
     )
     date = models.DateField(verbose_name=_("fecha"))
 

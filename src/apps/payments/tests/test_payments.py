@@ -60,10 +60,10 @@ class TestRegisterPayment:
         assert Decimal(summary.data["total_paid"]) == Decimal("1000.00")
         assert Decimal(summary.data["pending_balance"]) == Decimal("1100.00")
 
-    def test_payment_exceeding_pending_returns_400(
+    def test_payment_beyond_advance_is_allowed(
         self, authenticated_client, user
     ) -> None:
-        """Caso alternativo - Pago supera el saldo pendiente."""
+        """Refinamiento v1.1 - Anticipo/pago sin tope, independiente del avance."""
         project = make_project_with_advance(user)  # advanced 2100
         register_payment(
             owner=user, project=project, amount=Decimal("1000"), date=date(2026, 1, 15)
@@ -72,8 +72,36 @@ class TestRegisterPayment:
 
         response = authenticated_client.post(PAYMENTS_URL, payload)
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "El pago supera el saldo pendiente (1100" in str(response.data)
+        assert response.status_code == status.HTTP_201_CREATED
+        summary = authenticated_client.get(
+            f"{PAYMENTS_URL}summary/", {"project": str(project.id)}
+        )
+        assert Decimal(summary.data["total_paid"]) == Decimal("2500.00")
+
+    def test_method_defaults_to_cash(self, authenticated_client, user) -> None:
+        """Caso de borde v1.1 - Método por defecto efectivo."""
+        project = make_project_with_advance(user)
+        payload = {"project": str(project.id), "amount": "1000", "date": "2026-01-15"}
+
+        response = authenticated_client.post(PAYMENTS_URL, payload)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["method"] == "cash"
+
+    def test_register_with_transfer_method(self, authenticated_client, user) -> None:
+        """Refinamiento v1.1 - Método transferencia."""
+        project = make_project_with_advance(user)
+        payload = {
+            "project": str(project.id),
+            "amount": "1000",
+            "date": "2026-01-15",
+            "method": "transfer",
+        }
+
+        response = authenticated_client.post(PAYMENTS_URL, payload)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["method"] == "transfer"
 
     def test_zero_amount_returns_400(self, authenticated_client, user) -> None:
         """Caso de borde - Monto de pago en cero."""
