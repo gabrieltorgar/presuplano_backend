@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.payments.selectors import list_payments_for_owner
+from apps.payments.selectors import get_owned_project, list_payments_for_owner
 from apps.payments.serializers import PaymentInputSerializer, PaymentSerializer
 from apps.payments.services import (
     build_voucher,
@@ -32,7 +32,7 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
 
     def _get_project(self) -> Project:
         project_id = self.request.query_params.get("project")
-        project = Project.objects.filter(id=project_id, owner=self.request.user).first()
+        project = get_owned_project(owner=self.request.user, project_id=project_id)
         if project is None:
             raise NotFound("Proyecto no encontrado.")
         return project
