@@ -39,6 +39,38 @@ class TestRegisterTariff:
         assert tariff.owner == user
         assert tariff.unit_price == Decimal("350.00")
 
+    def test_register_with_description_saves_it(
+        self, authenticated_client, user
+    ) -> None:
+        """Refinamiento v1.1 - Descripción opcional guardada."""
+        payload = {
+            "name": "Muro de tablaroca",
+            "unit_type": Tariff.UnitType.SQUARE_METER,
+            "unit_price": "350.00",
+            "description": "Incluye material y mano de obra",
+        }
+
+        response = authenticated_client.post(TARIFFS_URL, payload)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        tariff = Tariff.objects.get(name="Muro de tablaroca")
+        assert tariff.description == "Incluye material y mano de obra"
+
+    def test_register_without_description_defaults_empty(
+        self, authenticated_client
+    ) -> None:
+        """Refinamiento v1.1 - La descripción es opcional."""
+        payload = {
+            "name": "Zócalo",
+            "unit_type": Tariff.UnitType.LINEAR_METER,
+            "unit_price": "80.00",
+        }
+
+        response = authenticated_client.post(TARIFFS_URL, payload)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Tariff.objects.get(name="Zócalo").description == ""
+
     def test_register_with_zero_price_returns_400(self, authenticated_client) -> None:
         """Caso alternativo - Precio no válido."""
         payload = {
@@ -131,3 +163,12 @@ class TestListTariffs:
         names = {t["name"] for t in response.data}
         assert names == {"Muro de tablaroca"}
         assert "Piso porcelanato" not in names
+
+    def test_list_includes_description(self, authenticated_client, user) -> None:
+        """Refinamiento v1.1 - El catálogo expone la descripción."""
+        TariffFactory(owner=user, name="Muro", description="Acabado fino")
+
+        response = authenticated_client.get(TARIFFS_URL)
+
+        row = next(t for t in response.data if t["name"] == "Muro")
+        assert row["description"] == "Acabado fino"

@@ -21,9 +21,21 @@ class TariffSerializer(serializers.ModelSerializer):
         error_messages={"invalid": "El precio debe ser un número mayor a 0"},
     )
 
+    description = serializers.CharField(
+        required=False, allow_blank=True, default="", trim_whitespace=False
+    )
+
     class Meta:
         model = Tariff
-        fields = ["id", "name", "unit_type", "unit_price", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "unit_type",
+            "unit_price",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_unit_price(self, value):

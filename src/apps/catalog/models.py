@@ -23,6 +23,9 @@ class Tariff(TimestampedModel):
         verbose_name=_("propietario"),
     )
     name = models.CharField(max_length=150, verbose_name=_("nombre"))
+    description = models.TextField(
+        blank=True, default="", verbose_name=_("descripción")
+    )
     unit_type = models.CharField(
         max_length=20,
         choices=UnitType.choices,
