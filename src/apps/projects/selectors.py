@@ -12,7 +12,12 @@ def list_projects_for_owner(*, owner) -> QuerySet[Project]:
     return (
         Project.objects.filter(owner=owner)
         .select_related("quote", "quote__client")
-        .prefetch_related("quote__items", "progresses", "progresses__quote_item")
+        .prefetch_related(
+            "quote__items",
+            "quote__items__progresses",
+            "progresses",
+            "progresses__quote_item",
+        )
     )
 
 

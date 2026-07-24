@@ -16,15 +16,10 @@ class StartProjectSerializer(serializers.Serializer):
 
 
 class ProgressInputSerializer(serializers.Serializer):
-    """Validates a progress entry (quantity OR percentage + date)."""
+    """Validates a progress entry (quantity + date). Percentage removed in v1.1."""
 
     quote_item = serializers.PrimaryKeyRelatedField(queryset=QuoteItem.objects.all())
-    quantity = serializers.DecimalField(
-        max_digits=12, decimal_places=2, required=False, allow_null=True
-    )
-    percentage = serializers.DecimalField(
-        max_digits=6, decimal_places=2, required=False, allow_null=True
-    )
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2)
     date = serializers.DateField()
 
 
@@ -53,6 +48,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     quoted_value = serializers.SerializerMethodField()
     advanced_value = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
@@ -64,8 +60,27 @@ class ProjectSerializer(serializers.ModelSerializer):
             "quoted_value",
             "advanced_value",
             "progress_percentage",
+            "items",
             "created_at",
         ]
+
+    def get_items(self, obj: Project) -> list[dict]:
+        """Line items with their pending (still-registerable) quantity."""
+        items = []
+        for item in obj.quote.items.all():
+            advanced = sum(
+                (p.quantity for p in item.progresses.all()), Decimal("0")
+            )
+            items.append(
+                {
+                    "id": str(item.id),
+                    "name": item.name,
+                    "unit_type": item.unit_type,
+                    "quantity": str(item.quantity),
+                    "pending_quantity": str(item.quantity - advanced),
+                }
+            )
+        return items
 
     def get_quoted_value(self, obj: Project) -> Decimal:
         return quoted_value(obj)
