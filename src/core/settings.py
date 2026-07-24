@@ -5,6 +5,7 @@ Modular settings: this file holds Django's own config and initializes
 library with significant config gets its own ``settings_<name>.py``.
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -22,6 +23,10 @@ env = environ.Env(
     LOG_DIR=(str, str(BASE_DIR / "tmp" / "logs")),
     OTP_UNIVERSAL_CODE=(str, "123456"),
     OTP_TTL_MINUTES=(int, 10),
+    # Long enough to keep an active session working; a refresh token silently
+    # renews access so the user is not logged out mid-use (see /auth/refresh/).
+    ACCESS_TOKEN_LIFETIME_MINUTES=(int, 60),
+    REFRESH_TOKEN_LIFETIME_DAYS=(int, 30),
 )
 
 # Load .env from core/ if present (optional — all vars have safe defaults).
@@ -138,6 +143,18 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
+}
+
+# --- SimpleJWT (token lifetimes) ---
+# SimpleJWT's default access lifetime is 5 minutes; that expired mid-session and
+# logged users out ("token error"). A 60-min access + 30-day refresh, together
+# with the /auth/refresh/ endpoint and the SPA's silent-refresh interceptor,
+# keeps an active session alive.
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env("ACCESS_TOKEN_LIFETIME_MINUTES")),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env("REFRESH_TOKEN_LIFETIME_DAYS")),
+    "ROTATE_REFRESH_TOKENS": False,
+    "UPDATE_LAST_LOGIN": False,
 }
 
 # --- OTP (universal code for the MVP; real SMS/WhatsApp integration later) ---
