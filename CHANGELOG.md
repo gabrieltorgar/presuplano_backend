@@ -3,6 +3,28 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.3.1] — 2026-09-17
+
+### Fixed
+- **vercel.json, pyproject.toml, wsgi.py (incidencia de despliegue):** la API
+  respondía **404 a todo** en producción. No era el código: Vercel pasó a
+  entregar a la aplicación la ruta **ya reescrita** cuando hay un rewrite
+  interno —lo avisa el propio build: *«Internal rewrites in backend framework
+  projects now route requests using the rewritten destination path»*—, así que
+  el `/(.*)` → `/api/index` que llevaba aquí desde el principio hacía que
+  Django resolviera siempre `/api/index`, no encontrara ninguna URL y devolviera
+  su página de «Not Found». Se quita el rewrite y se le declara a Vercel la
+  instancia WSGI a servir (`[tool.vercel] entrypoint = "wsgi:application"`),
+  que es la forma que hoy documenta para Django; con ella desaparece
+  `api/index.py`, que además compartía nombre con la app `api` del proyecto.
+
+### Tests
+- **api/tests/test_deploy_entrypoint.py:** importa el entrypoint como lo hace
+  Vercel, comprueba que resuelven rutas reales de la API y del admin, y falla si
+  vuelve a aparecer un rewrite general. 86 tests. Nada bajo `src/` podía ver
+  esto, que es por lo que 80 tests en verde convivieron con una API que no
+  respondía a nada.
+
 ## [1.3.0] — 2026-09-17
 
 ### Added
