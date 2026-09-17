@@ -358,3 +358,61 @@ class TestCustomUnitPrice:
 
         assert response.status_code == status.HTTP_200_OK
         assert Decimal(response.data["total"]) == Decimal("150.00")
+
+
+@pytest.mark.django_db
+class TestAgreedTotalSurvives:
+    """US-63: el total acordado es el total, aunque no se reparta en centavos."""
+
+    def test_a_total_that_does_not_divide_in_cents_is_respected(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - 32 000 entre 15 siguen siendo 32 000."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {
+                    "tariff": str(muro.id),
+                    "quantity": "15",
+                    "unit_price": "2133.333333",
+                },
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Decimal(response.data["items"][0]["subtotal"]) == Decimal("32000.00")
+        assert Decimal(response.data["total"]) == Decimal("32000.00")
+
+    def test_the_line_is_charged_in_whole_cents(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Lo que se cobra son centavos, no millonésimas."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "3", "unit_price": "33.333333"},
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        # 3 × 33,333333 = 99,999999, que se cobra como 100,00
+        assert Decimal(response.data["items"][0]["subtotal"]) == Decimal("100.00")
+
+    def test_a_price_with_cents_keeps_working_as_before(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - El precio de siempre no cambia de comportamiento."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [{"tariff": str(muro.id), "quantity": "10"}],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert Decimal(response.data["total"]) == Decimal("3500.00")

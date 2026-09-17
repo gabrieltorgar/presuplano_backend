@@ -4,7 +4,7 @@ Each line item snapshots the tariff's name, unit type and unit price at quoting
 time, so later tariff edits never change an already-issued quote (US-05 edge).
 """
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.db import models
@@ -68,7 +68,13 @@ class QuoteItem(TimestampedModel):
     name = models.CharField(max_length=150, verbose_name=_("nombre"))
     unit_type = models.CharField(max_length=20, verbose_name=_("tipo de unidad"))
     unit_price = models.DecimalField(
-        max_digits=12, decimal_places=2, verbose_name=_("precio unitario")
+        max_digits=16,
+        decimal_places=6,
+        verbose_name=_("precio unitario"),
+        help_text=_(
+            "Hasta seis decimales: un total acordado no siempre se reparte en "
+            "centavos entre la cantidad."
+        ),
     )
     quantity = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name=_("cantidad")
@@ -82,8 +88,17 @@ class QuoteItem(TimestampedModel):
 
     @property
     def subtotal(self) -> Decimal:
-        """Line subtotal = quantity × snapshotted unit price (pure fields)."""
-        return self.quantity * self.unit_price
+        """What this line charges: quantity × unit price, in whole cents.
+
+        The price carries six decimals so that a total agreed with the client
+        survives being split across the quantity — 32 000 between 15 is
+        2 133,333333 — and the line is rounded back to cents here, which is
+        what is actually invoiced and what makes the agreed total come out
+        exact instead of five cents short.
+        """
+        return (self.quantity * self.unit_price).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
 
     def __str__(self) -> str:
         return f"{self.name} × {self.quantity}"
