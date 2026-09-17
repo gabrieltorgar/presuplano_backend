@@ -63,7 +63,7 @@ class QuoteItem(TimestampedModel):
         "catalog.Tariff",
         on_delete=models.PROTECT,
         related_name="quote_items",
-        verbose_name=_("tarifa"),
+        verbose_name=_("servicio"),
     )
     name = models.CharField(max_length=150, verbose_name=_("nombre"))
     unit_type = models.CharField(max_length=20, verbose_name=_("tipo de unidad"))
@@ -77,8 +77,8 @@ class QuoteItem(TimestampedModel):
     class Meta:
         db_table = "quotes_quote_item"
         ordering = ["created_at"]
-        verbose_name = _("partida")
-        verbose_name_plural = _("partidas")
+        verbose_name = _("servicio cotizado")
+        verbose_name_plural = _("servicios cotizados")
 
     @property
     def subtotal(self) -> Decimal:

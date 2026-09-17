@@ -14,12 +14,12 @@ logger = logging.getLogger("apps")
 
 
 def _ensure_owned(*, owner, client: Client, items_data: list[dict]) -> None:
-    """Reject a payload referencing another account's client or tariffs."""
+    """Reject a payload referencing another account's client or services."""
     if client.owner_id != owner.id:
         raise ValidationError("Cliente no encontrado.")
     for item in items_data:
         if item["tariff"].owner_id != owner.id:
-            raise ValidationError("Tarifa no encontrada.")
+            raise ValidationError("Servicio no encontrado.")
 
 
 def _create_item(

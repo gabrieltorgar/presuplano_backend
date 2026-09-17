@@ -38,14 +38,14 @@ class Tariff(TimestampedModel):
     in_catalog = models.BooleanField(
         default=True,
         verbose_name=_("en catálogo"),
-        help_text=_("Si es falso, la tarifa es única de una cotización."),
+        help_text=_("Si es falso, el servicio es único de una cotización."),
     )
 
     class Meta:
         db_table = "catalog_tariff"
         ordering = ["-created_at"]
-        verbose_name = _("tarifa")
-        verbose_name_plural = _("tarifas")
+        verbose_name = _("servicio")
+        verbose_name_plural = _("servicios")
         indexes = [models.Index(fields=["owner", "name"])]
 
     def __str__(self) -> str:
