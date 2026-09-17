@@ -27,6 +27,11 @@ dev = [
     "ruff>=0.6,<1",
 ]
 
+[tool.vercel]
+# Donde Vercel encuentra la instancia WSGI. Sin esto tendría que adivinarla, y
+# el proyecto vive bajo src/, que no es donde importa.
+entrypoint = "wsgi:application"
+
 [tool.ruff]
 line-length = 88
 target-version = "py312"
