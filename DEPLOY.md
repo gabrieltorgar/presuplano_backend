@@ -1,17 +1,27 @@
 # Deploy — presuplano backend (Vercel + Neon)
 
 El backend se despliega en **Vercel** como **función serverless de Python**
-(`@vercel/python`) y usa **Neon Postgres** como base de datos. Config incluida:
+(soporte nativo de Django) y usa **Neon Postgres** como base de datos. Config
+incluida:
 
-- `api/index.py` — entrypoint WSGI (pone `src/` en el path y expone `app`).
-- `vercel.json` — `buildCommand` que corre **migraciones** y **collectstatic**, y
-  reenvía todo el tráfico a la función:
+- `wsgi.py` (raíz del repo) — entrypoint WSGI: pone `src/` en el path y expone
+  `application`. Está en la raíz porque es desde ahí desde donde Vercel importa.
+- `pyproject.toml` — `[tool.vercel] entrypoint = "wsgi:application"`, que le dice
+  a Vercel qué instancia servir. Vercel la usa para **todas** las rutas,
+  conservando la ruta que pidió el cliente.
+- `vercel.json` — solo el `buildCommand`, que corre **migraciones** y
+  **collectstatic**:
   ```json
   {
-    "buildCommand": "uv sync && uv run python manage.py migrate --noinput && uv run python manage.py collectstatic --noinput",
-    "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+    "buildCommand": "uv sync && uv run python src/manage.py migrate && uv run python src/manage.py collectstatic --noinput"
   }
   ```
+
+> **Nada de rewrites generales.** Un `{"source": "/(.*)", "destination": "/api/index"}`
+> funcionó hasta que Vercel pasó a entregar a la aplicación la ruta **ya
+> reescrita**: desde entonces Django recibía siempre `/api/index`, no encontraba
+> ninguna URL y **toda la API respondía 404**. Lo cubre
+> `src/api/tests/test_deploy_entrypoint.py`.
 - `requirements.txt` — dependencias de runtime que Vercel instala para la función
   (incluye `psycopg-binary` con libpq y `whitenoise`).
 - **WhiteNoise** sirve los estáticos del **admin/DRF** desde la función (por eso
