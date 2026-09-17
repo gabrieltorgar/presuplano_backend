@@ -3,6 +3,28 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.3.0] — 2026-09-17
+
+### Added
+- **apps/quotes (US-63):** `unit_price` opcional en cada partida enviada. El
+  precio del catálogo es un punto de partida, no una condena: un cliente
+  negocia, o se acuerda un total redondo que hay que repartir entre la
+  cantidad. El precio enviado vale solo para esa cotización; omitido, se sigue
+  tomando el del servicio, y el servicio conserva el suyo en cualquier caso. Un
+  precio de cero o negativo se rechaza con 400.
+
+### Changed
+- **apps/catalog, apps/quotes (v2.9 del producto):** lo que la aplicación
+  llamaba «tarifas» y «partidas» se llama ahora «servicios» en todo lo que se
+  lee —el error que llega a la pantalla («Servicio no encontrado.»), los
+  nombres del admin—. El recurso de la API sigue siendo `tariffs`: renombrarlo
+  rompería a cualquier cliente ya instalado. Las migraciones 0004 (catalog) y
+  0002 (quotes) solo cambian opciones de modelo, sin tocar el esquema.
+
+### Tests
+- 80 tests, ruff limpio. Cinco casos nuevos para el precio ajustable, incluido
+  el que comprueba que el catálogo no se altera al ajustar una partida.
+
 ## [1.2.0] — 2026-07-24
 
 ### Changed
