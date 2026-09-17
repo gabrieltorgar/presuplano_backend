@@ -10,7 +10,11 @@ from apps.quotes.models import Quote, QuoteItem
 
 
 class QuoteItemInputSerializer(serializers.Serializer):
-    """Validates one input line item (tariff + quantity).
+    """Validates one input line item (service + quantity + optional price).
+
+    ``unit_price`` is what this quote charges for the service, which is not
+    always its catalogue price: a negotiated figure, or a total agreed with the
+    client and split across the quantity. Omitted, the catalogue price stands.
 
     Tariff/client ownership is enforced in the service layer.
     """
@@ -21,10 +25,21 @@ class QuoteItemInputSerializer(serializers.Serializer):
         decimal_places=2,
         error_messages={"invalid": "La cantidad debe ser mayor a 0"},
     )
+    unit_price = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        error_messages={"invalid": "El precio debe ser mayor a 0"},
+    )
 
     def validate_quantity(self, value: Decimal) -> Decimal:
         if value <= 0:
             raise serializers.ValidationError("La cantidad debe ser mayor a 0")
+        return value
+
+    def validate_unit_price(self, value: Decimal) -> Decimal:
+        if value <= 0:
+            raise serializers.ValidationError("El precio debe ser mayor a 0")
         return value
 
 

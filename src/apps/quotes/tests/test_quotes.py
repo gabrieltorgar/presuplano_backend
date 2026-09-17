@@ -270,3 +270,91 @@ class TestQuotePriceSnapshot:
         # Quote keeps the price it was quoted at (350 × 10 = 3500).
         assert Decimal(response.data["total"]) == Decimal("3500.00")
         assert Decimal(response.data["items"][0]["unit_price"]) == Decimal("350.00")
+
+
+@pytest.mark.django_db
+class TestCustomUnitPrice:
+    """US-63: el precio de una partida se puede ajustar sin tocar el servicio."""
+
+    def test_custom_unit_price_overrides_the_catalog_price(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Precio ajustado para esta cotización."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "2", "unit_price": "150"},
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Decimal(response.data["items"][0]["unit_price"]) == Decimal("150.00")
+        assert Decimal(response.data["total"]) == Decimal("300.00")
+
+    def test_the_service_keeps_its_own_price(self, authenticated_client, user) -> None:
+        """Caso de borde - El catálogo no se altera al ajustar una partida."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "1", "unit_price": "150"},
+            ],
+        }
+
+        authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        muro.refresh_from_db()
+        assert muro.unit_price == Decimal("350.00")
+
+    def test_without_unit_price_takes_the_one_from_the_service(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Sin precio propio se toma el del servicio."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [{"tariff": str(muro.id), "quantity": "2"}],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert Decimal(response.data["items"][0]["unit_price"]) == Decimal("350.00")
+
+    def test_unit_price_of_zero_returns_400(self, authenticated_client, user) -> None:
+        """Caso alternativo - Un precio de cero no es un precio."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "2", "unit_price": "0"},
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_update_changes_the_custom_price(self, authenticated_client, user) -> None:
+        """Flujo principal - Ajustar el precio al editar el borrador."""
+        client, muro, _zocalo = build_catalog(user)
+        quote = create_quote(
+            owner=user,
+            client=client,
+            items_data=[{"tariff": muro, "quantity": Decimal("2")}],
+        )
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "2", "unit_price": "75"},
+            ],
+        }
+
+        response = authenticated_client.patch(
+            detail_url(quote.id), payload, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Decimal(response.data["total"]) == Decimal("150.00")

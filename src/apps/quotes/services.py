@@ -22,14 +22,24 @@ def _ensure_owned(*, owner, client: Client, items_data: list[dict]) -> None:
             raise ValidationError("Tarifa no encontrada.")
 
 
-def _create_item(*, quote: Quote, tariff: Tariff, quantity: Decimal) -> QuoteItem:
-    """Create a line item snapshotting the tariff's name, unit and price."""
+def _create_item(
+    *,
+    quote: Quote,
+    tariff: Tariff,
+    quantity: Decimal,
+    unit_price: Decimal | None = None,
+) -> QuoteItem:
+    """Create a line item snapshotting the service's name, unit and price.
+
+    ``unit_price`` overrides the catalogue price for this quote only — the price
+    agreed with this client — and the service keeps its own.
+    """
     return QuoteItem.objects.create(
         quote=quote,
         tariff=tariff,
         name=tariff.name,
         unit_type=tariff.unit_type,
-        unit_price=tariff.unit_price,
+        unit_price=tariff.unit_price if unit_price is None else unit_price,
         quantity=quantity,
     )
 
@@ -40,7 +50,12 @@ def create_quote(*, owner, client: Client, items_data: list[dict]) -> Quote:
     _ensure_owned(owner=owner, client=client, items_data=items_data)
     quote = Quote.objects.create(owner=owner, client=client)
     for item in items_data:
-        _create_item(quote=quote, tariff=item["tariff"], quantity=item["quantity"])
+        _create_item(
+            quote=quote,
+            tariff=item["tariff"],
+            quantity=item["quantity"],
+            unit_price=item.get("unit_price"),
+        )
     logger.info("Quote created", extra={"quote_id": str(quote.pk)})
     return quote
 
@@ -62,7 +77,12 @@ def update_quote(*, quote: Quote, client: Client, items_data: list[dict]) -> Quo
     quote.save(update_fields=["client", "updated_at"])
     quote.items.all().delete()
     for item in items_data:
-        _create_item(quote=quote, tariff=item["tariff"], quantity=item["quantity"])
+        _create_item(
+            quote=quote,
+            tariff=item["tariff"],
+            quantity=item["quantity"],
+            unit_price=item.get("unit_price"),
+        )
     return quote
 
 
