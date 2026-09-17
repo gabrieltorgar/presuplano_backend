@@ -14,7 +14,9 @@ class QuoteItemInputSerializer(serializers.Serializer):
 
     ``unit_price`` is what this quote charges for the service, which is not
     always its catalogue price: a negotiated figure, or a total agreed with the
-    client and split across the quantity. Omitted, the catalogue price stands.
+    client and split across the quantity — hence six decimals, because that
+    split does not always land on a whole cent.  Omitted, the catalogue price
+    stands.
 
     Tariff/client ownership is enforced in the service layer.
     """
@@ -26,8 +28,8 @@ class QuoteItemInputSerializer(serializers.Serializer):
         error_messages={"invalid": "La cantidad debe ser mayor a 0"},
     )
     unit_price = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
+        max_digits=16,
+        decimal_places=6,
         required=False,
         error_messages={"invalid": "El precio debe ser mayor a 0"},
     )
@@ -60,7 +62,7 @@ class QuoteWriteSerializer(serializers.Serializer):
 class QuoteItemSerializer(serializers.ModelSerializer):
     """Read shape of a line item, including its computed subtotal."""
 
-    subtotal = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    subtotal = serializers.DecimalField(max_digits=16, decimal_places=2, read_only=True)
 
     class Meta:
         model = QuoteItem

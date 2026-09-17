@@ -3,6 +3,24 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.4.0] — 2026-09-17
+
+### Fixed
+- **apps/quotes (US-63):** un total acordado que no se reparte en centavos ya
+  no pierde dinero. 32 000 entre 15 dejaba el precio en 2 133,33 y la partida
+  se cobraba a 31 999,95. `QuoteItem.unit_price` pasa a **seis decimales** —los
+  que admite el valor unitario de un CFDI, que nace del mismo problema— y
+  `subtotal` redondea a centavos una sola vez (`ROUND_HALF_UP`), que es lo que
+  de verdad se factura; así 3 × 33,333333 se cobran como 100,00 y el total
+  vuelve a ser el pactado. El serializador de entrada acepta esos decimales.
+  Migración `0003_alter_quoteitem_unit_price` (solo amplía la columna: ningún
+  dato existente cambia de valor).
+
+### Tests
+- 89 tests. Tres casos nuevos: el total que no divide en centavos, la línea
+  cobrada en centavos enteros y el precio de siempre, que sigue comportándose
+  igual.
+
 ## [1.3.1] — 2026-09-17
 
 ### Fixed
