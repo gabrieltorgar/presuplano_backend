@@ -9,11 +9,17 @@ from rest_framework.views import APIView
 from apps.accounts.serializers import (
     LoginSerializer,
     MyAccountSerializer,
+    OrganizationSerializer,
     RegisterSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
-from apps.accounts.services import login_user, register_user, verify_phone
+from apps.accounts.services import (
+    get_my_organization,
+    login_user,
+    register_user,
+    verify_phone,
+)
 
 
 class RegisterView(APIView):
@@ -64,3 +70,22 @@ class MyAccountView(APIView):
 
     def get(self, request: Request) -> Response:
         return Response(MyAccountSerializer(request.user).data)
+
+
+class MyOrganizationView(APIView):
+    """GET/PATCH /api/auth/organization/ — the letterhead of the documents."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        organization = get_my_organization(user=request.user)
+        return Response(OrganizationSerializer(organization).data)
+
+    def patch(self, request: Request) -> Response:
+        organization = get_my_organization(user=request.user)
+        serializer = OrganizationSerializer(
+            organization, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)

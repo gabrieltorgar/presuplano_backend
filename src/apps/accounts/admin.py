@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from apps.accounts.models import Subscription, User
+from apps.accounts.models import Organization, Subscription, User
 
 
 @admin.register(User)
@@ -14,3 +14,9 @@ class UserAdmin(admin.ModelAdmin):
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
     list_display = ("user", "plan", "status", "created_at")
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("user", "name", "color", "updated_at")
+    search_fields = ("name", "user__phone")
