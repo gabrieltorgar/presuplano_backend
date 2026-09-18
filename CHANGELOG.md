@@ -3,6 +3,27 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.7.0] — 2026-09-18
+
+### Added
+- **apps/accounts (US-71):** la cuenta guarda el membrete con el que firma sus
+  documentos. `GET/PATCH /api/auth/organization/` lee y edita el nombre del
+  despacho y su color, y `GET /api/auth/me/` lo devuelve junto a la suscripción.
+  El nombre es opcional —vacío, el papel lo sigue firmando presuplano, que es
+  como venía funcionando— y el color se valida como hexadecimal de seis dígitos
+  y se guarda en mayúsculas, para que el mismo color escrito de dos formas sea
+  uno. Pedir la organización la crea si no existía, así que ninguna pantalla se
+  topa con un 404 que no pueda resolver.
+- Migraciones `0002_organization` y `0003_organization_for_existing_accounts`:
+  la segunda le da un membrete vacío a las cuentas anteriores, porque `/auth/me/`
+  solo lo reporta y lo habrían leído como `null` hasta abrir esa pantalla.
+
+### Tests
+- 106 tests. Trece casos nuevos: el membrete vacío de una cuenta nueva, guardar
+  nombre y color, la cuenta que ya lo trae, guardar dos veces sin duplicarlo,
+  cuatro colores inválidos, la normalización a mayúsculas, el recorte de
+  espacios, el acceso sin sesión y el aislamiento entre cuentas.
+
 ## [1.6.0] — 2026-09-18
 
 ### Added

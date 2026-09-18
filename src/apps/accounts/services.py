@@ -13,17 +13,18 @@ from rest_framework.exceptions import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import Subscription, User
+from apps.accounts.models import Organization, Subscription, User
 
 logger = logging.getLogger("apps")
 
 
 @transaction.atomic
 def register_user(*, phone: str, password: str) -> User:
-    """Create a pending (unverified) account and its active subscription.
+    """Create a pending (unverified) account, its subscription and letterhead.
 
     The account starts with ``is_phone_verified=False``; a subscription with the
-    initial plan is created in the same transaction (multi-tenant workspace).
+    initial plan and an empty organization are created in the same transaction
+    (multi-tenant workspace).
     """
     user = User.objects.create_user(
         phone=phone,
@@ -35,6 +36,9 @@ def register_user(*, phone: str, password: str) -> User:
         plan=Subscription.Plan.INITIAL,
         status=Subscription.Status.ACTIVE,
     )
+    # Empty letterhead, but already there: the documents screen never has to
+    # deal with an account that has no organization row at all.
+    Organization.objects.create(user=user)
     logger.info("Account registered", extra={"user_id": str(user.pk)})
     return user
 
@@ -86,3 +90,13 @@ def login_user(*, phone: str, password: str) -> tuple[User, dict[str, str]]:
     tokens = {"access": str(refresh.access_token), "refresh": str(refresh)}
     logger.info("Login succeeded", extra={"user_id": str(user.pk)})
     return user, tokens
+
+
+def get_my_organization(*, user: User) -> Organization:
+    """Return the account's letterhead, creating an empty one if it has none.
+
+    Accounts registered before organizations existed have no row; asking for it
+    is what creates it, so the screen never sees a 404 it cannot act on.
+    """
+    organization, _created = Organization.objects.get_or_create(user=user)
+    return organization

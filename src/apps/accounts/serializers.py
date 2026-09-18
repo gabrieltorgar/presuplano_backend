@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from apps.accounts.models import Subscription, User
+from apps.accounts.models import HEX_COLOR_VALIDATOR, Organization, Subscription, User
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -58,16 +58,50 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class OrganizationSerializer(serializers.ModelSerializer):
+    """The letterhead: the name and the color the documents are printed with.
+
+    Both fields are optional on input so the screen can save one without
+    touching the other (``PATCH`` with just a color).
+    """
+
+    name = serializers.CharField(
+        max_length=120, required=False, allow_blank=True, trim_whitespace=True
+    )
+    color = serializers.CharField(
+        max_length=7, required=False, validators=[HEX_COLOR_VALIDATOR]
+    )
+
+    class Meta:
+        model = Organization
+        fields = ["name", "color", "updated_at"]
+        read_only_fields = ["updated_at"]
+
+    def validate_color(self, value: str) -> str:
+        """One color, one spelling: #0f766e and #0F766E are the same ink."""
+        return value.upper()
+
+
 class MyAccountSerializer(serializers.ModelSerializer):
-    """What the profile screen shows: the account and its subscription.
+    """What the profile screen shows: the account, its plan and its letterhead.
 
     An account with no subscription reports ``null`` rather than failing: the
-    screen has to be able to say «sin suscripción» instead of breaking.
+    screen has to be able to say «sin suscripción» instead of breaking. The
+    organization is reported the same way — accounts created before it existed
+    have none until they save one.
     """
 
     subscription = SubscriptionSerializer(read_only=True)
+    organization = OrganizationSerializer(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "phone", "is_phone_verified", "created_at", "subscription"]
+        fields = [
+            "id",
+            "phone",
+            "is_phone_verified",
+            "created_at",
+            "subscription",
+            "organization",
+        ]
         read_only_fields = fields
