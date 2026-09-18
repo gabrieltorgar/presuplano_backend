@@ -3,6 +3,19 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.6.0] — 2026-09-18
+
+### Added
+- **apps/accounts (US-69):** `GET /api/auth/me/` devuelve la cuenta de quien
+  pregunta —teléfono, verificación, fecha de alta— y su suscripción con plan y
+  estado. La sesión solo llevaba el teléfono, que no alcanza para una pantalla
+  de perfil. Una cuenta sin suscripción responde `null` en ese campo en lugar de
+  fallar, porque la pantalla tiene que poder decir «sin suscripción».
+
+### Tests
+- 93 tests. Cuatro casos nuevos: los datos de la cuenta, la suscripción, la
+  cuenta sin suscripción y el acceso sin sesión (401).
+
 ## [1.5.0] — 2026-09-18
 
 ### Changed
