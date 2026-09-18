@@ -17,8 +17,14 @@ class Quote(TimestampedModel):
     """A quote for a client, composed of line items with an automatic total."""
 
     class Status(models.TextChoices):
+        """Where the quote is, which is not about its document.
+
+        The document exists from the moment the quote does and is rebuilt from
+        it on every edit, so «documented» was never a state of the quote: it
+        stays a draft until it becomes a project, and only then stops changing.
+        """
+
         DRAFT = "draft", _("Borrador")
-        DOCUMENT_GENERATED = "document_generated", _("Documento generado")
         IN_PROJECT = "in_project", _("En proyecto")
 
     owner = models.ForeignKey(

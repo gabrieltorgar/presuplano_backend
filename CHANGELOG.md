@@ -3,6 +3,25 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.5.0] — 2026-09-18
+
+### Changed
+- **apps/quotes (US-12, US-11):** «documento generado» deja de ser un estado de
+  la cotización. El documento se construye a partir de ella cada vez que se
+  pide, así que existe desde que existe la cotización: desaparece la operación
+  `POST /quotes/:id/generate-document/` y el estado queda en **borrador** hasta
+  que se convierte en proyecto. Editar está permitido mientras no lo sea, en
+  lugar de bloquearse al imprimir el papel.
+- **apps/projects (US-14):** un proyecto arranca desde cualquier cotización de
+  la cuenta, sin el paso previo de documentarla.
+- Migración `0004_quote_document_is_not_a_state`: devuelve a borrador las
+  cotizaciones marcadas como documentadas, que es lo que son.
+
+### Tests
+- 89 tests. La suite cubre que una cotización nace y sigue siendo borrador por
+  muchas veces que se edite, que deja de editarse al ser proyecto, y que la
+  operación de generar documento ya no existe.
+
 ## [1.4.0] — 2026-09-17
 
 ### Fixed

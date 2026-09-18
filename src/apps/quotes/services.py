@@ -62,15 +62,18 @@ def create_quote(*, owner, client: Client, items_data: list[dict]) -> Quote:
 
 @transaction.atomic
 def update_quote(*, quote: Quote, client: Client, items_data: list[dict]) -> Quote:
-    """Replace a draft quote's client and items; blocked once documented.
+    """Replace a quote's client and items; blocked once it is a project.
+
+    A quote can be corrected as many times as the negotiation takes — its
+    document is rebuilt from it every time — and stops changing when work has
+    started on it, because from then on there are advances measured against it.
 
     Raises:
-        ValidationError: the quote already has a generated document.
+        ValidationError: the quote is already a project.
     """
-    if quote.status != Quote.Status.DRAFT:
+    if quote.status == Quote.Status.IN_PROJECT:
         raise ValidationError(
-            "La cotización ya tiene documento generado; crea una nueva versión "
-            "para modificarla"
+            "La cotización ya es un proyecto en marcha; no se puede modificar"
         )
     _ensure_owned(owner=quote.owner, client=client, items_data=items_data)
     quote.client = client
@@ -83,21 +86,4 @@ def update_quote(*, quote: Quote, client: Client, items_data: list[dict]) -> Quo
             quantity=item["quantity"],
             unit_price=item.get("unit_price"),
         )
-    return quote
-
-
-def generate_quote_document(*, quote: Quote) -> Quote:
-    """Mark the quote as documented. Idempotent (regenerating is a no-op).
-
-    Raises:
-        ValidationError: the quote has no line items.
-    """
-    if not quote.items.exists():
-        raise ValidationError(
-            "No se puede generar el documento de una cotización sin partidas"
-        )
-    if quote.status == Quote.Status.DRAFT:
-        quote.status = Quote.Status.DOCUMENT_GENERATED
-        quote.save(update_fields=["status", "updated_at"])
-        logger.info("Quote document generated", extra={"quote_id": str(quote.pk)})
     return quote

@@ -1,14 +1,17 @@
-"""Quotes views: account-scoped quote CRUD + document generation."""
+"""Quotes views: account-scoped quote CRUD.
+
+There is no «generate document» operation: the document is built from the
+quote whenever it is asked for, so it is always the current one.
+"""
 
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.quotes.selectors import list_quotes_for_owner
 from apps.quotes.serializers import QuoteSerializer, QuoteWriteSerializer
-from apps.quotes.services import create_quote, generate_quote_document, update_quote
+from apps.quotes.services import create_quote, update_quote
 
 
 class QuoteViewSet(viewsets.ModelViewSet):
@@ -44,9 +47,3 @@ class QuoteViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request: Request, *args, **kwargs) -> Response:
         return self.update(request, *args, **kwargs)
-
-    @action(detail=True, methods=["post"], url_path="generate-document")
-    def generate_document(self, request: Request, pk: str | None = None) -> Response:
-        quote = self.get_object()
-        quote = generate_quote_document(quote=quote)
-        return Response(QuoteSerializer(quote).data)

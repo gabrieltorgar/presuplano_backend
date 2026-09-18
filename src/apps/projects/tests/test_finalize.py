@@ -11,7 +11,7 @@ from apps.clients.tests.factories import ClientFactory
 from apps.payments.services import register_payment
 from apps.projects.models import Project
 from apps.projects.services import register_progress, start_project
-from apps.quotes.services import create_quote, generate_quote_document
+from apps.quotes.services import create_quote
 
 PROJECTS_URL = "/api/projects/"
 
@@ -31,7 +31,6 @@ def build_project(user, paid=None):
             {"tariff": zocalo, "quantity": Decimal("20")},
         ],
     )
-    generate_quote_document(quote=quote)
     project = start_project(owner=user, quote=quote)
     muro_item = quote.items.get(tariff=muro)
     register_progress(
