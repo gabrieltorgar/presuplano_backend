@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from apps.accounts.models import User
+from apps.accounts.models import Subscription, User
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -46,4 +46,28 @@ class UserAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "phone", "is_phone_verified"]
+        read_only_fields = fields
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    """The account's plan and whether it is active."""
+
+    class Meta:
+        model = Subscription
+        fields = ["plan", "status", "created_at"]
+        read_only_fields = fields
+
+
+class MyAccountSerializer(serializers.ModelSerializer):
+    """What the profile screen shows: the account and its subscription.
+
+    An account with no subscription reports ``null`` rather than failing: the
+    screen has to be able to say «sin suscripción» instead of breaking.
+    """
+
+    subscription = SubscriptionSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "phone", "is_phone_verified", "created_at", "subscription"]
         read_only_fields = fields

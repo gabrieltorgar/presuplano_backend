@@ -1,13 +1,14 @@
 """Accounts views (orchestration only; logic lives in services)."""
 
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.serializers import (
     LoginSerializer,
+    MyAccountSerializer,
     RegisterSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
@@ -54,3 +55,12 @@ class LoginView(APIView):
             {**tokens, "user": UserAccountSerializer(user).data},
             status=status.HTTP_200_OK,
         )
+
+
+class MyAccountView(APIView):
+    """GET /api/auth/me/ — the account of whoever is asking."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        return Response(MyAccountSerializer(request.user).data)
