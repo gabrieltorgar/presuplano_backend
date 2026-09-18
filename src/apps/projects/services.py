@@ -15,17 +15,16 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 def start_project(*, owner, quote: Quote) -> Project:
-    """Start a project from a documented quote.
+    """Start a project from a quote.
+
+    Any quote of the account can become a project: its document exists from the
+    moment it does, so there is nothing to generate first.
 
     Raises:
-        ValidationError: quote not owned, still a draft, or already has a project.
+        ValidationError: quote not owned, or it already has a project.
     """
     if quote.owner_id != owner.id:
         raise ValidationError("Cotización no encontrada.")
-    if quote.status == Quote.Status.DRAFT:
-        raise ValidationError(
-            "Genera el documento de la cotización antes de iniciar el proyecto"
-        )
     if Project.objects.filter(quote=quote).exists():
         raise ValidationError("Esta cotización ya tiene un proyecto asociado")
 

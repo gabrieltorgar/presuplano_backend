@@ -10,7 +10,7 @@ from apps.catalog.tests.factories import TariffFactory
 from apps.clients.tests.factories import ClientFactory
 from apps.payments.services import register_payment
 from apps.projects.services import register_progress, start_project
-from apps.quotes.services import create_quote, generate_quote_document
+from apps.quotes.services import create_quote
 
 PAYMENTS_URL = "/api/payments/"
 
@@ -30,7 +30,6 @@ def make_project_with_advance(user, advance=Decimal("6")):
             {"tariff": zocalo, "quantity": Decimal("20")},
         ],
     )
-    generate_quote_document(quote=quote)
     project = start_project(owner=user, quote=quote)
     muro_item = quote.items.get(tariff=muro)
     register_progress(
