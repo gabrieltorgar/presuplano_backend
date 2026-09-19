@@ -33,6 +33,27 @@ class VerifyOtpSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=6)
 
 
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Pedir recuperar: solo hace falta el teléfono, que es la identidad."""
+
+    phone = serializers.CharField(max_length=20)
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Confirmar la recuperación con el código y la contraseña nueva."""
+
+    phone = serializers.CharField(max_length=20)
+    code = serializers.CharField(max_length=6)
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+    def validate_password(self, value: str) -> str:
+        if len(value) < MIN_PASSWORD_LENGTH:
+            raise serializers.ValidationError(
+                "La contraseña debe tener al menos 8 caracteres"
+            )
+        return value
+
+
 class LoginSerializer(serializers.Serializer):
     """Validates login input."""
 

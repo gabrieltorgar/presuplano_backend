@@ -10,6 +10,8 @@ from apps.accounts.serializers import (
     LoginSerializer,
     MyAccountSerializer,
     OrganizationSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     RegisterSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
@@ -18,6 +20,8 @@ from apps.accounts.services import (
     get_my_organization,
     login_user,
     register_user,
+    reset_password,
+    start_password_reset,
     verify_phone,
 )
 
@@ -61,6 +65,39 @@ class LoginView(APIView):
             {**tokens, "user": UserAccountSerializer(user).data},
             status=status.HTTP_200_OK,
         )
+
+
+class PasswordResetRequestView(APIView):
+    """POST /api/auth/password-reset/ — pedir recuperar la contraseña."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        start_password_reset(**serializer.validated_data)
+        # La misma respuesta exista o no la cuenta: no se revela quién es cliente.
+        return Response(
+            {
+                "detail": (
+                    "Si ese teléfono tiene una cuenta, puedes continuar con el "
+                    "código de verificación."
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = reset_password(**serializer.validated_data)
+        return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
 class MyAccountView(APIView):

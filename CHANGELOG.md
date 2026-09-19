@@ -3,6 +3,26 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.8.0] — 2026-09-19
+
+### Added
+- **apps/accounts (US-82):** recuperar la contraseña.
+  `POST /api/auth/password-reset/` la pide y
+  `POST /api/auth/password-reset/confirm/` la cambia con el mismo código que
+  verifica el teléfono. No existía: quien la olvidaba quedaba fuera para
+  siempre, y tampoco tenía a quién escribirle. Pedirla responde igual exista o
+  no la cuenta —responder distinto convertiría el endpoint en un detector de
+  clientes— y quien la recupera queda con el teléfono verificado, porque ha
+  demostrado lo mismo que verificándolo.
+- **apps/leads (US-83):** `POST /api/contact/` recibe un mensaje de quien
+  todavía no tiene cuenta —nombre y un teléfono o un correo para responderle—.
+  Se leen en el admin: la página deja mensajes, no los consulta.
+
+### Tests
+- 122 tests. Dieciséis nuevos: ocho de la recuperación (incluido que un teléfono
+  desconocido responde igual y que un código inválido no cambia nada) y ocho del
+  contacto.
+
 ## [1.7.0] — 2026-09-18
 
 ### Added

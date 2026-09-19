@@ -92,6 +92,45 @@ def login_user(*, phone: str, password: str) -> tuple[User, dict[str, str]]:
     return user, tokens
 
 
+def start_password_reset(*, phone: str) -> None:
+    """Arrancar la recuperación de una contraseña olvidada.
+
+    En el MVP el código es el OTP universal, así que no hay nada que enviar:
+    esto existe para dejar registro del intento y para que la pantalla tenga a
+    quién preguntarle. Un teléfono desconocido no dice nada —responder distinto
+    convertiría el endpoint en un detector de clientes—, así que solo se anota.
+    """
+    exists = User.objects.filter(phone=phone).exists()
+    logger.info(
+        "Password reset requested",
+        extra={"phone_known": exists},
+    )
+
+
+def reset_password(*, phone: str, code: str, password: str) -> User:
+    """Cambiar la contraseña de quien demuestra tener el teléfono.
+
+    Raises:
+        NotFound: no existe una cuenta con ese teléfono.
+        ValidationError: el código no es el correcto.
+    """
+    try:
+        user = User.objects.get(phone=phone)
+    except User.DoesNotExist as exc:
+        raise NotFound("No existe una cuenta con ese teléfono.") from exc
+
+    if not secrets.compare_digest(str(code), str(settings.OTP_UNIVERSAL_CODE)):
+        raise ValidationError("Código de verificación inválido")
+
+    user.set_password(password)
+    # Quien recupera demuestra lo mismo que quien verifica: que tiene el
+    # teléfono. Una cuenta que se quedó a medias entra de una vez.
+    user.is_phone_verified = True
+    user.save(update_fields=["password", "is_phone_verified", "updated_at"])
+    logger.info("Password reset", extra={"user_id": str(user.pk)})
+    return user
+
+
 def get_my_organization(*, user: User) -> Organization:
     """Return the account's letterhead, creating an empty one if it has none.
 
