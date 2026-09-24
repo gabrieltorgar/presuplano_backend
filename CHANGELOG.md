@@ -3,6 +3,31 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.11.0] — 2026-09-24
+
+### Added
+- **apps/planner (US-92):** los planos dejan de vivir sólo en el navegador que
+  los dibujó. `/api/plans/` los guarda por cuenta y los devuelve a cualquier
+  dispositivo: la lista trae resúmenes —pintar cinco renglones no puede costar
+  cinco planos enteros por la red del teléfono— y el detalle, el documento
+  completo, tal como lo serializa el editor, con su propio número de versión de
+  formato.
+- El plano conserva **el id que le puso el editor**: es el de su dirección, y
+  con otro el plano del teléfono y el de la computadora serían dos. El resumen
+  incluye además la fecha que estampó el editor, que es con la que cada
+  dispositivo decide qué copia es la nueva sin depender de que su reloj y el
+  del servidor coincidan.
+- Tope de 4 MB por documento (`PLAN_MAX_BYTES`), con un mensaje que dice qué
+  suele pesar: el plano de fondo escaneado o una textura suelta, que viajan
+  dentro del documento.
+
+### Tests
+- 139 tests (11 nuevos): guardar y volver a abrir, que la lista no carga el
+  documento, que guardar otra vez reemplaza, que un plano ajeno no existe, que
+  sin sesión no hay planos, el nombre obligatorio, el tope de peso explicado,
+  el borrado, el orden por lo último tocado, el id propio y la fecha del
+  documento.
+
 ## [1.10.0] — 2026-09-24
 
 ### Changed
