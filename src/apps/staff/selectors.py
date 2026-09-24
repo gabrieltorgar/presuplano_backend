@@ -8,6 +8,16 @@ from apps.projects.models import Progress, Project
 from apps.staff.models import Assignment, Worker, WorkerPayment
 
 ZERO = Decimal("0.00")
+CENTS = Decimal("0.01")
+
+
+def money(value: Decimal) -> str:
+    """Un importe tal como viaja en esta API: cadena con dos decimales.
+
+    Decimal rendered as JSON becomes a float, and a float is not money: the
+    rest of the API sends amounts as strings and the app reads them so.
+    """
+    return str(Decimal(value).quantize(CENTS))
 
 
 def list_workers_for_owner(*, owner) -> QuerySet[Worker]:
@@ -82,11 +92,11 @@ def worker_totals(worker: Worker, *, project_id: str | None = None) -> dict:
     accrued = accrued_value(worker, project_id=project_id)
     paid = paid_value(worker, project_id=project_id)
     return {
-        "committed_value": committed,
-        "accrued_value": accrued,
-        "total_paid": paid,
-        "balance": max(accrued - paid, ZERO),
-        "advance_balance": max(paid - accrued, ZERO),
+        "committed_value": money(committed),
+        "accrued_value": money(accrued),
+        "total_paid": money(paid),
+        "balance": money(max(accrued - paid, ZERO)),
+        "advance_balance": money(max(paid - accrued, ZERO)),
     }
 
 
@@ -111,34 +121,38 @@ def project_distribution(*, project: Project) -> dict:
                 "name": item.name,
                 "unit_type": item.unit_type,
                 "tariff": str(item.tariff_id),
-                "quantity": item.quantity,
-                "assigned_quantity": assigned,
-                "unassigned_quantity": item.quantity - assigned,
-                "advanced_quantity": advanced,
+                "quantity": money(item.quantity),
+                "assigned_quantity": money(assigned),
+                "unassigned_quantity": money(item.quantity - assigned),
+                "advanced_quantity": money(advanced),
                 "assignments": [
                     {
                         "id": str(a.id),
                         "worker": str(a.worker_id),
                         "worker_name": a.worker.name,
                         "is_self": a.worker.is_self,
-                        "quantity": a.quantity,
-                        "unit_price": a.unit_price,
-                        "committed_value": a.committed_value,
-                        "advanced_quantity": sum(
-                            (
-                                p.quantity
-                                for p in advances
-                                if p.worker_id == a.worker_id
-                            ),
-                            ZERO,
+                        "quantity": money(a.quantity),
+                        "unit_price": money(a.unit_price),
+                        "committed_value": money(a.committed_value),
+                        "advanced_quantity": money(
+                            sum(
+                                (
+                                    p.quantity
+                                    for p in advances
+                                    if p.worker_id == a.worker_id
+                                ),
+                                ZERO,
+                            )
                         ),
-                        "accrued_value": sum(
-                            (
-                                p.labor_value
-                                for p in advances
-                                if p.worker_id == a.worker_id
-                            ),
-                            ZERO,
+                        "accrued_value": money(
+                            sum(
+                                (
+                                    p.labor_value
+                                    for p in advances
+                                    if p.worker_id == a.worker_id
+                                ),
+                                ZERO,
+                            )
                         ),
                     }
                     for a in mine
