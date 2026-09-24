@@ -33,6 +33,12 @@ class VerifyOtpSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=6)
 
 
+class ResendOtpSerializer(serializers.Serializer):
+    """Reenviar el código: basta el teléfono, que es la identidad de la cuenta."""
+
+    phone = serializers.CharField(max_length=20)
+
+
 class PasswordResetRequestSerializer(serializers.Serializer):
     """Pedir recuperar: solo hace falta el teléfono, que es la identidad."""
 

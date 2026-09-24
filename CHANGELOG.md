@@ -3,6 +3,22 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.9.0] — 2026-09-24
+
+### Added
+- **apps/accounts (US-89):** `POST /api/auth/resend-otp/` vuelve a enviar el
+  código de verificación. Quien no lo recibía se quedaba mirando la pantalla:
+  la única salida era registrarse otra vez, que además falla porque el teléfono
+  ya existe. Responde igual exista o no la cuenta y esté o no verificada —lo
+  contrario convertiría el endpoint en un detector de clientes—; en el MVP el
+  código es el OTP universal, así que lo que deja es registro del intento, con
+  el envío real de SMS por detrás el día que lo haya.
+
+### Tests
+- 127 tests (5 nuevos): que una cuenta pendiente puede pedir el código otra vez
+  y queda anotado, que un teléfono desconocido y uno ya verificado responden lo
+  mismo, que el teléfono es obligatorio y que sólo se acepta por POST.
+
 ## [1.8.0] — 2026-09-19
 
 ### Added

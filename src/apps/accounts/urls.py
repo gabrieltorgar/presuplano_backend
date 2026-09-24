@@ -10,6 +10,7 @@ from apps.accounts.views import (
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RegisterView,
+    ResendOtpView,
     VerifyOtpView,
 )
 
@@ -18,6 +19,7 @@ app_name = "accounts"
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
     path("verify-otp/", VerifyOtpView.as_view(), name="verify-otp"),
+    path("resend-otp/", ResendOtpView.as_view(), name="resend-otp"),
     path("login/", LoginView.as_view(), name="login"),
     path(
         "password-reset/",
