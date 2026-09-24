@@ -3,6 +3,8 @@
 Source: 4.0_Backlog_Producto.json → US-03 acceptance_criteria_gherkin.
 """
 
+import logging
+
 import pytest
 from rest_framework import status
 
@@ -38,6 +40,28 @@ class TestLogin:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert "Credenciales inválidas" in str(response.data)
+
+    def test_unverified_login_sends_the_code_and_names_the_reason(
+        self, api_client, user_factory, caplog
+    ) -> None:
+        """Flujo principal - Entrar sin verificar manda el código otra vez.
+
+        La pantalla tiene que distinguir esto de una contraseña equivocada para
+        llevar al código en vez de dejar un error rojo, así que la respuesta
+        trae un código propio que no depende del texto del mensaje.
+        """
+        account = user_factory(is_phone_verified=False, password="testpass123")
+
+        with caplog.at_level(logging.INFO, logger="apps"):
+            response = api_client.post(
+                LOGIN_URL, {"phone": account.phone, "password": "testpass123"}
+            )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.data["code"] == "phone_not_verified"
+        assert any(
+            "Verification code sent" in record.message for record in caplog.records
+        )
 
     def test_login_with_unverified_phone_returns_403(
         self, api_client, user_factory
