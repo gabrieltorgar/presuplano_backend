@@ -26,10 +26,13 @@ class PlanSummarySerializer(serializers.ModelSerializer):
 
         The device decides which copy is newer, and comparing its own stamp
         against the server's clock would make that decision depend on how well
-        the two agree.
+        the two agree. The plan travels inside the editor's own envelope
+        (``{format, version, plan}``), so the date is looked for there first.
         """
         document = plan.document if isinstance(plan.document, dict) else {}
-        stamp = document.get("updatedAt")
+        inner = document.get("plan")
+        source = inner if isinstance(inner, dict) else document
+        stamp = source.get("updatedAt")
         return stamp if isinstance(stamp, str) else None
 
 

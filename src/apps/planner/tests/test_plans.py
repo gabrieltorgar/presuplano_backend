@@ -218,3 +218,21 @@ class TestPlans:
         resumen = authenticated_client.get(URL).data[0]
 
         assert resumen["document_updated_at"] == DOCUMENT["updatedAt"]
+
+    def test_the_summary_reads_the_date_inside_the_format_envelope(
+        self, authenticated_client
+    ) -> None:
+        """Flujo principal - El plano viaja dentro del sobre de su formato.
+
+        El editor serializa `{format, version, plan}` para poder migrar
+        formatos viejos; la fecha del documento vive ahí dentro.
+        """
+        sobre = {"format": "presuplano.plan", "version": 2, "plan": DOCUMENT}
+
+        authenticated_client.post(
+            URL, {"name": "Casa Reyes", "document": sobre}, format="json"
+        )
+
+        resumen = authenticated_client.get(URL).data[0]
+
+        assert resumen["document_updated_at"] == DOCUMENT["updatedAt"]
