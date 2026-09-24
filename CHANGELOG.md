@@ -3,6 +3,42 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.12.0] — 2026-09-24
+
+### Added
+- **apps/staff (US-96):** el personal —la persona o la empresa que ejecuta el
+  trabajo— con lo que sabe hacer y **a cómo se le paga**, que no es lo que se
+  le cobra al cliente: la diferencia es el margen de la obra. Un servicio lo
+  pueden hacer varios y cada quien puede hacer varios. `/api/workers/`.
+- **El reparto (US-97):** `/api/assignments/` entrega parte de una partida a
+  alguien, a un precio acordado que se **congela ahí** —cambiar un trato de hoy
+  no puede reescribir lo ya repartido—. No se puede repartir más de lo que la
+  partida tiene, y repartir dos veces lo mismo a la misma persona corrige el
+  reparto en vez de duplicarlo. `/api/projects/:id/distribution/` dice, partida
+  por partida, quién lleva qué y qué falta por repartir.
+- **El avance dice quién lo hizo (US-98):** `POST /projects/:id/progress/`
+  acepta `worker`, y con él copia el precio de mano de obra del reparto. Así lo
+  ejecutado se convierte en lo devengado: dos cifras separadas a propósito —lo
+  **comprometido**, que es todo lo repartido, y lo **devengado**, que es lo que
+  ya se trabajó—. Se paga contra lo devengado.
+- **Pagos al personal (US-98):** `/api/worker-payments/` registra el pago de un
+  proyecto o el de la semana entera, y `summary/` devuelve comprometido,
+  devengado, pagado, saldo y anticipo. A «Yo» —el registro del propio despacho,
+  uno solo por cuenta— se le reparte trabajo pero no se le paga.
+
+### Notes
+- El saldo nunca es negativo: lo entregado de más se informa aparte como
+  anticipo, para que no se lea como deuda.
+- Un avance sin autor no le debe nada a nadie; es trabajo de la casa.
+
+### Tests
+- 157 tests (17 nuevos + 1 app): alta de persona y de empresa, el mismo
+  servicio en varias manos, «Yo» único por cuenta, aislamiento entre cuentas,
+  el reparto con y sin precio acordado, el tope de lo repartible, lo que falta
+  por repartir, el devengo por autor, el pago que baja el saldo, el pago
+  general sin proyecto y los dos rechazos: pagarse a uno mismo y pagarle al
+  personal de otra cuenta.
+
 ## [1.11.0] — 2026-09-24
 
 ### Added

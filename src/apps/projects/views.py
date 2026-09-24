@@ -48,6 +48,13 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
         entry = register_progress(project=project, **serializer.validated_data)
         return Response(ProgressSerializer(entry).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["get"])
+    def distribution(self, request: Request, pk: str | None = None) -> Response:
+        """Cómo está repartida la obra: quién lleva qué y qué falta por repartir."""
+        from apps.staff.selectors import project_distribution
+
+        return Response(project_distribution(project=self.get_object()))
+
     @action(detail=True, methods=["post"])
     def finalize(self, request: Request, pk: str | None = None) -> Response:
         project = self.get_object()
