@@ -7,6 +7,7 @@ from rest_framework import serializers
 from apps.projects.models import Evidence, Progress, Project
 from apps.projects.selectors import advanced_value, quoted_value
 from apps.quotes.models import Quote, QuoteItem
+from apps.staff.models import Worker
 
 
 class StartProjectSerializer(serializers.Serializer):
@@ -16,11 +17,14 @@ class StartProjectSerializer(serializers.Serializer):
 
 
 class ProgressInputSerializer(serializers.Serializer):
-    """Validates a progress entry (quantity + date). Percentage removed in v1.1."""
+    """Validates a progress entry (quantity + date + who did it)."""
 
     quote_item = serializers.PrimaryKeyRelatedField(queryset=QuoteItem.objects.all())
     quantity = serializers.DecimalField(max_digits=12, decimal_places=2)
     date = serializers.DateField()
+    worker = serializers.PrimaryKeyRelatedField(
+        queryset=Worker.objects.all(), required=False, allow_null=True
+    )
 
 
 class ProgressSerializer(serializers.ModelSerializer):
@@ -32,7 +36,15 @@ class ProgressSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Progress
-        fields = ["id", "quote_item", "quantity", "date", "earned_value"]
+        fields = [
+            "id",
+            "quote_item",
+            "quantity",
+            "date",
+            "earned_value",
+            "worker",
+            "labor_unit_price",
+        ]
 
 
 class EvidenceSerializer(serializers.ModelSerializer):
@@ -73,6 +85,7 @@ class ProjectSerializer(serializers.ModelSerializer):
                 "date": str(progress.date),
                 "item": progress.quote_item.name,
                 "quantity": str(progress.quantity),
+                "worker_name": progress.worker.name if progress.worker_id else "",
             }
             for progress in obj.progresses.all()
         ]
@@ -81,9 +94,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         """Line items with their pending (still-registerable) quantity."""
         items = []
         for item in obj.quote.items.all():
-            advanced = sum(
-                (p.quantity for p in item.progresses.all()), Decimal("0")
-            )
+            advanced = sum((p.quantity for p in item.progresses.all()), Decimal("0"))
             items.append(
                 {
                     "id": str(item.id),

@@ -43,13 +43,18 @@ def register_progress(
     quote_item: QuoteItem,
     date,
     quantity: Decimal | None = None,
+    worker=None,
 ) -> Progress:
     """Record an advance on a quote item, by quantity.
 
+    The advance may say WHO did it. When it does, it carries the labour price
+    agreed with that person —copied here, not looked up later— because that is
+    what turns work done into money owed.
+
     Raises:
-        ValidationError: item not in the project, non-positive advance, or an
-            advance that would exceed the pending quantity; also if the project is
-            finished.
+        ValidationError: item not in the project, non-positive advance, an
+            advance that would exceed the pending quantity, a worker from another
+            account or one with no agreed price; also if the project is finished.
     """
     if project.status == Project.Status.FINISHED:
         raise ValidationError("El proyecto está finalizado")
@@ -64,8 +69,26 @@ def register_progress(
     if quantity > pending:
         raise ValidationError(f"El avance supera la cantidad pendiente ({pending})")
 
+    labor_unit_price = None
+    if worker is not None:
+        # Import local: el personal conoce los proyectos, y al revés sólo aquí.
+        from apps.staff.services import labor_unit_price_for
+
+        if worker.owner_id != project.owner_id:
+            raise ValidationError("Personal no encontrado.")
+        labor_unit_price = labor_unit_price_for(quote_item=quote_item, worker=worker)
+        if labor_unit_price is None:
+            raise ValidationError(
+                f"Falta decir cuánto se le paga a {worker.name} por {quote_item.name}"
+            )
+
     return Progress.objects.create(
-        project=project, quote_item=quote_item, quantity=quantity, date=date
+        project=project,
+        quote_item=quote_item,
+        quantity=quantity,
+        date=date,
+        worker=worker,
+        labor_unit_price=labor_unit_price,
     )
 
 
