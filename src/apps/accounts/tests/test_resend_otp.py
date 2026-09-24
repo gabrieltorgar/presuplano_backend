@@ -28,7 +28,9 @@ class TestResendOtp:
 
         assert response.status_code == status.HTTP_200_OK
         assert "detail" in response.data
-        assert any("OTP resent" in record.message for record in caplog.records)
+        assert any(
+            "Verification code sent" in record.message for record in caplog.records
+        )
 
     def test_an_unknown_phone_answers_the_same(self, api_client, user_factory) -> None:
         """Caso de borde - No se revela qué teléfonos existen.

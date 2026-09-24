@@ -3,6 +3,23 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.10.0] — 2026-09-24
+
+### Changed
+- **apps/accounts (US-90):** entrar con un teléfono sin verificar ya no es un
+  callejón. `POST /api/auth/login/` manda el código otra vez antes de negar el
+  paso, y responde 403 con `code: "phone_not_verified"` junto al mensaje de
+  siempre: la pantalla necesita distinguir esto de una contraseña equivocada
+  para llevar a escribir el código, y hacerlo comparando el texto del mensaje
+  se rompería el día que cambie la redacción.
+- **apps/accounts:** el envío del código vive en un solo sitio
+  (`send_verification_code`), que es donde se colgará el SMS de verdad. Lo usan
+  el reenvío y el acceso sin verificar.
+
+### Tests
+- 128 tests (1 nuevo): que entrar sin verificar deja el código enviado y nombra
+  el motivo con su propio código.
+
 ## [1.9.0] — 2026-09-24
 
 ### Added

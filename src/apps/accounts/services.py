@@ -18,6 +18,23 @@ from apps.accounts.models import Organization, Subscription, User
 logger = logging.getLogger("apps")
 
 
+class PhoneNotVerified(PermissionDenied):
+    """403 con un código propio para una cuenta sin verificar.
+
+    The screen has to tell this apart from a wrong password to walk the person
+    to the code instead of leaving a red box, and matching on the message text
+    would break the day the wording changes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            {
+                "detail": "Debes verificar tu teléfono antes de iniciar sesión",
+                "code": "phone_not_verified",
+            }
+        )
+
+
 @transaction.atomic
 def register_user(*, phone: str, password: str) -> User:
     """Create a pending (unverified) account, its subscription and letterhead.
@@ -41,6 +58,16 @@ def register_user(*, phone: str, password: str) -> User:
     Organization.objects.create(user=user)
     logger.info("Account registered", extra={"user_id": str(user.pk)})
     return user
+
+
+def send_verification_code(*, user: User) -> None:
+    """Hacer llegar a su dueño el código que activa la cuenta.
+
+    En el MVP el código es el OTP universal y no hay SMS que mandar: esto es el
+    punto donde colgarlo el día que lo haya, y hoy deja constancia de que
+    tocaba enviarlo.
+    """
+    logger.info("Verification code sent", extra={"user_id": str(user.pk)})
 
 
 def verify_phone(*, phone: str, code: str) -> User:
@@ -80,13 +107,13 @@ def resend_otp(*, phone: str) -> None:
     clientes—, así que solo se anota.
     """
     user = User.objects.filter(phone=phone).first()
+    pending = user is not None and not user.is_phone_verified
     logger.info(
-        "OTP resent",
-        extra={
-            "phone_known": user is not None,
-            "pending": user is not None and not user.is_phone_verified,
-        },
+        "OTP resend requested",
+        extra={"phone_known": user is not None, "pending": pending},
     )
+    if user is not None and pending:
+        send_verification_code(user=user)
 
 
 def login_user(*, phone: str, password: str) -> tuple[User, dict[str, str]]:
@@ -97,13 +124,17 @@ def login_user(*, phone: str, password: str) -> tuple[User, dict[str, str]]:
 
     Raises:
         AuthenticationFailed: unknown phone or wrong password (401).
-        PermissionDenied: correct credentials but phone not verified (403).
+        PhoneNotVerified: correct credentials but phone not verified (403); the
+            verification code is sent again on the way out.
     """
     user = User.objects.filter(phone=phone).first()
     if user is None or not user.check_password(password):
         raise AuthenticationFailed("Credenciales inválidas")
     if not user.is_phone_verified:
-        raise PermissionDenied("Debes verificar tu teléfono antes de iniciar sesión")
+        # Quien entra sin verificar no se quedó fuera: recibe el código otra vez
+        # y la pantalla lo lleva a escribirlo, como al registrarse.
+        send_verification_code(user=user)
+        raise PhoneNotVerified
 
     refresh = RefreshToken.for_user(user)
     tokens = {"access": str(refresh.access_token), "refresh": str(refresh)}
