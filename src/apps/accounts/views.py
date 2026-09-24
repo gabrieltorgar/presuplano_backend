@@ -13,6 +13,7 @@ from apps.accounts.serializers import (
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
+    ResendOtpSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
@@ -20,6 +21,7 @@ from apps.accounts.services import (
     get_my_organization,
     login_user,
     register_user,
+    resend_otp,
     reset_password,
     start_password_reset,
     verify_phone,
@@ -50,6 +52,27 @@ class VerifyOtpView(APIView):
         serializer.is_valid(raise_exception=True)
         user = verify_phone(**serializer.validated_data)
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class ResendOtpView(APIView):
+    """POST /api/auth/resend-otp/ — volver a pedir el código de verificación."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        serializer = ResendOtpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        resend_otp(**serializer.validated_data)
+        # La misma respuesta exista o no la cuenta: no se revela quién es cliente.
+        return Response(
+            {
+                "detail": (
+                    "Si esa cuenta está pendiente de verificar, te enviamos el "
+                    "código otra vez."
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LoginView(APIView):

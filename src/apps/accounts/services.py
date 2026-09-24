@@ -70,6 +70,25 @@ def verify_phone(*, phone: str, code: str) -> User:
     return user
 
 
+def resend_otp(*, phone: str) -> None:
+    """Volver a mandar el código de verificación de una cuenta pendiente.
+
+    En el MVP el código es el OTP universal, así que no hay nada que enviar:
+    esto existe para dejar registro del intento y para que la pantalla tenga a
+    quién pedírselo. Ni un teléfono desconocido ni uno ya verificado se
+    distinguen en la respuesta —eso convertiría el endpoint en un detector de
+    clientes—, así que solo se anota.
+    """
+    user = User.objects.filter(phone=phone).first()
+    logger.info(
+        "OTP resent",
+        extra={
+            "phone_known": user is not None,
+            "pending": user is not None and not user.is_phone_verified,
+        },
+    )
+
+
 def login_user(*, phone: str, password: str) -> tuple[User, dict[str, str]]:
     """Authenticate by phone + password and issue JWT tokens.
 
