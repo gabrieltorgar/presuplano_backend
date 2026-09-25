@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     "apps.leads",
     "apps.planner",
     "apps.staff",
+    "apps.dashboard",
 ]
 
 MIDDLEWARE = [

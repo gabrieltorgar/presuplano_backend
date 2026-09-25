@@ -3,6 +3,36 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.13.0] — 2026-09-25
+
+### Added
+- **apps/dashboard (US-99):** `/api/dashboard/` responde, en un solo viaje, lo
+  que el arquitecto abre la aplicación a preguntar: cuántas obras están en
+  marcha, cuántas cotizaciones se hicieron y cuántas se volvieron proyecto —y
+  **cuánto representan en dinero** del total cotizado, que es lo que dice si se
+  están ganando las que importan—, las cuentas por cobrar y las cuentas por
+  pagar, los ingresos de los últimos seis meses terminando en el actual, y las
+  tablas de lo más vendido: diez servicios, cinco clientes y cinco personas del
+  personal.
+
+### Notes
+- **Vendido es lo que se volvió obra:** las tablas de servicios y clientes leen
+  las cotizaciones convertidas en proyecto, no todas. Una cotización que nunca
+  se ganó no vendió nada.
+- **Ingreso es lo cobrado**, no lo ganado: lo que la cuenta puede contar es lo
+  que el cliente ya pagó.
+- «Yo» —el propio despacho— no aparece entre el personal con más trabajos: no
+  es alguien a quien contarle trabajos.
+- La conversión se mide **en dinero**: dos cotizaciones chicas ganadas y una
+  grande perdida no son un 66 % de nada.
+
+### Tests
+- 168 tests (11 nuevos): lo que hay en marcha, la conversión en dinero, lo que
+  se cobra y lo que se debe, los seis meses terminando hoy —con un cobro viejo
+  que no se cuela—, los más vendidos leyendo sólo lo vendido, los clientes que
+  compran, el personal con más trabajos sin contar a la casa, la cuenta recién
+  abierta y el aislamiento entre cuentas.
+
 ## [1.12.0] — 2026-09-24
 
 ### Added
