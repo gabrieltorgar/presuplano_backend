@@ -30,6 +30,15 @@ TIMEOUT_SECONDS = 10
 #: entrega al correo del dueño de la cuenta: a un cliente nunca le llega.
 SANDBOX_SENDER = "onboarding@resend.dev"
 
+#: Con qué nombre se presenta este cliente.
+#:
+#: No es cosmético. La API de Resend está detrás de Cloudflare, que corta las
+#: peticiones cuya firma parece un script suelto: con el `Python-urllib/3.x`
+#: que pone la biblioteca por omisión, la respuesta era un 403 con «error code:
+#: 1010» —una página de Cloudflare, no de Resend— y el envío no llegaba ni a
+#: aparecer en el registro de la cuenta.
+USER_AGENT = "presuplano/1.0 (+https://presuplano.vercel.app)"
+
 
 class Attachment:
     """Un archivo que viaja con el correo: el PDF del documento."""
@@ -96,6 +105,8 @@ def send_email(
         headers={
             "Authorization": f"Bearer {settings.RESEND_API_KEY}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
         },
         method="POST",
     )

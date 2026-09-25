@@ -49,6 +49,21 @@ class TestResend:
         assert body["to"] == ["ana@estudio.mx"]
         assert body["subject"] == "Hola"
 
+    def test_the_client_says_who_it_is(self, configurado, mocker) -> None:
+        """Caso de borde - Sin nombre, Cloudflare corta la petición.
+
+        Regresión: con el `User-Agent` que pone urllib por omisión, la API de
+        Resend contestaba 403 «error code: 1010» —la página de Cloudflare— y el
+        envío no llegaba ni a aparecer en el registro de la cuenta.
+        """
+        urlopen = mocker.patch("urllib.request.urlopen", return_value=FakeResponse(200))
+
+        mail.send_email(to="ana@estudio.mx", subject="x", html="x")
+
+        cabeceras = urlopen.call_args.args[0].headers
+        assert cabeceras["User-agent"] == mail.USER_AGENT
+        assert "urllib" not in cabeceras["User-agent"]
+
     def test_an_attachment_travels_encoded(self, configurado, mocker) -> None:
         """Flujo principal - El PDF va en base64, como pide la API."""
         urlopen = mocker.patch("urllib.request.urlopen", return_value=FakeResponse(200))
