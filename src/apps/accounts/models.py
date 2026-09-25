@@ -78,12 +78,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_verified(self) -> bool:
-        """Si demostró tener alguna de sus dos identidades.
+        """Si puede entrar: el correo manda, y si no hay correo, el teléfono.
 
-        Con una basta para entrar: quien se registró con su correo no tiene un
-        teléfono que verificar, y a quien tiene los dos no se le pide dos veces.
+        El correo es el canal que existe de verdad —por ahí llega el código y
+        por ahí salen los comprobantes—, así que una cuenta que tiene uno lo
+        verifica antes de entrar. A la que sólo tiene teléfono se le sigue
+        pidiendo el teléfono, que es lo único que se le puede pedir.
         """
-        return self.is_phone_verified or self.is_email_verified
+        return self.is_email_verified if self.email else self.is_phone_verified
+
+    @property
+    def verification_identity(self) -> str:
+        """A dónde va su código: su correo si lo tiene, si no su teléfono."""
+        return self.email or self.phone or ""
 
 
 class Subscription(models.Model):

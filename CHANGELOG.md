@@ -3,6 +3,31 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.15.1] — 2026-09-25
+
+### Changed
+- **apps/accounts:** una cuenta con correo **lo verifica antes de entrar**. El
+  correo es el canal que existe de verdad —por ahí llega el código y por ahí
+  salen los comprobantes—, así que dejar entrar con uno sin confirmar era dejar
+  una cuenta a la que no se le puede escribir. El teléfono sigue mandando en
+  las cuentas que sólo tienen teléfono, que es lo único que se les puede pedir.
+- **apps/accounts:** el 403 de acceso sin verificar dice ahora **a dónde salió
+  el código** (`identity`). Quien entra con su teléfono y tiene el correo sin
+  confirmar recibe el código en el correo; sin este dato la pantalla siguiente
+  le pediría el del teléfono y confirmaría el canal equivocado.
+
+### Added
+- **apps/accounts:** `GET /api/auth/organization/logo/` entrega el logotipo
+  **incrustado** en la respuesta. El PDF lo dibuja el navegador, y el navegador
+  no puede bajar del bucket un archivo de otro dominio que no lo autoriza: por
+  eso los documentos salían sin marca. La API sí puede leerlo.
+
+### Tests
+- 224 tests (9 nuevos): el correo sin verificar que no abre la cuenta, el
+  código que sale solo al intentar entrar, el 403 que dice a dónde fue, la
+  cuenta con sólo teléfono que no cambia, el correo agregado desde el perfil
+  que cierra la puerta hasta confirmarlo, y el logotipo servido en bytes.
+
 ## [1.15.0] — 2026-09-25
 
 ### Added

@@ -166,3 +166,37 @@ class TestMyOrganization:
         organization = Organization.objects.get(user__phone="5599887766")
         assert organization.name == ""
         assert organization.color == DEFAULT_ORGANIZATION_COLOR
+
+
+@pytest.mark.django_db
+class TestLogotipoParaElDocumento:
+    """El logotipo se entrega en bytes, no como dirección.
+
+    El PDF lo dibuja el navegador, y el navegador no puede bajar del bucket un
+    archivo de otro dominio que no lo autoriza: el documento salía sin marca.
+    """
+
+    URL = "/api/auth/organization/logo/"
+
+    def test_the_logo_comes_embedded(self, authenticated_client) -> None:
+        """Flujo principal - Con logotipo, llega listo para imprimirse."""
+        authenticated_client.patch(
+            "/api/auth/organization/",
+            {"logo": SimpleUploadedFile("logo.png", PNG, "image/png")},
+            format="multipart",
+        )
+
+        response = authenticated_client.get(self.URL)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data_url"].startswith("data:image/png;base64,")
+
+    def test_without_a_logo_it_says_so(self, authenticated_client) -> None:
+        """Caso de borde - Sin logotipo no hay nada que incrustar."""
+        response = authenticated_client.get(self.URL)
+
+        assert response.data["data_url"] is None
+
+    def test_without_a_session_there_is_no_logo(self, api_client) -> None:
+        """Caso de borde - Sin sesión no se sirve el logotipo."""
+        assert api_client.get(self.URL).status_code == status.HTTP_401_UNAUTHORIZED

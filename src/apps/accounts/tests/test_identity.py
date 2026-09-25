@@ -206,3 +206,108 @@ class TestPerfilDeIdentidad:
         response = api_client.patch(ME, {"email": "x@y.mx"}, format="json")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCorreoSinVerificar:
+    """Una cuenta con correo entra cuando ese correo está verificado.
+
+    El correo es el canal que existe de verdad: por ahí llega el código y por
+    ahí salen los comprobantes. Dejar entrar con un correo sin confirmar era
+    dejar una cuenta a la que no se le puede escribir.
+    """
+
+    def test_an_unverified_email_does_not_open_the_account(
+        self, api_client, user_factory, correo
+    ) -> None:
+        """Flujo principal - Con el correo sin verificar no se entra."""
+        cuenta = user_factory(
+            phone="5511112222",
+            email="ana@estudio.mx",
+            is_phone_verified=True,
+            is_email_verified=False,
+            password="testpass123",
+        )
+
+        response = api_client.post(
+            LOGIN, {"identifier": cuenta.phone, "password": "testpass123"}
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.data["code"] == "phone_not_verified"
+
+    def test_the_code_goes_out_by_itself(
+        self, api_client, user_factory, correo
+    ) -> None:
+        """Flujo principal - El código sale solo al intentar entrar."""
+        cuenta = user_factory(
+            email="ana@estudio.mx", is_email_verified=False, password="testpass123"
+        )
+
+        api_client.post(LOGIN, {"identifier": cuenta.email, "password": "testpass123"})
+
+        assert correo.called
+
+    def test_it_says_where_the_code_went(
+        self, api_client, user_factory, correo
+    ) -> None:
+        """Flujo principal - El 403 dice a dónde buscar el código.
+
+        Quien entró con su teléfono tiene que escribir el código que le llegó
+        al correo; sin esto la pantalla siguiente le pediría el del teléfono y
+        verificaría el canal equivocado.
+        """
+        cuenta = user_factory(
+            phone="5511113333",
+            email="ana@estudio.mx",
+            is_phone_verified=True,
+            is_email_verified=False,
+            password="testpass123",
+        )
+
+        response = api_client.post(
+            LOGIN, {"identifier": cuenta.phone, "password": "testpass123"}
+        )
+
+        assert response.data["identity"] == "ana@estudio.mx"
+
+    def test_once_verified_the_account_opens(
+        self, api_client, user_factory, correo
+    ) -> None:
+        """Flujo principal - Verificado el correo, se entra."""
+        cuenta = user_factory(
+            email="ana@estudio.mx", is_email_verified=True, password="testpass123"
+        )
+
+        response = api_client.post(
+            LOGIN, {"identifier": cuenta.email, "password": "testpass123"}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_an_account_with_only_a_phone_is_unaffected(
+        self, api_client, user_factory
+    ) -> None:
+        """Caso de borde - Sin correo, sigue mandando el teléfono."""
+        cuenta = user_factory(is_phone_verified=True, password="testpass123")
+
+        response = api_client.post(
+            LOGIN, {"identifier": cuenta.phone, "password": "testpass123"}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_adding_an_email_closes_the_door_until_it_is_verified(
+        self, authenticated_client, api_client, user, correo
+    ) -> None:
+        """Caso de borde - Agregar un correo obliga a confirmarlo."""
+        user.set_password("testpass123")
+        user.save(update_fields=["password"])
+        authenticated_client.patch(ME, {"email": "nuevo@estudio.mx"}, format="json")
+
+        response = api_client.post(
+            LOGIN, {"identifier": user.phone, "password": "testpass123"}
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.data["identity"] == "nuevo@estudio.mx"

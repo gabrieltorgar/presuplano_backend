@@ -22,6 +22,7 @@ from apps.accounts.serializers import (
 from apps.accounts.services import (
     get_my_organization,
     login_user,
+    organization_logo_data_url,
     register_user,
     resend_otp,
     reset_password,
@@ -161,3 +162,17 @@ class MyOrganizationView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MyOrganizationLogoView(APIView):
+    """GET /api/auth/organization/logo/ — el logotipo listo para imprimirse.
+
+    Devuelve la imagen incrustada en la respuesta y no su dirección: el PDF se
+    dibuja en el navegador, y el navegador no puede bajar del bucket un archivo
+    de otro dominio que no lo autoriza. Sin esto, el documento salía sin marca.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        return Response({"data_url": organization_logo_data_url(user=request.user)})
