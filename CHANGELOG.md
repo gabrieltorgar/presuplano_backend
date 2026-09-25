@@ -22,8 +22,14 @@ Todas las notas de cambios relevantes de la API. El formato sigue
   no puede bajar del bucket un archivo de otro dominio que no lo autoriza: por
   eso los documentos salían sin marca. La API sí puede leerlo.
 
+### Notes
+- El remitente por omisión (`onboarding@resend.dev`) es el de pruebas de
+  Resend: entrega sólo al dueño de la cuenta, así que a un cliente no le llega.
+  Con la llave puesta hay que fijar `RESEND_FROM` a un dominio verificado, y
+  mientras no lo esté cada envío lo deja anotado.
+
 ### Tests
-- 224 tests (9 nuevos): el correo sin verificar que no abre la cuenta, el
+- 225 tests (10 nuevos): el correo sin verificar que no abre la cuenta, el
   código que sale solo al intentar entrar, el 403 que dice a dónde fue, la
   cuenta con sólo teléfono que no cambia, el correo agregado desde el perfil
   que cierra la puerta hasta confirmarlo, y el logotipo servido en bytes.

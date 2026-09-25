@@ -26,6 +26,10 @@ RESEND_ENDPOINT = "https://api.resend.com/emails"
 #: y quien pidió la pantalla sigue con su trabajo.
 TIMEOUT_SECONDS = 10
 
+#: El remitente de pruebas de Resend. Funciona sin configurar nada, pero sólo
+#: entrega al correo del dueño de la cuenta: a un cliente nunca le llega.
+SANDBOX_SENDER = "onboarding@resend.dev"
+
 
 class Attachment:
     """Un archivo que viaja con el correo: el PDF del documento."""
@@ -66,6 +70,14 @@ def send_email(
     if not to:
         logger.warning("Email not sent: no recipient")
         return False
+
+    if SANDBOX_SENDER in settings.RESEND_FROM:
+        # Con este remitente, Resend sólo entrega al dueño de la cuenta: la
+        # cotización de un cliente se rechaza y el fallo no se explica solo.
+        logger.warning(
+            "Sending from Resend's test address: only the account owner will "
+            "receive it. Set RESEND_FROM to an address of a verified domain."
+        )
 
     body: dict = {
         "from": settings.RESEND_FROM,
