@@ -65,7 +65,7 @@ def send_email(
 ) -> bool:
     """Manda un correo por Resend. Devuelve si lo aceptaron."""
     if not is_configured():
-        logger.warning("Email not sent: Resend is not configured")
+        logger.warning("Email not sent: RESEND_API_KEY is empty")
         return False
     if not to:
         logger.warning("Email not sent: no recipient")
@@ -104,15 +104,21 @@ def send_email(
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
             accepted = 200 <= response.status < 300
     except urllib.error.HTTPError as error:
-        # El cuerpo dice por qué: dominio sin verificar, destinatario inválido.
+        # El motivo va en el propio mensaje y no en los campos extra: el visor
+        # de registros de la plataforma sólo muestra el texto, así que «Email
+        # refused by Resend» a secas no decía nada de lo que hay que corregir.
         detail = error.read()[:500].decode("utf-8", "replace")
         logger.warning(
-            "Email refused by Resend", extra={"status": error.code, "detail": detail}
+            "Email refused by Resend (HTTP %s) from=%r to=%r: %s",
+            error.code,
+            settings.RESEND_FROM,
+            to,
+            detail,
         )
         return False
     except (urllib.error.URLError, TimeoutError, OSError) as error:
-        logger.warning("Email could not be sent", extra={"error": str(error)})
+        logger.warning("Email could not be sent: %s", error)
         return False
 
-    logger.info("Email sent", extra={"subject": subject})
+    logger.info("Email sent to %r: %s", to, subject)
     return accepted

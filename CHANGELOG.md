@@ -3,6 +3,18 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.15.2] — 2026-09-25
+
+### Fixed
+- **common/mail:** un envío rechazado decía sólo «Email refused by Resend». El
+  motivo viajaba en los campos extra del registro, que el visor de la
+  plataforma no muestra, así que no había con qué corregir nada. Ahora el
+  mensaje lleva el código HTTP, el remitente, el destinatario y lo que contestó
+  Resend.
+- **core/settings:** la llave y el remitente se recortan al leerlos. Un salto
+  de línea pegado al copiar el valor invalida la llave —Resend contesta 401— y
+  no se ve en ningún lado.
+
 ## [1.15.1] — 2026-09-25
 
 ### Changed
