@@ -1,6 +1,8 @@
 """Accounts business logic (all domain operations live here)."""
 
+import base64
 import logging
+import mimetypes
 import secrets
 from datetime import timedelta
 
@@ -32,15 +34,20 @@ class AccountNotVerified(PermissionDenied):
     The screen has to tell this apart from a wrong password to walk the person
     to the code instead of leaving a red box, and matching on the message text
     would break the day the wording changes.
+
+    Lleva además a dónde salió el código. Quien entró con su teléfono y tiene
+    el correo sin verificar tiene que escribir el que le llegó al correo, y sin
+    esto la pantalla siguiente le pediría el del teléfono.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, identity: str = "") -> None:
         super().__init__(
             {
                 "detail": "Debes verificar tu cuenta antes de iniciar sesión",
                 # El código no cambia aunque ahora la identidad pueda ser un
                 # correo: la pantalla que lo entiende lleva meses publicada.
                 "code": "phone_not_verified",
+                "identity": identity,
             }
         )
 
@@ -249,7 +256,7 @@ def login_user(*, identifier: str, password: str) -> tuple[User, dict[str, str]]
         # Quien entra sin verificar no se quedó fuera: recibe el código otra vez
         # y la pantalla lo lleva a escribirlo, como al registrarse.
         send_verification_code(user=user)
-        raise AccountNotVerified
+        raise AccountNotVerified(user.verification_identity)
 
     refresh = RefreshToken.for_user(user)
     tokens = {"access": str(refresh.access_token), "refresh": str(refresh)}
@@ -362,3 +369,28 @@ def get_my_organization(*, user: User) -> Organization:
     """
     organization, _created = Organization.objects.get_or_create(user=user)
     return organization
+
+
+def organization_logo_data_url(*, user: User) -> str | None:
+    """El logotipo de la cuenta como imagen incrustable, o nada.
+
+    El PDF lo dibuja el navegador, y el logotipo vive en el bucket: bajarlo
+    desde ahí es una petición a otro dominio que el bucket no autoriza, así
+    que el documento salía sin marca. Esta API sí puede leerlo —y ya está
+    autorizada para hablar con la aplicación—, de modo que lo entrega en el
+    mismo cuerpo de la respuesta.
+    """
+    organization = get_my_organization(user=user)
+    if not organization.logo:
+        return None
+
+    try:
+        with organization.logo.open("rb") as archivo:
+            raw = archivo.read()
+    except (FileNotFoundError, OSError, ValueError):
+        # Un archivo que ya no está no es un error de quien pide el documento.
+        logger.warning("Organization logo missing", extra={"user_id": str(user.pk)})
+        return None
+
+    mime = mimetypes.guess_type(organization.logo.name)[0] or "image/png"
+    return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"

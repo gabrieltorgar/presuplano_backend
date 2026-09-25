@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.accounts.views import (
     LoginView,
     MyAccountView,
+    MyOrganizationLogoView,
     MyOrganizationView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -33,6 +34,11 @@ urlpatterns = [
     ),
     path("me/", MyAccountView.as_view(), name="me"),
     path("organization/", MyOrganizationView.as_view(), name="organization"),
+    path(
+        "organization/logo/",
+        MyOrganizationLogoView.as_view(),
+        name="organization-logo",
+    ),
     # Exchange a valid refresh token for a fresh access token (silent renew).
     path("refresh/", TokenRefreshView.as_view(), name="refresh"),
 ]
