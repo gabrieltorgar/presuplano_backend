@@ -7,6 +7,7 @@ from apps.projects.models import Project
 from apps.quotes.models import QuoteItem
 from apps.staff.models import Assignment, Worker, WorkerPayment
 from apps.staff.selectors import worker_totals
+from common.money import money
 
 
 class WorkerServiceInputSerializer(serializers.Serializer):
@@ -87,7 +88,12 @@ class WorkerSerializer(serializers.ModelSerializer):
                 "tariff": str(service.tariff_id),
                 "tariff_name": service.tariff.name,
                 "unit_type": service.tariff.unit_type,
-                "unit_price": service.unit_price,
+                # Como cadena, igual que el resto del dinero de esta API: un
+                # decimal renderizado a JSON sale como flotante y el formulario
+                # lo recibe con otro tipo del que dice tener.
+                "unit_price": (
+                    None if service.unit_price is None else money(service.unit_price)
+                ),
             }
             for service in instance.services.all()
         ]

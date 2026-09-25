@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "apps.planner",
     "apps.staff",
     "apps.dashboard",
+    "apps.assets",
 ]
 
 MIDDLEWARE = [
@@ -167,6 +168,10 @@ OTP_UNIVERSAL_CODE = env("OTP_UNIVERSAL_CODE")
 # Tope del documento de un plano. Una textura suelta y el plano de fondo
 # escaneado viajan dentro del JSON, que es lo que puede engordarlo.
 PLAN_MAX_BYTES = env.int("PLAN_MAX_BYTES", default=4 * 1024 * 1024)
+
+# Tope por archivo del editor (una textura, una malla). Lo que no cabe en el
+# documento del plano vive en el bucket, pero tampoco sin límite.
+PLAN_ASSET_MAX_BYTES = env.int("PLAN_ASSET_MAX_BYTES", default=10 * 1024 * 1024)
 OTP_TTL_MINUTES = env("OTP_TTL_MINUTES")
 
 # --- CORS ---

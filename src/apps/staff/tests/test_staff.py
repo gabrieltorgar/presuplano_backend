@@ -60,8 +60,9 @@ class TestWorkerRegistry:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "Juan Pérez"
         assert response.data["services"][0]["tariff_name"] == "Aplanado fino"
-        # Lo que se le paga no es lo que se le cobra al cliente.
-        assert Decimal(response.data["services"][0]["unit_price"]) == Decimal("180.00")
+        # Lo que se le paga no es lo que se le cobra al cliente, y viaja como
+        # cadena: el formulario que lo lee espera texto, no un flotante.
+        assert response.data["services"][0]["unit_price"] == "180.00"
 
     def test_registers_a_company(self, authenticated_client) -> None:
         """Flujo principal - El personal también puede ser una empresa."""

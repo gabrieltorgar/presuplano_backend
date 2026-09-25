@@ -3,6 +3,43 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.14.0] — 2026-09-25
+
+### Added
+- **apps/assets (US-101):** `/api/plan-assets/` guarda en la cuenta los
+  binarios del editor —las texturas y las mallas del mobiliario—, que hasta
+  ahora vivían sólo en el navegador que los importó: abrir el plano en otro
+  dispositivo dejaba cajas grises y muros en blanco. Se guardan una sola vez,
+  direccionados por la misma ruta con la que el plano ya los nombra, y `missing/`
+  dice cuáles faltan para no volver a subir una biblioteca entera en cada
+  importación.
+- **apps/accounts (US-102):** la organización puede llevar **logotipo**. Se sube
+  a la misma cuenta y sale en los documentos junto al nombre.
+- **En el bucket, una carpeta por organización**, con los nombres del oficio:
+  `<uuid>/logo/`, `<uuid>/texturas/` y `<uuid>/inmobiliario/`. Lo que hay en el
+  almacenamiento se puede leer sin conocer este código.
+
+### Notes
+- Los bytes **nunca viajan dentro del documento del plano**: un escaneo de fondo
+  o una biblioteca de texturas se saltaría cualquier tamaño razonable, y la
+  misma textura usada en diez planos se guardaría diez veces.
+- Subir dos veces la misma ruta no es un error: es el mismo archivo y la cuenta
+  ya lo tiene. Importar una biblioteca dos veces —o desde dos dispositivos— no
+  cuesta nada.
+- Tope de 10 MB por archivo del editor (`PLAN_ASSET_MAX_BYTES`) y de 2 MB por
+  logotipo: es una marca, no una fotografía.
+
+### Fixed
+- **apps/staff:** el precio que se le paga a alguien viajaba como número y el
+  formulario que lo lee espera texto. Ahora va como cadena, igual que el resto
+  del dinero de esta API.
+
+### Tests
+- 178 tests (10 nuevos): subir una textura y una malla, la carpeta que cuelga de
+  la organización, la ruta repetida que no duplica, el cotejo de lo que falta,
+  el archivo por encima del tope, el aislamiento entre cuentas, y el logotipo
+  que se sube, se lee y se quita.
+
 ## [1.13.0] — 2026-09-25
 
 ### Added
