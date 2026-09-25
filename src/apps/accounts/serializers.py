@@ -7,17 +7,44 @@ from apps.accounts.models import HEX_COLOR_VALIDATOR, Organization, Subscription
 MIN_PASSWORD_LENGTH = 8
 
 
-class RegisterSerializer(serializers.Serializer):
-    """Validates registration input: phone uniqueness and password length."""
+class IdentitySerializer(serializers.Serializer):
+    """Una identidad: el teléfono, el correo, o los dos.
 
-    phone = serializers.CharField(max_length=20)
+    Se valida aquí, y no en cada pantalla, que venga al menos uno: una cuenta
+    sin ninguno de los dos no tendría por dónde entrar nunca más.
+    """
+
+    phone = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True
+    )
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+
+    def validate(self, attrs: dict) -> dict:
+        if (
+            not (attrs.get("phone") or "").strip()
+            and not (attrs.get("email") or "").strip()
+        ):
+            raise serializers.ValidationError(
+                "Escribe tu teléfono o tu correo para continuar"
+            )
+        return attrs
+
+
+class RegisterSerializer(IdentitySerializer):
+    """Validates registration input: identity, uniqueness and password length."""
+
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
 
     def validate_phone(self, value: str) -> str:
-        if User.objects.filter(phone=value).exists():
+        if value and User.objects.filter(phone=value.strip()).exists():
             raise serializers.ValidationError("Ese teléfono ya está registrado")
         return value
 
+    def validate_email(self, value: str) -> str:
+        if value and User.objects.filter(email__iexact=value.strip()).exists():
+            raise serializers.ValidationError("Ese correo ya está registrado")
+        return value
+
     def validate_password(self, value: str) -> str:
         if len(value) < MIN_PASSWORD_LENGTH:
             raise serializers.ValidationError(
@@ -26,30 +53,49 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
 
-class VerifyOtpSerializer(serializers.Serializer):
+class IdentifierSerializer(serializers.Serializer):
+    """Quién dice ser: un teléfono o un correo, en un solo campo.
+
+    Acepta ``identifier`` y también el viejo ``phone``: las pantallas
+    publicadas siguen mandando ese nombre y no hay por qué dejarlas fuera.
+    """
+
+    identifier = serializers.CharField(max_length=254, required=False)
+    phone = serializers.CharField(max_length=254, required=False)
+    email = serializers.CharField(max_length=254, required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        identifier = (
+            attrs.get("identifier") or attrs.get("email") or attrs.get("phone") or ""
+        ).strip()
+        if not identifier:
+            raise serializers.ValidationError(
+                "Escribe tu teléfono o tu correo para continuar"
+            )
+        return {"identifier": identifier}
+
+
+class VerifyOtpSerializer(IdentifierSerializer):
     """Validates OTP verification input."""
 
-    phone = serializers.CharField(max_length=20)
     code = serializers.CharField(max_length=6)
 
-
-class ResendOtpSerializer(serializers.Serializer):
-    """Reenviar el código: basta el teléfono, que es la identidad de la cuenta."""
-
-    phone = serializers.CharField(max_length=20)
+    def validate(self, attrs: dict) -> dict:
+        code = attrs.get("code", "")
+        return {**super().validate(attrs), "code": code}
 
 
-class PasswordResetRequestSerializer(serializers.Serializer):
-    """Pedir recuperar: solo hace falta el teléfono, que es la identidad."""
-
-    phone = serializers.CharField(max_length=20)
+class ResendOtpSerializer(IdentifierSerializer):
+    """Reenviar el código: basta con la identidad de la cuenta."""
 
 
-class PasswordResetConfirmSerializer(serializers.Serializer):
+class PasswordResetRequestSerializer(IdentifierSerializer):
+    """Pedir recuperar: sólo hace falta la identidad de la cuenta."""
+
+
+class PasswordResetConfirmSerializer(VerifyOtpSerializer):
     """Confirmar la recuperación con el código y la contraseña nueva."""
 
-    phone = serializers.CharField(max_length=20)
-    code = serializers.CharField(max_length=6)
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
 
     def validate_password(self, value: str) -> str:
@@ -59,12 +105,28 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             )
         return value
 
+    def validate(self, attrs: dict) -> dict:
+        password = attrs.get("password", "")
+        return {**super().validate(attrs), "password": password}
 
-class LoginSerializer(serializers.Serializer):
+
+class LoginSerializer(IdentifierSerializer):
     """Validates login input."""
 
-    phone = serializers.CharField(max_length=20)
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+    def validate(self, attrs: dict) -> dict:
+        password = attrs.get("password", "")
+        return {**super().validate(attrs), "password": password}
+
+
+class UpdateMyAccountSerializer(serializers.Serializer):
+    """Lo que el perfil deja cambiar de la cuenta: cómo se entra a ella."""
+
+    phone = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True
+    )
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
 
 
 class UserAccountSerializer(serializers.ModelSerializer):
@@ -72,7 +134,7 @@ class UserAccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "phone", "is_phone_verified"]
+        fields = ["id", "phone", "email", "is_phone_verified", "is_email_verified"]
         read_only_fields = fields
 
 
@@ -149,7 +211,9 @@ class MyAccountSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "phone",
+            "email",
             "is_phone_verified",
+            "is_email_verified",
             "created_at",
             "subscription",
             "organization",

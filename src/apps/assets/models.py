@@ -59,3 +59,44 @@ class PlanAsset(TimestampedModel):
 
     def __str__(self) -> str:
         return self.path
+
+
+class CatalogModel(TimestampedModel):
+    """Una ficha del catálogo de mobiliario de la cuenta.
+
+    Los bytes de la malla ya viajaban (`PlanAsset`), pero la ficha que la
+    nombra —cómo se llama, en qué categoría está, cuánto mide de verdad— se
+    quedaba en el navegador que importó la biblioteca: el catálogo aparecía
+    vacío en el teléfono aunque el plano dibujara los muebles.
+
+    La ficha se guarda tal como la escribe el editor, igual que el documento
+    del plano: el servidor no tiene por qué saber qué es una silla, sólo de
+    quién es y con qué id la vuelve a pedir.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="catalog_models",
+        verbose_name=_("propietario"),
+    )
+    model_id = models.CharField(
+        max_length=200,
+        verbose_name=_("id del modelo"),
+        help_text=_("El id con el que el plano nombra al mueble."),
+    )
+    fiche = models.JSONField(verbose_name=_("ficha"))
+
+    class Meta:
+        db_table = "assets_catalogmodel"
+        ordering = ["model_id"]
+        verbose_name = _("modelo del catálogo")
+        verbose_name_plural = _("modelos del catálogo")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "model_id"], name="assets_one_model_per_id"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return str(self.fiche.get("name") or self.model_id)

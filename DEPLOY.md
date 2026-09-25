@@ -42,7 +42,8 @@ incluida:
 | `DATABASE_URL` | **Sí** | Neon Postgres — sin ella el build de `migrate` falla y no hay tablas |
 | `SECRET_KEY` | **Sí** | aleatorio ≥ 32 caracteres |
 | `CORS_ALLOWED_ORIGINS` | Sí | `https://tu-frontend.vercel.app` |
-| `OTP_UNIVERSAL_CODE` | opcional | MVP; def. `123456` |
+| `OTP_UNIVERSAL_CODE` | opcional | MVP; def. `123456` (ver *Correo saliente*) |
+| `RESEND_API_KEY` | opcional | sin ella no sale correo: ni códigos ni documentos |
 | `DEBUG` | opcional | en Vercel es `False` por defecto (no definir en prod) |
 | `ALLOWED_HOSTS` | opcional | los hosts de Vercel se añaden solos; agrega tu dominio propio si lo usas |
 
@@ -82,6 +83,31 @@ Pasos para activarlo:
 Con esas variables, `default_storage` apunta a R2 y las evidencias persisten
 entre invocaciones. Los estáticos del admin/DRF los sigue sirviendo WhiteNoise
 (no van a R2).
+
+## Correo saliente — Resend
+
+El correo sale por la **API HTTP de Resend**, no por el mailer de Django: en
+serverless no hay conexión SMTP que sostener y una llamada HTTPS es lo único
+que la plataforma siempre permite. Vive en `common/mail.py` y nunca lanza: un
+correo que no sale se anota y la pantalla sigue.
+
+| Variable | Obligatoria | Valor |
+|---|---|---|
+| `RESEND_API_KEY` | para mandar correo | la llave `re_…` de Resend |
+| `RESEND_FROM` | opcional | remitente verificado; def. `presuplano <onboarding@resend.dev>` |
+| `APP_BASE_URL` | opcional | a dónde llevan los enlaces; def. `https://presuplano.vercel.app` |
+| `DOCUMENT_EMAIL_MAX_BYTES` | opcional | tope del adjunto; def. 8 MB |
+
+Qué cambia al configurarla:
+
+- **El código de verificación deja de ser universal** para las cuentas con
+  correo: cada una recibe el suyo, de seis cifras, guardado cifrado y con
+  vencimiento (`OTP_TTL_MINUTES`). Las cuentas que sólo tienen teléfono siguen
+  con `OTP_UNIVERSAL_CODE` mientras no haya SMS por donde mandarles el suyo.
+- **Se habilita el envío de documentos** (`POST /api/documents/send/`):
+  cotización, estatus de proyecto, comprobante de pago y de cobro. Sin llave,
+  ese endpoint responde 400 diciendo que no está configurado, en vez de fingir
+  que envió.
 
 ## Base de datos (Neon)
 

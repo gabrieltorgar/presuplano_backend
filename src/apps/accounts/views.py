@@ -15,6 +15,7 @@ from apps.accounts.serializers import (
     PasswordResetRequestSerializer,
     RegisterSerializer,
     ResendOtpSerializer,
+    UpdateMyAccountSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
@@ -25,12 +26,13 @@ from apps.accounts.services import (
     resend_otp,
     reset_password,
     start_password_reset,
-    verify_phone,
+    update_my_account,
+    verify_account,
 )
 
 
 class RegisterView(APIView):
-    """POST /api/auth/register/ — create an account (phone + password)."""
+    """POST /api/auth/register/ — crear una cuenta (teléfono o correo)."""
 
     permission_classes = [AllowAny]
 
@@ -44,14 +46,14 @@ class RegisterView(APIView):
 
 
 class VerifyOtpView(APIView):
-    """POST /api/auth/verify-otp/ — verify the phone with the universal OTP."""
+    """POST /api/auth/verify-otp/ — dar por buena la identidad con el código."""
 
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
         serializer = VerifyOtpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = verify_phone(**serializer.validated_data)
+        user = verify_account(**serializer.validated_data)
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
@@ -104,8 +106,8 @@ class PasswordResetRequestView(APIView):
         return Response(
             {
                 "detail": (
-                    "Si ese teléfono tiene una cuenta, puedes continuar con el "
-                    "código de verificación."
+                    "Si esos datos tienen una cuenta, te enviamos el código "
+                    "para continuar."
                 )
             },
             status=status.HTTP_200_OK,
@@ -125,12 +127,19 @@ class PasswordResetConfirmView(APIView):
 
 
 class MyAccountView(APIView):
-    """GET /api/auth/me/ — the account of whoever is asking."""
+    """GET/PATCH /api/auth/me/ — la cuenta de quien pregunta, y cómo se entra."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         return Response(MyAccountSerializer(request.user).data)
+
+    def patch(self, request: Request) -> Response:
+        """Cambiar el teléfono o el correo con los que se entra."""
+        serializer = UpdateMyAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = update_my_account(user=request.user, **serializer.validated_data)
+        return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
 class MyOrganizationView(APIView):

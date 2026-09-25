@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 
 from apps.accounts.services import get_my_organization
-from apps.assets.models import PlanAsset
+from apps.assets.models import CatalogModel, PlanAsset
 
 URL = "/api/plan-assets/"
 
@@ -128,3 +128,77 @@ class TestPlanAssets:
     def test_without_a_session_there_are_no_assets(self, api_client) -> None:
         """Caso de borde - Sin sesión no hay archivos."""
         assert api_client.get(URL).status_code == status.HTTP_401_UNAUTHORIZED
+
+
+MODELOS = "/api/plan-models/"
+
+SILLA = {
+    "id": "eTeks#chair",
+    "name": "Silla",
+    "category": "Comedor",
+    "width": 0.45,
+    "depth": 0.45,
+    "height": 0.9,
+    "format": "sh3f",
+    "modelRef": "sh3f/chair.obj",
+}
+
+
+@pytest.mark.django_db
+class TestCatalogoDeModelos:
+    """El catálogo de mobiliario vive en la cuenta, no en el navegador."""
+
+    def test_an_imported_library_lives_in_the_account(
+        self, authenticated_client
+    ) -> None:
+        """Flujo principal - Guardar el catálogo y volver a leerlo."""
+        guardado = authenticated_client.post(
+            MODELOS, {"models": [SILLA]}, format="json"
+        )
+
+        assert guardado.status_code == status.HTTP_201_CREATED
+        assert guardado.data["stored"] == 1
+        assert authenticated_client.get(MODELOS).data == [SILLA]
+
+    def test_importing_the_same_library_twice_does_not_duplicate(
+        self, authenticated_client
+    ) -> None:
+        """Caso de borde - El mismo id es la misma ficha."""
+        authenticated_client.post(MODELOS, {"models": [SILLA]}, format="json")
+
+        renombrada = {**SILLA, "name": "Silla de comedor"}
+        authenticated_client.post(MODELOS, {"models": [renombrada]}, format="json")
+
+        assert authenticated_client.get(MODELOS).data == [renombrada]
+
+    def test_a_fiche_without_an_id_is_refused(self, authenticated_client) -> None:
+        """Caso de borde - Sin id no hay con qué volver a pedirla."""
+        response = authenticated_client.post(
+            MODELOS, {"models": [{"name": "Silla"}]}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_a_removed_model_leaves_the_account(self, authenticated_client) -> None:
+        """Flujo alternativo - Quitar una ficha del catálogo."""
+        authenticated_client.post(MODELOS, {"models": [SILLA]}, format="json")
+
+        quitado = authenticated_client.post(
+            f"{MODELOS}remove/", {"ids": [SILLA["id"]]}, format="json"
+        )
+
+        assert quitado.data["removed"] == 1
+        assert authenticated_client.get(MODELOS).data == []
+
+    def test_the_catalog_is_isolated_per_account(
+        self, authenticated_client, user_factory
+    ) -> None:
+        """Caso de borde - El catálogo de otra cuenta no se ve."""
+        otra = user_factory()
+        CatalogModel.objects.create(owner=otra, model_id="ajeno", fiche=SILLA)
+
+        assert authenticated_client.get(MODELOS).data == []
+
+    def test_without_a_session_there_is_no_catalog(self, api_client) -> None:
+        """Caso de borde - Sin sesión no hay catálogo."""
+        assert api_client.get(MODELOS).status_code == status.HTTP_401_UNAUTHORIZED

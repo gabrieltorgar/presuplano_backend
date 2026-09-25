@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     "apps.staff",
     "apps.dashboard",
     "apps.assets",
+    "apps.documents",
 ]
 
 MIDDLEWARE = [
@@ -163,7 +164,20 @@ SIMPLE_JWT = {
 }
 
 # --- OTP (universal code for the MVP; real SMS/WhatsApp integration later) ---
+# Con correo configurado, una cuenta con correo recibe un código propio y este
+# deja de servirle; sigue siendo el de las cuentas que sólo tienen teléfono,
+# porque todavía no hay SMS por donde mandarles el suyo.
 OTP_UNIVERSAL_CODE = env("OTP_UNIVERSAL_CODE")
+
+# Tope de lo que puede viajar adjunto en un correo. Un PDF de cotización pesa
+# kilobytes; uno con fotos de avance, no tanto como para pagarlo en base64.
+DOCUMENT_EMAIL_MAX_BYTES = env.int("DOCUMENT_EMAIL_MAX_BYTES", default=8 * 1024 * 1024)
+
+# --- Resend (correo saliente por su API HTTP, no por el mailer de Django) ---
+RESEND_API_KEY = env.str("RESEND_API_KEY", default="")
+RESEND_FROM = env.str("RESEND_FROM", default="presuplano <onboarding@resend.dev>")
+# A dónde llevan los enlaces de los correos: la aplicación, no la API.
+APP_BASE_URL = env.str("APP_BASE_URL", default="https://presuplano.vercel.app")
 
 # Tope del documento de un plano. Una textura suelta y el plano de fondo
 # escaneado viajan dentro del JSON, que es lo que puede engordarlo.

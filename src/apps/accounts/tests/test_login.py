@@ -60,7 +60,7 @@ class TestLogin:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert response.data["code"] == "phone_not_verified"
         assert any(
-            "Verification code sent" in record.message for record in caplog.records
+            "Verification code requested" in record.message for record in caplog.records
         )
 
     def test_login_with_unverified_phone_returns_403(
@@ -73,6 +73,4 @@ class TestLogin:
         response = api_client.post(LOGIN_URL, payload)
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "Debes verificar tu teléfono antes de iniciar sesión" in str(
-            response.data
-        )
+        assert "Debes verificar tu cuenta antes de iniciar sesión" in str(response.data)

@@ -2,7 +2,7 @@
 
 from django.db.models import QuerySet
 
-from apps.assets.models import PlanAsset
+from apps.assets.models import CatalogModel, PlanAsset
 
 
 def list_assets_for_owner(*, owner) -> QuerySet[PlanAsset]:
@@ -22,3 +22,8 @@ def missing_paths(*, owner, paths: list[str]) -> list[str]:
         )
     )
     return [path for path in paths if path not in stored]
+
+
+def list_models_for_owner(*, owner) -> QuerySet[CatalogModel]:
+    """El catálogo de mobiliario de esa cuenta."""
+    return CatalogModel.objects.filter(owner=owner)

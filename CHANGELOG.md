@@ -3,6 +3,53 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.15.0] — 2026-09-25
+
+### Added
+- **apps/accounts (US-104):** una cuenta se identifica por **teléfono, correo, o
+  ambos**. `register/`, `login/`, `verify-otp/`, `resend-otp/` y
+  `password-reset/` aceptan `identifier` (y siguen entendiendo `phone`, que es
+  lo que mandan las pantallas publicadas). `PATCH /api/auth/me/` cambia el
+  teléfono y el correo desde el perfil: el dato nuevo entra sin verificar y con
+  su código en camino, y la cuenta no puede quedarse sin ninguno de los dos.
+- **apps/accounts (US-105):** **código de un solo uso de verdad**
+  (`OtpCode`). Una cuenta con correo recibe el suyo, de seis cifras, guardado
+  cifrado, con vencimiento (`OTP_TTL_MINUTES`) y que muere al usarse. El
+  universal (`OTP_UNIVERSAL_CODE`) queda para quien no tiene por dónde recibir
+  el suyo: las cuentas con sólo teléfono, mientras no haya SMS.
+- **common/mail (US-105):** **Resend por su API HTTP**, no por el mailer de
+  Django: en serverless no hay conexión SMTP que sostener y una llamada HTTPS es
+  lo único que la plataforma siempre permite. Nunca lanza —un correo que no sale
+  se anota y la pantalla sigue— y la plantilla se pinta con el membrete de la
+  organización cuando lo hay, con un pie de «optimizado por presuplano», y con
+  el de presuplano cuando no.
+- **apps/documents (US-105):** `POST /api/documents/send/` entrega los cuatro
+  documentos por correo —cotización, estatus de proyecto, comprobante de pago y
+  de cobro— con el PDF adjunto. El PDF llega hecho desde el navegador, que es
+  donde están las fuentes y el logotipo ya descargado; el servidor pone el
+  sobre. Tope de 8 MB por adjunto (`DOCUMENT_EMAIL_MAX_BYTES`).
+- **apps/assets (US-103):** `/api/plan-models/` guarda el **catálogo de
+  mobiliario** de la cuenta. Los bytes de las mallas ya viajaban, pero la ficha
+  que las nombra —nombre, categoría, medidas reales— se quedaba en el navegador
+  que importó la biblioteca: el catálogo aparecía vacío en el teléfono aunque el
+  plano dibujara los muebles. Las fichas van y vienen en lote y se guardan tal
+  como las escribe el editor.
+
+### Notes
+- Sin `RESEND_API_KEY` no hay envío: el código vuelve a ser el universal para
+  todas las cuentas y `documents/send/` responde 400 diciendo que no está
+  configurado, en vez de fingir que envió. Ver `DEPLOY.md`.
+- `phone` pasa a admitir nulo para que una cuenta pueda existir sólo con su
+  correo. Van nulos —y no en blanco— cuando faltan: dos cadenas vacías chocarían
+  contra el índice único, mientras que dos nulos conviven.
+
+### Tests
+- 215 tests (16 nuevos): alta y acceso con correo, el código propio que vence y
+  se gasta, el universal que deja de abrir una cuenta con correo, el cambio de
+  identidad desde el perfil, el catálogo de modelos que no se duplica ni se ve
+  entre cuentas, el envío de cada documento con y sin membrete, y la llamada a
+  Resend —con su adjunto en base64— que no tumba nada cuando falla.
+
 ## [1.14.0] — 2026-09-25
 
 ### Added
