@@ -174,8 +174,12 @@ OTP_UNIVERSAL_CODE = env("OTP_UNIVERSAL_CODE")
 DOCUMENT_EMAIL_MAX_BYTES = env.int("DOCUMENT_EMAIL_MAX_BYTES", default=8 * 1024 * 1024)
 
 # --- Resend (correo saliente por su API HTTP, no por el mailer de Django) ---
-RESEND_API_KEY = env.str("RESEND_API_KEY", default="")
-RESEND_FROM = env.str("RESEND_FROM", default="presuplano <onboarding@resend.dev>")
+# Se recortan: un salto de línea o un espacio pegado al pegar el valor
+# invalida la llave —Resend contesta 401— sin que se vea en ningún lado.
+RESEND_API_KEY = env.str("RESEND_API_KEY", default="").strip()
+RESEND_FROM = env.str(
+    "RESEND_FROM", default="presuplano <onboarding@resend.dev>"
+).strip()
 # A dónde llevan los enlaces de los correos: la aplicación, no la API.
 APP_BASE_URL = env.str("APP_BASE_URL", default="https://presuplano.vercel.app")
 
