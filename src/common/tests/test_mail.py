@@ -1,6 +1,7 @@
 """El correo sale por la API de Resend, y un fallo no tumba lo que se hacía."""
 
 import json
+import logging
 import urllib.error
 
 import pytest
@@ -62,6 +63,21 @@ class TestResend:
         adjunto = json.loads(urlopen.call_args.args[0].data)["attachments"][0]
         assert adjunto["filename"] == "c.pdf"
         assert adjunto["content"] == "JVBERi0xLjQ="
+
+    def test_the_test_sender_is_flagged(self, settings, mocker, caplog) -> None:
+        """Caso de borde - El remitente de pruebas no llega a un cliente.
+
+        Funciona sin configurar nada, así que es fácil dejarlo puesto y no
+        entender por qué la cotización nunca llegó.
+        """
+        settings.RESEND_API_KEY = "re_test"
+        settings.RESEND_FROM = "presuplano <onboarding@resend.dev>"
+        mocker.patch("urllib.request.urlopen", return_value=FakeResponse(200))
+
+        with caplog.at_level(logging.WARNING, logger="apps"):
+            assert mail.send_email(to="ana@estudio.mx", subject="x", html="x") is True
+
+        assert any("RESEND_FROM" in record.message for record in caplog.records)
 
     def test_without_a_key_nothing_is_sent(self, settings) -> None:
         """Caso de borde - Sin llave no hay envío, y se sabe."""

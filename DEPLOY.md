@@ -94,9 +94,15 @@ correo que no sale se anota y la pantalla sigue.
 | Variable | Obligatoria | Valor |
 |---|---|---|
 | `RESEND_API_KEY` | para mandar correo | la llave `re_…` de Resend |
-| `RESEND_FROM` | opcional | remitente verificado; def. `presuplano <onboarding@resend.dev>` |
+| `RESEND_FROM` | **sí, en cuanto haya llave** | remitente de un dominio verificado, p. ej. `presuplano <no-reply@tudominio.com>` |
 | `APP_BASE_URL` | opcional | a dónde llevan los enlaces; def. `https://presuplano.vercel.app` |
 | `DOCUMENT_EMAIL_MAX_BYTES` | opcional | tope del adjunto; def. 8 MB |
+
+El remitente por omisión (`onboarding@resend.dev`) es el de pruebas de Resend:
+funciona sin configurar nada, pero **sólo entrega al correo del dueño de la
+cuenta de Resend**. A un cliente nunca le llega, así que en cuanto la llave
+esté puesta hay que fijar `RESEND_FROM` a una dirección de un dominio
+verificado; mientras no lo esté, cada envío lo deja anotado en el log.
 
 Qué cambia al configurarla:
 
