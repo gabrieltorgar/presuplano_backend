@@ -3,6 +3,16 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.15.3] — 2026-09-25
+
+### Fixed
+- **common/mail (crítico):** ningún correo salía. La API de Resend está detrás
+  de Cloudflare, que corta las peticiones cuya firma parece un script suelto:
+  con el `User-Agent` que pone `urllib` por omisión la respuesta era un **403
+  con «error code: 1010»** —una página de Cloudflare, no de Resend—, y el
+  intento no llegaba siquiera a aparecer en el registro de la cuenta. El
+  cliente se presenta ahora con su propio nombre.
+
 ## [1.15.2] — 2026-09-25
 
 ### Fixed
