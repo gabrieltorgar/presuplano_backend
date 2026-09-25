@@ -85,6 +85,10 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+#: Lo que puede pesar un logotipo. Es una marca, no una fotografía.
+LOGO_MAX_BYTES = 2 * 1024 * 1024
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     """The letterhead: the name and the color the documents are printed with.
 
@@ -99,10 +103,29 @@ class OrganizationSerializer(serializers.ModelSerializer):
         max_length=7, required=False, validators=[HEX_COLOR_VALIDATOR]
     )
 
+    # Sube un archivo y se lee como dirección: el documento no carga bytes,
+    # carga una imagen que ya está en la cuenta.
+    logo = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = Organization
-        fields = ["name", "color", "updated_at"]
+        fields = ["name", "color", "logo", "updated_at"]
         read_only_fields = ["updated_at"]
+
+    def validate_logo(self, value):
+        """Un logotipo es una imagen, y no una de varios megas."""
+        if value in (None, ""):
+            return None
+        if value.size > LOGO_MAX_BYTES:
+            raise serializers.ValidationError(
+                f"El logotipo pesa más de {LOGO_MAX_BYTES // (1024 * 1024)} MB"
+            )
+        return value
+
+    def to_representation(self, instance: Organization) -> dict:
+        data = super().to_representation(instance)
+        data["logo"] = instance.logo.url if instance.logo else None
+        return data
 
     def validate_color(self, value: str) -> str:
         """One color, one spelling: #0f766e and #0F766E are the same ink."""

@@ -6,11 +6,19 @@ la cuenta guarda esa identidad y la API la deja leer y editar.
 """
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 
 from apps.accounts.models import DEFAULT_ORGANIZATION_COLOR, Organization
 
 ORGANIZATION_URL = "/api/auth/organization/"
+
+#: Un PNG de 1×1: lo mínimo que Pillow acepta como imagen.
+PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 ME_URL = "/api/auth/me/"
 
 
@@ -29,6 +37,37 @@ class TestMyOrganization:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == ""
         assert response.data["color"] == DEFAULT_ORGANIZATION_COLOR
+
+    def test_saves_a_logo_and_keeps_it_in_its_own_folder(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - El despacho sube su logotipo (US-102)."""
+        imagen = SimpleUploadedFile("logo.png", PNG, content_type="image/png")
+
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"logo": imagen}, format="multipart"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["logo"]
+        organizacion = Organization.objects.get(user=user)
+        # En el bucket cuelga de la organización, junto a sus texturas.
+        assert organizacion.logo.name.startswith(f"{organizacion.id}/logo/")
+
+    def test_the_logo_can_be_taken_off(self, authenticated_client, user) -> None:
+        """Caso de borde - Quitar el logotipo deja los documentos sin él."""
+        authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"logo": SimpleUploadedFile("logo.png", PNG, content_type="image/png")},
+            format="multipart",
+        )
+
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"logo": None}, format="json"
+        )
+
+        assert response.data["logo"] is None
+        assert not Organization.objects.get(user=user).logo
 
     def test_saves_the_name_and_the_color(self, authenticated_client, user) -> None:
         """Flujo principal - El despacho pone su nombre y su color."""

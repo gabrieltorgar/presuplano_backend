@@ -12,6 +12,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.accounts.managers import UserManager
+from common.uploads import organization_logo_upload_to
 
 #: presuplano's own blue: what a document is painted with until the account
 #: chooses its own color.
@@ -125,6 +126,13 @@ class Organization(models.Model):
         validators=[HEX_COLOR_VALIDATOR],
         verbose_name=_("color"),
         help_text=_("Color hexadecimal del encabezado de los documentos."),
+    )
+    logo = models.ImageField(
+        upload_to=organization_logo_upload_to,
+        blank=True,
+        null=True,
+        verbose_name=_("logotipo"),
+        help_text=_("La imagen que llevan los documentos junto al nombre."),
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("creado en"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("actualizado en"))

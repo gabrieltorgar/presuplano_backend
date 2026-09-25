@@ -1,6 +1,7 @@
 """Accounts views (orchestration only; logic lives in services)."""
 
 from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -136,6 +137,8 @@ class MyOrganizationView(APIView):
     """GET/PATCH /api/auth/organization/ — the letterhead of the documents."""
 
     permission_classes = [IsAuthenticated]
+    # El logotipo llega como formulario; el nombre y el color, como JSON.
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request: Request) -> Response:
         organization = get_my_organization(user=request.user)

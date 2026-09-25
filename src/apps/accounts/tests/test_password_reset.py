@@ -18,9 +18,7 @@ class TestPasswordReset:
 
     def test_asking_for_a_reset_accepts_a_known_phone(self, api_client, user) -> None:
         """Flujo principal - Pedir recuperar con un teléfono de la casa."""
-        response = api_client.post(
-            REQUEST_URL, {"phone": user.phone}, format="json"
-        )
+        response = api_client.post(REQUEST_URL, {"phone": user.phone}, format="json")
 
         assert response.status_code == status.HTTP_200_OK
         assert "detail" in response.data
@@ -92,9 +90,7 @@ class TestPasswordReset:
         user.refresh_from_db()
         assert not user.check_password("nuevaclave123")
 
-    def test_an_unknown_phone_cannot_be_confirmed(
-        self, api_client, settings
-    ) -> None:
+    def test_an_unknown_phone_cannot_be_confirmed(self, api_client, settings) -> None:
         """Caso alternativo - Sin cuenta no hay nada que recuperar."""
         response = api_client.post(
             CONFIRM_URL,
