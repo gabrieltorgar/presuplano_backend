@@ -1,7 +1,10 @@
-"""Accounts models: phone-based User and per-user Subscription.
+"""Accounts models: the account, its subscription and its letterhead.
 
 Each ``User`` is a tenant: all domain data (tariffs, clients, quotes,
-projects, payments) is scoped to the user that owns it.
+projects, payments) is scoped to the user that owns it. An account is
+identified by a phone, by an email, or by both: the architect who works from
+the site signs in with the number they already know by heart, and the one who
+works from the studio with their email.
 """
 
 import uuid
@@ -29,15 +32,31 @@ class User(AbstractBaseUser, PermissionsMixin):
     """User authenticated by phone number; owns a tenant workspace."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Uno de los dos basta, y ninguno se repite. Van nulos —y no en blanco—
+    # cuando faltan: dos cadenas vacías chocarían contra el índice único,
+    # mientras que dos nulos conviven.
     phone = models.CharField(
         max_length=20,
         unique=True,
+        null=True,
+        blank=True,
         db_index=True,
         verbose_name=_("teléfono"),
+    )
+    email = models.EmailField(
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("correo"),
     )
     is_phone_verified = models.BooleanField(
         default=False,
         verbose_name=_("teléfono verificado"),
+    )
+    is_email_verified = models.BooleanField(
+        default=False,
+        verbose_name=_("correo verificado"),
     )
     is_active = models.BooleanField(default=True, verbose_name=_("activo"))
     is_staff = models.BooleanField(default=False, verbose_name=_("es staff"))
@@ -55,7 +74,16 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = _("usuarios")
 
     def __str__(self) -> str:
-        return self.phone
+        return self.phone or self.email or str(self.pk)
+
+    @property
+    def is_verified(self) -> bool:
+        """Si demostró tener alguna de sus dos identidades.
+
+        Con una basta para entrar: quien se registró con su correo no tiene un
+        teléfono que verificar, y a quien tiene los dos no se le pide dos veces.
+        """
+        return self.is_phone_verified or self.is_email_verified
 
 
 class Subscription(models.Model):
@@ -95,7 +123,7 @@ class Subscription(models.Model):
         verbose_name_plural = _("suscripciones")
 
     def __str__(self) -> str:
-        return f"{self.user.phone} — {self.plan} ({self.status})"
+        return f"{self.user} — {self.plan} ({self.status})"
 
 
 class Organization(models.Model):
@@ -143,4 +171,43 @@ class Organization(models.Model):
         verbose_name_plural = _("organizaciones")
 
     def __str__(self) -> str:
-        return self.name or self.user.phone
+        return self.name or str(self.user)
+
+
+class OtpCode(models.Model):
+    """Un código de un solo uso, con su plazo y para qué sirve.
+
+    Hasta ahora el código era uno solo para todos (``OTP_UNIVERSAL_CODE``):
+    servía para el MVP porque no había por dónde mandarlo. Con el correo sí lo
+    hay, así que cada cuenta con correo recibe el suyo, se guarda cifrado —lo
+    que llega a la base no sirve para entrar— y muere al usarse o al vencer.
+    """
+
+    class Purpose(models.TextChoices):
+        SIGNUP = "signup", _("Verificación de la cuenta")
+        PASSWORD_RESET = "password_reset", _("Cambio de contraseña")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="otp_codes",
+        verbose_name=_("usuario"),
+    )
+    purpose = models.CharField(
+        max_length=20, choices=Purpose.choices, verbose_name=_("motivo")
+    )
+    code_hash = models.CharField(max_length=128, verbose_name=_("código"))
+    expires_at = models.DateTimeField(verbose_name=_("vence en"))
+    used_at = models.DateTimeField(null=True, blank=True, verbose_name=_("usado en"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("creado en"))
+
+    class Meta:
+        db_table = "account_otpcode"
+        ordering = ["-created_at"]
+        verbose_name = _("código de verificación")
+        verbose_name_plural = _("códigos de verificación")
+        indexes = [models.Index(fields=["user", "purpose", "-created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.user} — {self.purpose}"

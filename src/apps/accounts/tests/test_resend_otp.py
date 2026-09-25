@@ -29,7 +29,7 @@ class TestResendOtp:
         assert response.status_code == status.HTTP_200_OK
         assert "detail" in response.data
         assert any(
-            "Verification code sent" in record.message for record in caplog.records
+            "Verification code requested" in record.message for record in caplog.records
         )
 
     def test_an_unknown_phone_answers_the_same(self, api_client, user_factory) -> None:
@@ -53,12 +53,12 @@ class TestResendOtp:
         assert response.status_code == status.HTTP_200_OK
         assert "detail" in response.data
 
-    def test_the_phone_is_required(self, api_client) -> None:
-        """Caso de borde - Sin teléfono no hay nada que reenviar."""
+    def test_an_identity_is_required(self, api_client) -> None:
+        """Caso de borde - Sin teléfono ni correo no hay nada que reenviar."""
         response = api_client.post(URL, {}, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "phone" in response.data
+        assert "teléfono o tu correo" in str(response.data)
 
     def test_only_post_is_allowed(self, api_client) -> None:
         """Caso de borde - Pedirlo por GET no reenvía nada."""

@@ -35,3 +35,19 @@ class MissingPathsSerializer(serializers.Serializer):
     paths = serializers.ListField(
         child=serializers.CharField(max_length=400), allow_empty=True, max_length=500
     )
+
+
+class CatalogModelsInputSerializer(serializers.Serializer):
+    """Valida un lote de fichas: objetos, y no más de los que trae una biblioteca."""
+
+    models = serializers.ListField(
+        child=serializers.DictField(), allow_empty=True, max_length=500
+    )
+
+
+class ModelIdsSerializer(serializers.Serializer):
+    """Valida una lista de ids del catálogo."""
+
+    ids = serializers.ListField(
+        child=serializers.CharField(max_length=200), allow_empty=True, max_length=500
+    )
