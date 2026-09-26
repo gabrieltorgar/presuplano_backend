@@ -6,7 +6,12 @@ from rest_framework import serializers
 
 from apps.catalog.models import Tariff
 from apps.clients.models import Client
-from apps.quotes.models import Quote, QuoteItem
+from apps.quotes.models import (
+    MAX_VALIDITY_DAYS,
+    NOTES_MAX_LENGTH,
+    Quote,
+    QuoteItem,
+)
 
 
 class QuoteItemInputSerializer(serializers.Serializer):
@@ -46,10 +51,34 @@ class QuoteItemInputSerializer(serializers.Serializer):
 
 
 class QuoteWriteSerializer(serializers.Serializer):
-    """Validates a quote create/update payload (client + items)."""
+    """Validates a quote create/update payload (client, items and its terms).
+
+    ``notes`` and ``validity_days`` are optional: a screen that does not send
+    them —an older one still open— leaves what the quote already had.
+    """
 
     client = serializers.PrimaryKeyRelatedField(queryset=Client.objects.all())
     items = QuoteItemInputSerializer(many=True)
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=NOTES_MAX_LENGTH,
+        error_messages={
+            "max_length": (
+                f"Las observaciones no pueden pasar de {NOTES_MAX_LENGTH} caracteres"
+            )
+        },
+    )
+    validity_days = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=MAX_VALIDITY_DAYS,
+        error_messages={
+            "min_value": "La vigencia debe ser de al menos 1 día",
+            "max_value": f"La vigencia no puede pasar de {MAX_VALIDITY_DAYS} días",
+            "invalid": "La vigencia debe ser un número de días",
+        },
+    )
 
     def validate_items(self, value: list) -> list:
         if not value:
@@ -93,6 +122,8 @@ class QuoteSerializer(serializers.ModelSerializer):
             "status",
             "items",
             "total",
+            "notes",
+            "validity_days",
             "created_at",
         ]
 

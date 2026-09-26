@@ -2,7 +2,7 @@
 
 Quien olvidaba su contraseña se quedaba fuera para siempre: no había pantalla ni
 endpoint, y tampoco a quién escribirle. Se recupera con el mismo OTP que ya
-verifica el teléfono, que es la identidad de la cuenta.
+verifica el correo, que es la identidad de la cuenta.
 """
 
 import pytest
@@ -16,22 +16,24 @@ CONFIRM_URL = "/api/auth/password-reset/confirm/"
 class TestPasswordReset:
     """US-82: volver a entrar cuando se olvidó la contraseña."""
 
-    def test_asking_for_a_reset_accepts_a_known_phone(self, api_client, user) -> None:
-        """Flujo principal - Pedir recuperar con un teléfono de la casa."""
-        response = api_client.post(REQUEST_URL, {"phone": user.phone}, format="json")
+    def test_asking_for_a_reset_accepts_a_known_email(self, api_client, user) -> None:
+        """Flujo principal - Pedir recuperar con un correo de la casa."""
+        response = api_client.post(REQUEST_URL, {"email": user.email}, format="json")
 
         assert response.status_code == status.HTTP_200_OK
         assert "detail" in response.data
 
-    def test_an_unknown_phone_answers_the_same(self, api_client) -> None:
-        """Caso de borde - No se revela qué teléfonos existen.
+    def test_an_unknown_email_answers_the_same(self, api_client) -> None:
+        """Caso de borde - No se revela qué correos existen.
 
         Responder distinto convertiría esto en un detector de clientes: quien
-        pregunta por mil teléfonos sabría cuáles tienen cuenta.
+        pregunta por mil correos sabría cuáles tienen cuenta.
         """
-        conocido = api_client.post(REQUEST_URL, {"phone": "5599887766"}, format="json")
+        conocido = api_client.post(
+            REQUEST_URL, {"email": "otra@presuplano.test"}, format="json"
+        )
         desconocido = api_client.post(
-            REQUEST_URL, {"phone": "5500000000"}, format="json"
+            REQUEST_URL, {"email": "nadie@presuplano.test"}, format="json"
         )
 
         assert conocido.status_code == desconocido.status_code == status.HTTP_200_OK
@@ -44,7 +46,7 @@ class TestPasswordReset:
         response = api_client.post(
             CONFIRM_URL,
             {
-                "phone": user.phone,
+                "email": user.email,
                 "code": str(settings.OTP_UNIVERSAL_CODE),
                 "password": "nuevaclave123",
             },
@@ -62,7 +64,7 @@ class TestPasswordReset:
         api_client.post(
             CONFIRM_URL,
             {
-                "phone": user.phone,
+                "email": user.email,
                 "code": str(settings.OTP_UNIVERSAL_CODE),
                 "password": "nuevaclave123",
             },
@@ -71,7 +73,7 @@ class TestPasswordReset:
 
         entrada = api_client.post(
             "/api/auth/login/",
-            {"phone": user.phone, "password": "nuevaclave123"},
+            {"email": user.email, "password": "nuevaclave123"},
             format="json",
         )
 
@@ -82,7 +84,7 @@ class TestPasswordReset:
         """Caso alternativo - Un código inválido no cambia la contraseña."""
         response = api_client.post(
             CONFIRM_URL,
-            {"phone": user.phone, "code": "000000", "password": "nuevaclave123"},
+            {"email": user.email, "code": "000000", "password": "nuevaclave123"},
             format="json",
         )
 
@@ -90,12 +92,12 @@ class TestPasswordReset:
         user.refresh_from_db()
         assert not user.check_password("nuevaclave123")
 
-    def test_an_unknown_phone_cannot_be_confirmed(self, api_client, settings) -> None:
+    def test_an_unknown_email_cannot_be_confirmed(self, api_client, settings) -> None:
         """Caso alternativo - Sin cuenta no hay nada que recuperar."""
         response = api_client.post(
             CONFIRM_URL,
             {
-                "phone": "5500000000",
+                "email": "nadie@presuplano.test",
                 "code": str(settings.OTP_UNIVERSAL_CODE),
                 "password": "nuevaclave123",
             },
@@ -109,7 +111,7 @@ class TestPasswordReset:
         response = api_client.post(
             CONFIRM_URL,
             {
-                "phone": user.phone,
+                "email": user.email,
                 "code": str(settings.OTP_UNIVERSAL_CODE),
                 "password": "corta",
             },
@@ -119,20 +121,20 @@ class TestPasswordReset:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "password" in response.data
 
-    def test_recovering_verifies_the_phone(
+    def test_recovering_verifies_the_email(
         self, api_client, user_factory, settings
     ) -> None:
-        """Caso de borde - Quien recupera, demuestra que tiene el teléfono.
+        """Caso de borde - Quien recupera, demuestra que el correo es suyo.
 
         Una cuenta que se quedó sin verificar podía registrarse y no entrar
         nunca; recuperar la contraseña prueba lo mismo que la verificación.
         """
-        pendiente = user_factory(is_phone_verified=False)
+        pendiente = user_factory(is_email_verified=False)
 
         api_client.post(
             CONFIRM_URL,
             {
-                "phone": pendiente.phone,
+                "email": pendiente.email,
                 "code": str(settings.OTP_UNIVERSAL_CODE),
                 "password": "nuevaclave123",
             },
@@ -140,4 +142,4 @@ class TestPasswordReset:
         )
 
         pendiente.refresh_from_db()
-        assert pendiente.is_phone_verified is True
+        assert pendiente.is_email_verified is True

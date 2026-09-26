@@ -8,6 +8,6 @@ from apps.planner.models import Plan
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
     list_display = ["name", "owner", "updated_at"]
-    search_fields = ["name", "owner__phone"]
+    search_fields = ["name", "owner__email"]
     list_filter = ["updated_at"]
     readonly_fields = ["document"]

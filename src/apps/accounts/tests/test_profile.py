@@ -1,6 +1,6 @@
 """RED tests for US-69 — los datos de mi cuenta.
 
-La pantalla de perfil necesita algo más que el teléfono que ya guarda la sesión:
+La pantalla de perfil necesita algo más que el correo que ya guarda la sesión:
 desde cuándo existe la cuenta y en qué plan está.
 """
 
@@ -23,8 +23,8 @@ class TestMyAccount:
         response = authenticated_client.get(ME_URL)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["phone"] == user.phone
-        assert response.data["is_phone_verified"] is True
+        assert response.data["email"] == user.email
+        assert response.data["is_email_verified"] is True
         assert response.data["created_at"] is not None
 
     def test_includes_the_subscription(self, authenticated_client, user) -> None:

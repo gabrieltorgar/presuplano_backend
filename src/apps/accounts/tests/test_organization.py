@@ -158,12 +158,12 @@ class TestMyOrganization:
         """Flujo principal - Registrarse ya crea la organización vacía."""
         response = api_client.post(
             "/api/auth/register/",
-            {"phone": "5599887766", "password": "secreta123"},
+            {"email": "nueva@estudio.mx", "password": "secreta123"},
             format="json",
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        organization = Organization.objects.get(user__phone="5599887766")
+        organization = Organization.objects.get(user__email="nueva@estudio.mx")
         assert organization.name == ""
         assert organization.color == DEFAULT_ORGANIZATION_COLOR
 
@@ -200,3 +200,75 @@ class TestLogotipoParaElDocumento:
     def test_without_a_session_there_is_no_logo(self, api_client) -> None:
         """Caso de borde - Sin sesión no se sirve el logotipo."""
         assert api_client.get(self.URL).status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestContactoDeLaOrganizacion:
+    """El correo y el teléfono que imprimen los documentos son del despacho.
+
+    Antes salía el teléfono con el que se entraba a la cuenta. Ahora se entra
+    con correo, y el contacto que se le da a un cliente no tiene por qué ser
+    ese: se guarda aparte, y vacío no sale nada.
+    """
+
+    def test_a_new_organization_has_no_contact(self, authenticated_client) -> None:
+        """Caso de borde - Sin configurar, los documentos no llevan contacto."""
+        response = authenticated_client.get(ORGANIZATION_URL)
+
+        assert response.data["email"] == ""
+        assert response.data["phone"] == ""
+
+    def test_saves_the_contact_the_documents_print(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - El despacho guarda su correo y su teléfono."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"email": "contacto@taller.mx", "phone": " 55 1234 5678 "},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["email"] == "contacto@taller.mx"
+        assert response.data["phone"] == "55 1234 5678"
+        organizacion = Organization.objects.get(user=user)
+        assert organizacion.email == "contacto@taller.mx"
+        # El de la cuenta no se toca: son dos cosas distintas.
+        user.refresh_from_db()
+        assert user.email != "contacto@taller.mx"
+
+    def test_the_contact_can_be_cleared(self, authenticated_client) -> None:
+        """Flujo alternativo - Vaciarlo quita el contacto de los documentos."""
+        authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"email": "contacto@taller.mx", "phone": "5512345678"},
+            format="json",
+        )
+
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"email": "", "phone": ""}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["email"] == ""
+        assert response.data["phone"] == ""
+
+    def test_a_malformed_email_is_refused(self, authenticated_client) -> None:
+        """Caso alternativo - Un correo mal escrito no llega al documento."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"email": "contacto@"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Escribe un correo válido" in str(response.data["email"])
+
+    def test_the_profile_carries_the_contact(self, authenticated_client) -> None:
+        """Flujo principal - El perfil lo trae junto con el membrete."""
+        authenticated_client.patch(
+            ORGANIZATION_URL, {"phone": "5512345678"}, format="json"
+        )
+
+        response = authenticated_client.get(ME_URL)
+
+        assert response.data["organization"]["phone"] == "5512345678"
+        assert "phone" not in {k for k in response.data if k != "organization"}
