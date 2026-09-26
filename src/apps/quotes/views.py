@@ -11,7 +11,7 @@ from rest_framework.response import Response
 
 from apps.quotes.selectors import list_quotes_for_owner
 from apps.quotes.serializers import QuoteSerializer, QuoteWriteSerializer
-from apps.quotes.services import create_quote, update_quote
+from apps.quotes.services import create_quote, delete_quote, update_quote
 
 
 class QuoteViewSet(viewsets.ModelViewSet):
@@ -47,3 +47,6 @@ class QuoteViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request: Request, *args, **kwargs) -> Response:
         return self.update(request, *args, **kwargs)
+
+    def perform_destroy(self, instance) -> None:
+        delete_quote(quote=instance)

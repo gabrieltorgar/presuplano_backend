@@ -414,3 +414,78 @@ class TestAgreedTotalSurvives:
         response = authenticated_client.post(QUOTES_URL, payload, format="json")
 
         assert Decimal(response.data["total"]) == Decimal("3500.00")
+
+
+@pytest.mark.django_db
+class TestDeleteQuote:
+    """US-111: borrar una cotización que todavía no es proyecto."""
+
+    def _quote(self, user, *, tariff=None):
+        client, muro, _zocalo = build_catalog(user)
+        return create_quote(
+            owner=user,
+            client=client,
+            items_data=[{"tariff": tariff or muro, "quantity": Decimal("3")}],
+        )
+
+    def test_draft_quote_is_deleted_with_its_items(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Cotización que no prosperó."""
+        from apps.quotes.models import QuoteItem
+
+        quote = self._quote(user)
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Quote.objects.filter(id=quote.id).exists()
+        assert not QuoteItem.objects.filter(quote_id=quote.id).exists()
+
+    def test_quote_with_a_project_is_kept(self, authenticated_client, user) -> None:
+        """Caso alternativo - La cotización ya es un proyecto."""
+        from apps.projects.services import start_project
+
+        quote = self._quote(user)
+        start_project(owner=user, quote=quote)
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ya es un proyecto" in str(response.data)
+        assert Quote.objects.filter(id=quote.id).exists()
+
+    def test_services_made_only_for_it_go_with_it(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Sus servicios únicos no quedan huérfanos."""
+        from apps.catalog.models import Tariff
+
+        unico = TariffFactory(owner=user, name="Único", in_catalog=False)
+        quote = self._quote(user, tariff=unico)
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Tariff.objects.filter(id=unico.id).exists()
+
+    def test_catalogue_services_stay(self, authenticated_client, user) -> None:
+        """Los servicios del catálogo no se tocan al borrar la cotización."""
+        from apps.catalog.models import Tariff
+
+        quote = self._quote(user)
+        tariff_id = quote.items.get().tariff_id
+
+        authenticated_client.delete(detail_url(quote.id))
+
+        assert Tariff.objects.filter(id=tariff_id).exists()
+
+    def test_another_accounts_quote_is_not_found(
+        self, authenticated_client, user_factory
+    ) -> None:
+        """Aislamiento entre cuentas."""
+        quote = self._quote(user_factory())
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
