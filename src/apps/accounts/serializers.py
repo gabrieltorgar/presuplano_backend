@@ -7,41 +7,20 @@ from apps.accounts.models import HEX_COLOR_VALIDATOR, Organization, Subscription
 MIN_PASSWORD_LENGTH = 8
 
 
-class IdentitySerializer(serializers.Serializer):
-    """Una identidad: el teléfono, el correo, o los dos.
+class RegisterSerializer(serializers.Serializer):
+    """Validates registration input: email, uniqueness and password length."""
 
-    Se valida aquí, y no en cada pantalla, que venga al menos uno: una cuenta
-    sin ninguno de los dos no tendría por dónde entrar nunca más.
-    """
-
-    phone = serializers.CharField(
-        max_length=20, required=False, allow_blank=True, allow_null=True
+    email = serializers.EmailField(
+        error_messages={
+            "required": "Escribe tu correo para registrarte",
+            "blank": "Escribe tu correo para registrarte",
+            "invalid": "Escribe un correo válido",
+        }
     )
-    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
-
-    def validate(self, attrs: dict) -> dict:
-        if (
-            not (attrs.get("phone") or "").strip()
-            and not (attrs.get("email") or "").strip()
-        ):
-            raise serializers.ValidationError(
-                "Escribe tu teléfono o tu correo para continuar"
-            )
-        return attrs
-
-
-class RegisterSerializer(IdentitySerializer):
-    """Validates registration input: identity, uniqueness and password length."""
-
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
 
-    def validate_phone(self, value: str) -> str:
-        if value and User.objects.filter(phone=value.strip()).exists():
-            raise serializers.ValidationError("Ese teléfono ya está registrado")
-        return value
-
     def validate_email(self, value: str) -> str:
-        if value and User.objects.filter(email__iexact=value.strip()).exists():
+        if User.objects.filter(email__iexact=value.strip()).exists():
             raise serializers.ValidationError("Ese correo ya está registrado")
         return value
 
@@ -53,29 +32,31 @@ class RegisterSerializer(IdentitySerializer):
         return value
 
 
-class IdentifierSerializer(serializers.Serializer):
-    """Quién dice ser: un teléfono o un correo, en un solo campo.
+class EmailIdentitySerializer(serializers.Serializer):
+    """Quién dice ser: su correo.
 
-    Acepta ``identifier`` y también el viejo ``phone``: las pantallas
-    publicadas siguen mandando ese nombre y no hay por qué dejarlas fuera.
+    Acepta también ``identifier``, el nombre del campo cuando se podía entrar
+    con teléfono: una pantalla vieja todavía abierta no se queda fuera, y un
+    correo escrito ahí sirve igual.
     """
 
-    identifier = serializers.CharField(max_length=254, required=False)
-    phone = serializers.CharField(max_length=254, required=False)
     email = serializers.CharField(max_length=254, required=False)
+    identifier = serializers.CharField(max_length=254, required=False)
 
     def validate(self, attrs: dict) -> dict:
-        identifier = (
-            attrs.get("identifier") or attrs.get("email") or attrs.get("phone") or ""
-        ).strip()
-        if not identifier:
+        email = (attrs.get("email") or attrs.get("identifier") or "").strip()
+        if not email:
+            raise serializers.ValidationError({"email": "Escribe tu correo"})
+        try:
+            serializers.EmailField().run_validation(email)
+        except serializers.ValidationError:
             raise serializers.ValidationError(
-                "Escribe tu teléfono o tu correo para continuar"
-            )
-        return {"identifier": identifier}
+                {"email": "Escribe un correo válido"}
+            ) from None
+        return {"email": email}
 
 
-class VerifyOtpSerializer(IdentifierSerializer):
+class VerifyOtpSerializer(EmailIdentitySerializer):
     """Validates OTP verification input."""
 
     code = serializers.CharField(max_length=6)
@@ -85,12 +66,12 @@ class VerifyOtpSerializer(IdentifierSerializer):
         return {**super().validate(attrs), "code": code}
 
 
-class ResendOtpSerializer(IdentifierSerializer):
-    """Reenviar el código: basta con la identidad de la cuenta."""
+class ResendOtpSerializer(EmailIdentitySerializer):
+    """Reenviar el código: basta con el correo de la cuenta."""
 
 
-class PasswordResetRequestSerializer(IdentifierSerializer):
-    """Pedir recuperar: sólo hace falta la identidad de la cuenta."""
+class PasswordResetRequestSerializer(EmailIdentitySerializer):
+    """Pedir recuperar: sólo hace falta el correo de la cuenta."""
 
 
 class PasswordResetConfirmSerializer(VerifyOtpSerializer):
@@ -110,7 +91,7 @@ class PasswordResetConfirmSerializer(VerifyOtpSerializer):
         return {**super().validate(attrs), "password": password}
 
 
-class LoginSerializer(IdentifierSerializer):
+class LoginSerializer(EmailIdentitySerializer):
     """Validates login input."""
 
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
@@ -121,12 +102,15 @@ class LoginSerializer(IdentifierSerializer):
 
 
 class UpdateMyAccountSerializer(serializers.Serializer):
-    """Lo que el perfil deja cambiar de la cuenta: cómo se entra a ella."""
+    """Lo que el perfil deja cambiar de la cuenta: el correo con el que se entra."""
 
-    phone = serializers.CharField(
-        max_length=20, required=False, allow_blank=True, allow_null=True
+    email = serializers.EmailField(
+        error_messages={
+            "required": "Tu cuenta necesita un correo",
+            "blank": "Tu cuenta necesita un correo",
+            "invalid": "Escribe un correo válido",
+        }
     )
-    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
 
 
 class UserAccountSerializer(serializers.ModelSerializer):
@@ -134,7 +118,7 @@ class UserAccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "phone", "email", "is_phone_verified", "is_email_verified"]
+        fields = ["id", "email", "is_email_verified"]
         read_only_fields = fields
 
 
@@ -152,10 +136,11 @@ LOGO_MAX_BYTES = 2 * 1024 * 1024
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
-    """The letterhead: the name and the color the documents are printed with.
+    """The letterhead: name, color, logo and the contact the documents print.
 
-    Both fields are optional on input so the screen can save one without
-    touching the other (``PATCH`` with just a color).
+    Every field is optional on input so the screen can save one without
+    touching the others (``PATCH`` with just a color). The contact email and
+    phone may be cleared: empty means the documents print no contact line.
     """
 
     name = serializers.CharField(
@@ -165,13 +150,23 @@ class OrganizationSerializer(serializers.ModelSerializer):
         max_length=7, required=False, validators=[HEX_COLOR_VALIDATOR]
     )
 
+    email = serializers.EmailField(
+        max_length=254,
+        required=False,
+        allow_blank=True,
+        error_messages={"invalid": "Escribe un correo válido"},
+    )
+    phone = serializers.CharField(
+        max_length=30, required=False, allow_blank=True, trim_whitespace=True
+    )
+
     # Sube un archivo y se lee como dirección: el documento no carga bytes,
     # carga una imagen que ya está en la cuenta.
     logo = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Organization
-        fields = ["name", "color", "logo", "updated_at"]
+        fields = ["name", "color", "logo", "email", "phone", "updated_at"]
         read_only_fields = ["updated_at"]
 
     def validate_logo(self, value):
@@ -210,9 +205,7 @@ class MyAccountSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id",
-            "phone",
             "email",
-            "is_phone_verified",
             "is_email_verified",
             "created_at",
             "subscription",

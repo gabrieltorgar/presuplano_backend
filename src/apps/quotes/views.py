@@ -33,7 +33,11 @@ class QuoteViewSet(viewsets.ModelViewSet):
     def create(self, request: Request, *args, **kwargs) -> Response:
         data = self._write(request)
         quote = create_quote(
-            owner=request.user, client=data["client"], items_data=data["items"]
+            owner=request.user,
+            client=data["client"],
+            items_data=data["items"],
+            notes=data.get("notes"),
+            validity_days=data.get("validity_days"),
         )
         return Response(QuoteSerializer(quote).data, status=status.HTTP_201_CREATED)
 
@@ -41,7 +45,11 @@ class QuoteViewSet(viewsets.ModelViewSet):
         quote = self.get_object()
         data = self._write(request)
         quote = update_quote(
-            quote=quote, client=data["client"], items_data=data["items"]
+            quote=quote,
+            client=data["client"],
+            items_data=data["items"],
+            notes=data.get("notes"),
+            validity_days=data.get("validity_days"),
         )
         return Response(QuoteSerializer(quote).data)
 

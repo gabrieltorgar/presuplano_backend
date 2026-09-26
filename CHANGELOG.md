@@ -3,6 +3,38 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.17.0] — 2026-09-26
+
+### Added
+- **apps/quotes (US-115, US-116):** la cotización guarda `notes`
+  (observaciones, hasta 2000 caracteres) y `validity_days` (1 a 365; 20 por
+  omisión). Una pantalla que no los manda al editar —una versión vieja todavía
+  abierta— conserva los que la cotización ya tenía.
+- **apps/accounts (US-118):** la organización guarda `email` y `phone` de
+  contacto, los que imprimen los documentos. Son opcionales y se pueden vaciar;
+  el correo se valida.
+
+### Changed
+- **apps/accounts (US-01, US-02, US-03, US-82, US-89, US-104):** la cuenta
+  **es su correo**. `User` pierde `phone` e `is_phone_verified`, y `email` pasa
+  a ser obligatorio. Registro, acceso, verificación, reenvío y recuperación
+  aceptan sólo correo (`email`; también `identifier`, el nombre del campo en
+  las pantallas anteriores), sin distinguir mayúsculas; un número se rechaza
+  con «Escribe un correo válido». `PATCH /auth/me/` cambia sólo el correo, que
+  queda por verificar y recibe su código. El código universal sirve sólo
+  mientras el correo no esté configurado.
+- **apps/catalog (US-117):** la unidad `unit` se lee **«Por lote (único)»**. El
+  valor guardado no cambia.
+
+### Migrations
+- **accounts 0006:** antes de exigir el correo, cualquier cuenta que sólo
+  tuviera teléfono recibe uno de relleno (`sin-correo-<id>@presuplano.invalid`,
+  un dominio que no existe), para no perderla; después se quitan `phone` e
+  `is_phone_verified` y se agregan el correo y el teléfono de la organización.
+  Probada de ida y de vuelta.
+- **catalog 0005, quotes 0005:** etiqueta de la unidad; observaciones y
+  vigencia de la cotización.
+
 ## [1.16.0] — 2026-09-26
 
 ### Added

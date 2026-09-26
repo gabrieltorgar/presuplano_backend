@@ -33,7 +33,7 @@ from apps.accounts.services import (
 
 
 class RegisterView(APIView):
-    """POST /api/auth/register/ — crear una cuenta (teléfono o correo)."""
+    """POST /api/auth/register/ — crear una cuenta con correo y contraseña."""
 
     permission_classes = [AllowAny]
 
@@ -47,7 +47,7 @@ class RegisterView(APIView):
 
 
 class VerifyOtpView(APIView):
-    """POST /api/auth/verify-otp/ — dar por buena la identidad con el código."""
+    """POST /api/auth/verify-otp/ — dar por bueno el correo con el código."""
 
     permission_classes = [AllowAny]
 
@@ -128,7 +128,7 @@ class PasswordResetConfirmView(APIView):
 
 
 class MyAccountView(APIView):
-    """GET/PATCH /api/auth/me/ — la cuenta de quien pregunta, y cómo se entra."""
+    """GET/PATCH /api/auth/me/ — la cuenta de quien pregunta y su correo."""
 
     permission_classes = [IsAuthenticated]
 
@@ -136,7 +136,7 @@ class MyAccountView(APIView):
         return Response(MyAccountSerializer(request.user).data)
 
     def patch(self, request: Request) -> Response:
-        """Cambiar el teléfono o el correo con los que se entra."""
+        """Cambiar el correo con el que se entra."""
         serializer = UpdateMyAccountSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = update_my_account(user=request.user, **serializer.validated_data)

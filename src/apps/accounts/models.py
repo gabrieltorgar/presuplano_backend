@@ -1,10 +1,10 @@
 """Accounts models: the account, its subscription and its letterhead.
 
 Each ``User`` is a tenant: all domain data (tariffs, clients, quotes,
-projects, payments) is scoped to the user that owns it. An account is
-identified by a phone, by an email, or by both: the architect who works from
-the site signs in with the number they already know by heart, and the one who
-works from the studio with their email.
+projects, payments) is scoped to the user that owns it. An account is its
+email: por ahí se entra, por ahí llega el código que la verifica y por ahí
+salen los comprobantes. El teléfono dejó de ser una forma de entrar —no había
+cómo mandarle un código— y el de los documentos es el de la organización.
 """
 
 import uuid
@@ -29,30 +29,13 @@ HEX_COLOR_VALIDATOR = RegexValidator(
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    """User authenticated by phone number; owns a tenant workspace."""
+    """User authenticated by email; owns a tenant workspace."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Uno de los dos basta, y ninguno se repite. Van nulos —y no en blanco—
-    # cuando faltan: dos cadenas vacías chocarían contra el índice único,
-    # mientras que dos nulos conviven.
-    phone = models.CharField(
-        max_length=20,
-        unique=True,
-        null=True,
-        blank=True,
-        db_index=True,
-        verbose_name=_("teléfono"),
-    )
     email = models.EmailField(
         unique=True,
-        null=True,
-        blank=True,
         db_index=True,
         verbose_name=_("correo"),
-    )
-    is_phone_verified = models.BooleanField(
-        default=False,
-        verbose_name=_("teléfono verificado"),
     )
     is_email_verified = models.BooleanField(
         default=False,
@@ -65,7 +48,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
-    USERNAME_FIELD = "phone"
+    USERNAME_FIELD = "email"
+    EMAIL_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []
 
     class Meta:
@@ -74,23 +58,17 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = _("usuarios")
 
     def __str__(self) -> str:
-        return self.phone or self.email or str(self.pk)
+        return self.email
 
     @property
     def is_verified(self) -> bool:
-        """Si puede entrar: el correo manda, y si no hay correo, el teléfono.
-
-        El correo es el canal que existe de verdad —por ahí llega el código y
-        por ahí salen los comprobantes—, así que una cuenta que tiene uno lo
-        verifica antes de entrar. A la que sólo tiene teléfono se le sigue
-        pidiendo el teléfono, que es lo único que se le puede pedir.
-        """
-        return self.is_email_verified if self.email else self.is_phone_verified
+        """Si puede entrar: cuando demostró que el correo es suyo."""
+        return self.is_email_verified
 
     @property
     def verification_identity(self) -> str:
-        """A dónde va su código: su correo si lo tiene, si no su teléfono."""
-        return self.email or self.phone or ""
+        """A dónde va su código: su correo."""
+        return self.email
 
 
 class Subscription(models.Model):
@@ -134,7 +112,7 @@ class Subscription(models.Model):
 
 
 class Organization(models.Model):
-    """The identity an account signs its documents with: a name and a color.
+    """The identity an account signs its documents with: name, color, contact.
 
     Accounts are one-person workspaces, so this is not a tenancy boundary —
     it is the letterhead. It stays optional: with no name the documents are
@@ -168,6 +146,21 @@ class Organization(models.Model):
         null=True,
         verbose_name=_("logotipo"),
         help_text=_("La imagen que llevan los documentos junto al nombre."),
+    )
+    # El contacto que imprimen los documentos. No es el de la cuenta: el correo
+    # con el que se entra no tiene por qué ser el que se le da a un cliente.
+    email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name=_("correo de contacto"),
+        help_text=_("Sale en los documentos; vacío no sale nada."),
+    )
+    phone = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        verbose_name=_("teléfono de contacto"),
+        help_text=_("Sale en los documentos; vacío no sale nada."),
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("creado en"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("actualizado en"))

@@ -35,17 +35,16 @@ class AccountNotVerified(PermissionDenied):
     to the code instead of leaving a red box, and matching on the message text
     would break the day the wording changes.
 
-    Lleva además a dónde salió el código. Quien entró con su teléfono y tiene
-    el correo sin verificar tiene que escribir el que le llegó al correo, y sin
-    esto la pantalla siguiente le pediría el del teléfono.
+    Lleva además a dónde salió el código —el correo de la cuenta—, para que la
+    pantalla siguiente lo diga sin volver a preguntarlo.
     """
 
     def __init__(self, identity: str = "") -> None:
         super().__init__(
             {
                 "detail": "Debes verificar tu cuenta antes de iniciar sesión",
-                # El código no cambia aunque ahora la identidad pueda ser un
-                # correo: la pantalla que lo entiende lleva meses publicada.
+                # El código conserva su nombre de cuando se entraba con
+                # teléfono: la pantalla que lo entiende ya está publicada.
                 "code": "phone_not_verified",
                 "identity": identity,
             }
@@ -56,40 +55,27 @@ class AccountNotVerified(PermissionDenied):
 PhoneNotVerified = AccountNotVerified
 
 
-def normalize_email(value: str | None) -> str | None:
-    """Un correo en minúsculas, o nada. Vacío es nada, no cadena vacía."""
-    cleaned = (value or "").strip().lower()
-    return cleaned or None
+def normalize_email(value: str | None) -> str:
+    """Un correo sin espacios y en minúsculas."""
+    return (value or "").strip().lower()
 
 
-def normalize_phone(value: str | None) -> str | None:
-    """Un teléfono sin espacios, o nada."""
-    cleaned = (value or "").strip()
-    return cleaned or None
-
-
-def find_user(*, identifier: str) -> User | None:
-    """La cuenta que responde a ese teléfono o a ese correo.
-
-    Es lo que permite escribir en un solo campo lo que cada quien recuerda: el
-    número de la obra o el correo del estudio.
-    """
-    identifier = (identifier or "").strip()
-    if not identifier:
+def find_user(*, email: str) -> User | None:
+    """La cuenta de ese correo, sin importar cómo se escribieron las mayúsculas."""
+    email = normalize_email(email)
+    if not email:
         return None
-    if "@" in identifier:
-        return User.objects.filter(email__iexact=identifier).first()
-    return User.objects.filter(phone=identifier).first()
+    return User.objects.filter(email__iexact=email).first()
 
 
 def uses_universal_code(user: User) -> bool:
     """Si a esa cuenta le sirve el código universal del MVP.
 
-    Le sirve a quien no tiene por dónde recibir el suyo: sin correo —no hay
-    SMS todavía— o con el correo apagado por falta de configuración. Quien sí
-    puede recibirlo necesita el suyo, y el universal deja de abrirle la puerta.
+    Sólo mientras el correo no esté configurado: sin él no hay por dónde
+    mandar el código de nadie. En cuanto lo está, cada quien necesita el suyo
+    y el universal deja de abrir la puerta.
     """
-    return not (user.email and mail.is_configured())
+    return not mail.is_configured()
 
 
 def issue_otp(*, user: User, purpose: str) -> str:
@@ -126,16 +112,12 @@ def check_otp(*, user: User, purpose: str, code: str) -> bool:
 def send_verification_code(
     *, user: User, purpose: str = OtpCode.Purpose.SIGNUP
 ) -> None:
-    """Hacer llegar a su dueño el código que abre su cuenta.
+    """Hacer llegar a su dueño, por correo, el código que abre su cuenta.
 
-    Por correo cuando lo hay, que es el canal que existe hoy. A una cuenta que
-    sólo tiene teléfono no hay nada que mandarle todavía —no hay SMS— y le
-    sigue sirviendo el código universal; esto deja constancia del intento.
+    Con el correo sin configurar no hay nada que mandar —sigue valiendo el
+    código universal—; queda anotado que tocaba enviarlo.
     """
     if uses_universal_code(user):
-        # Sin canal propio sigue valiendo el código universal; queda anotado
-        # que tocaba enviarlo, que es lo único que se puede hacer hoy por una
-        # cuenta que sólo tiene teléfono.
         logger.info(
             "Verification code requested",
             extra={"user_id": str(user.pk), "channel": "pending"},
@@ -154,26 +136,18 @@ def send_verification_code(
 
 
 @transaction.atomic
-def register_user(
-    *, password: str, phone: str | None = None, email: str | None = None
-) -> User:
+def register_user(*, email: str, password: str) -> User:
     """Create a pending (unverified) account, its subscription and letterhead.
 
     La cuenta nace sin verificar, con su suscripción del plan inicial y un
-    membrete vacío en la misma transacción. Basta con una de las dos
-    identidades: el teléfono de siempre, el correo, o los dos.
+    membrete vacío en la misma transacción, y el código sale de inmediato
+    hacia su correo.
     """
-    phone = normalize_phone(phone)
     email = normalize_email(email)
-    if not phone and not email:
-        raise ValidationError("Necesitas un teléfono o un correo para registrarte")
+    if not email:
+        raise ValidationError({"email": "Necesitas un correo para registrarte"})
 
-    user = User.objects.create_user(
-        phone=phone,
-        email=email,
-        password=password,
-        is_phone_verified=False,
-    )
+    user = User.objects.create_user(email=email, password=password)
     Subscription.objects.create(
         user=user,
         plan=Subscription.Plan.INITIAL,
@@ -188,47 +162,36 @@ def register_user(
     return user
 
 
-def verify_account(*, identifier: str, code: str) -> User:
-    """Dar por buena la identidad de quien demuestra tener el código.
-
-    Se verifica el canal por el que se pidió: quien escribe su correo verifica
-    su correo, quien escribe su teléfono, su teléfono.
+def verify_account(*, email: str, code: str) -> User:
+    """Dar por bueno el correo de quien demuestra tener el código.
 
     Raises:
-        NotFound: no hay cuenta con ese teléfono ni con ese correo.
-        ValidationError: ya estaba verificada por ahí, o el código no es válido.
+        NotFound: no hay cuenta con ese correo.
+        ValidationError: ya estaba verificada, o el código no es válido.
     """
-    user = find_user(identifier=identifier)
+    user = find_user(email=email)
     if user is None:
-        raise NotFound("No existe una cuenta con esos datos.")
-
-    por_correo = "@" in identifier
-    if por_correo and user.is_email_verified:
+        raise NotFound("No existe una cuenta con ese correo.")
+    if user.is_email_verified:
         raise ValidationError("El correo ya está verificado")
-    if not por_correo and user.is_phone_verified:
-        raise ValidationError("El teléfono ya está verificado")
 
     if not check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code=code):
         raise ValidationError("Código de verificación inválido")
 
-    if por_correo:
-        user.is_email_verified = True
-        user.save(update_fields=["is_email_verified", "updated_at"])
-    else:
-        user.is_phone_verified = True
-        user.save(update_fields=["is_phone_verified", "updated_at"])
+    user.is_email_verified = True
+    user.save(update_fields=["is_email_verified", "updated_at"])
     logger.info("Account verified", extra={"user_id": str(user.pk)})
     return user
 
 
-def resend_otp(*, identifier: str) -> None:
+def resend_otp(*, email: str) -> None:
     """Volver a mandar el código de una cuenta pendiente de verificar.
 
-    Ni una identidad desconocida ni una ya verificada se distinguen en la
+    Ni un correo desconocido ni uno ya verificado se distinguen en la
     respuesta —eso convertiría el endpoint en un detector de clientes—, así
     que sólo se anota y, cuando toca, se envía.
     """
-    user = find_user(identifier=identifier)
+    user = find_user(email=email)
     pending = user is not None and not user.is_verified
     logger.info(
         "OTP resend requested",
@@ -238,8 +201,8 @@ def resend_otp(*, identifier: str) -> None:
         send_verification_code(user=user)
 
 
-def login_user(*, identifier: str, password: str) -> tuple[User, dict[str, str]]:
-    """Authenticate by phone-or-email + password and issue JWT tokens.
+def login_user(*, email: str, password: str) -> tuple[User, dict[str, str]]:
+    """Authenticate by email + password and issue JWT tokens.
 
     Credentials are checked before verification status so that a correct
     password on an unverified account yields 403 (not 401).
@@ -249,7 +212,7 @@ def login_user(*, identifier: str, password: str) -> tuple[User, dict[str, str]]
         AccountNotVerified: correct credentials but unverified (403); the
             verification code is sent again on the way out.
     """
-    user = find_user(identifier=identifier)
+    user = find_user(email=email)
     if user is None or not user.check_password(password):
         raise AuthenticationFailed("Credenciales inválidas")
     if not user.is_verified:
@@ -264,100 +227,68 @@ def login_user(*, identifier: str, password: str) -> tuple[User, dict[str, str]]
     return user, tokens
 
 
-def start_password_reset(*, identifier: str) -> None:
+def start_password_reset(*, email: str) -> None:
     """Arrancar la recuperación de una contraseña olvidada.
 
-    A quien tiene correo le llega su código; a quien sólo tiene teléfono le
-    sirve el universal mientras no haya SMS. Una identidad desconocida no dice
-    nada —responder distinto convertiría el endpoint en un detector de
-    clientes—, así que sólo se anota.
+    Un correo desconocido no dice nada —responder distinto convertiría el
+    endpoint en un detector de clientes—, así que sólo se anota.
     """
-    user = find_user(identifier=identifier)
+    user = find_user(email=email)
     logger.info("Password reset requested", extra={"account_known": user is not None})
     if user is not None:
         send_verification_code(user=user, purpose=OtpCode.Purpose.PASSWORD_RESET)
 
 
-def reset_password(*, identifier: str, code: str, password: str) -> User:
-    """Cambiar la contraseña de quien demuestra tener el teléfono o el correo.
+def reset_password(*, email: str, code: str, password: str) -> User:
+    """Cambiar la contraseña de quien demuestra tener el correo.
 
     Raises:
-        NotFound: no existe una cuenta con esos datos.
+        NotFound: no existe una cuenta con ese correo.
         ValidationError: el código no es el correcto.
     """
-    user = find_user(identifier=identifier)
+    user = find_user(email=email)
     if user is None:
-        raise NotFound("No existe una cuenta con esos datos.")
+        raise NotFound("No existe una cuenta con ese correo.")
 
     if not check_otp(user=user, purpose=OtpCode.Purpose.PASSWORD_RESET, code=code):
         raise ValidationError("Código de verificación inválido")
 
     user.set_password(password)
-    # Quien recupera demuestra lo mismo que quien verifica: que tiene el canal.
-    # Una cuenta que se quedó a medias entra de una vez.
-    campos = ["password", "updated_at"]
-    if "@" in identifier:
-        user.is_email_verified = True
-        campos.append("is_email_verified")
-    else:
-        user.is_phone_verified = True
-        campos.append("is_phone_verified")
-    user.save(update_fields=campos)
+    # Quien recupera demuestra lo mismo que quien verifica: que el correo es
+    # suyo. Una cuenta que se quedó a medias entra de una vez.
+    user.is_email_verified = True
+    user.save(update_fields=["password", "is_email_verified", "updated_at"])
     logger.info("Password reset", extra={"user_id": str(user.pk)})
     return user
 
 
 @transaction.atomic
-def update_my_account(
-    *, user: User, phone: str | None = None, email: str | None = None
-) -> User:
-    """Cambiar el teléfono o el correo desde el perfil.
+def update_my_account(*, user: User, email: str) -> User:
+    """Cambiar desde el perfil el correo con el que se entra.
 
-    Un dato nuevo entra sin verificar y con su código en camino: la cuenta no
-    puede quedarse sin ninguna identidad verificada por un cambio, así que el
-    otro canal es el que la sostiene mientras tanto.
+    El correo nuevo entra sin verificar y con su código en camino: hasta que
+    se escriba, la cuenta vuelve a pedirlo al entrar.
 
     Raises:
-        ValidationError: el dato ya es de otra cuenta, o se queda sin ninguno.
+        ValidationError: el correo está vacío o ya es de otra cuenta.
     """
-    cambios: list[str] = []
+    nuevo = normalize_email(email)
+    if not nuevo:
+        raise ValidationError({"email": "Tu cuenta necesita un correo"})
+    if nuevo == user.email:
+        return user
+    if User.objects.filter(email__iexact=nuevo).exclude(pk=user.pk).exists():
+        raise ValidationError({"email": "Ese correo ya está registrado"})
 
-    if phone is not None:
-        nuevo = normalize_phone(phone)
-        if nuevo != user.phone:
-            if nuevo and User.objects.filter(phone=nuevo).exclude(pk=user.pk).exists():
-                raise ValidationError({"phone": "Ese teléfono ya está registrado"})
-            user.phone = nuevo
-            user.is_phone_verified = False
-            cambios += ["phone", "is_phone_verified"]
-
-    if email is not None:
-        nuevo = normalize_email(email)
-        if nuevo != user.email:
-            if (
-                nuevo
-                and User.objects.filter(email__iexact=nuevo)
-                .exclude(pk=user.pk)
-                .exists()
-            ):
-                raise ValidationError({"email": "Ese correo ya está registrado"})
-            user.email = nuevo
-            user.is_email_verified = False
-            cambios += ["email", "is_email_verified"]
-
-    if not user.phone and not user.email:
-        raise ValidationError("Tu cuenta necesita un teléfono o un correo")
-
-    if cambios:
-        user.save(update_fields=[*cambios, "updated_at"])
-        logger.info(
-            "Account identity updated",
-            extra={"user_id": str(user.pk), "fields": ",".join(cambios)},
-        )
-        # El dato nuevo hay que demostrarlo: el código sale hacia él.
-        if not user.is_verified or (email is not None and user.email):
-            send_verification_code(user=user)
-
+    user.email = nuevo
+    user.is_email_verified = False
+    user.save(update_fields=["email", "is_email_verified", "updated_at"])
+    logger.info(
+        "Account identity updated",
+        extra={"user_id": str(user.pk), "fields": "email"},
+    )
+    # El correo nuevo hay que demostrarlo: el código sale hacia él.
+    send_verification_code(user=user)
     return user
 
 

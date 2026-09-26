@@ -14,7 +14,7 @@ class Tariff(TimestampedModel):
         SQUARE_METER = "square_meter", _("Metro cuadrado")
         LINEAR_METER = "linear_meter", _("Metro lineal")
         FLOOR_WALL = "floor_wall", _("Piso/Muro")
-        UNIT = "unit", _("Unidad")
+        UNIT = "unit", _("Por lote (único)")
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,

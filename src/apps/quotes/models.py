@@ -7,10 +7,20 @@ time, so later tariff edits never change an already-issued quote (US-05 edge).
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from common.models import TimestampedModel
+
+#: Días que valen los precios de una cotización si nadie dice otra cosa.
+DEFAULT_VALIDITY_DAYS = 20
+
+#: Hasta dónde se puede estirar la vigencia: un año de obra.
+MAX_VALIDITY_DAYS = 365
+
+#: Lo que caben las observaciones: un par de párrafos, no un contrato.
+NOTES_MAX_LENGTH = 2000
 
 
 class Quote(TimestampedModel):
@@ -44,6 +54,20 @@ class Quote(TimestampedModel):
         choices=Status.choices,
         default=Status.DRAFT,
         verbose_name=_("estado"),
+    )
+    # Lo que el documento dice además de los precios: qué incluye, qué no,
+    # cómo se paga. Sale impreso tal como se escribe.
+    notes = models.TextField(
+        blank=True,
+        default="",
+        max_length=NOTES_MAX_LENGTH,
+        verbose_name=_("observaciones"),
+    )
+    validity_days = models.PositiveSmallIntegerField(
+        default=DEFAULT_VALIDITY_DAYS,
+        validators=[MinValueValidator(1), MaxValueValidator(MAX_VALIDITY_DAYS)],
+        verbose_name=_("días de vigencia"),
+        help_text=_("Cuántos días valen los precios desde la fecha de emisión."),
     )
 
     class Meta:

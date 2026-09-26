@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.catalog.models import Tariff
 from apps.clients.models import Client
-from apps.quotes.models import Quote, QuoteItem
+from apps.quotes.models import DEFAULT_VALIDITY_DAYS, Quote, QuoteItem
 
 logger = logging.getLogger("apps")
 
@@ -45,10 +45,26 @@ def _create_item(
 
 
 @transaction.atomic
-def create_quote(*, owner, client: Client, items_data: list[dict]) -> Quote:
-    """Create a draft quote for ``client`` with the given line items."""
+def create_quote(
+    *,
+    owner,
+    client: Client,
+    items_data: list[dict],
+    notes: str | None = None,
+    validity_days: int | None = None,
+) -> Quote:
+    """Create a draft quote for ``client`` with the given line items.
+
+    Without a validity it gets the house one (20 days), which is what every
+    quote had before it could be changed.
+    """
     _ensure_owned(owner=owner, client=client, items_data=items_data)
-    quote = Quote.objects.create(owner=owner, client=client)
+    quote = Quote.objects.create(
+        owner=owner,
+        client=client,
+        notes=(notes or "").strip(),
+        validity_days=validity_days or DEFAULT_VALIDITY_DAYS,
+    )
     for item in items_data:
         _create_item(
             quote=quote,
@@ -61,12 +77,20 @@ def create_quote(*, owner, client: Client, items_data: list[dict]) -> Quote:
 
 
 @transaction.atomic
-def update_quote(*, quote: Quote, client: Client, items_data: list[dict]) -> Quote:
+def update_quote(
+    *,
+    quote: Quote,
+    client: Client,
+    items_data: list[dict],
+    notes: str | None = None,
+    validity_days: int | None = None,
+) -> Quote:
     """Replace a quote's client and items; blocked once it is a project.
 
     A quote can be corrected as many times as the negotiation takes — its
     document is rebuilt from it every time — and stops changing when work has
     started on it, because from then on there are advances measured against it.
+    ``notes`` and ``validity_days`` left out (``None``) keep what it had.
 
     Raises:
         ValidationError: the quote is already a project.
@@ -77,7 +101,14 @@ def update_quote(*, quote: Quote, client: Client, items_data: list[dict]) -> Quo
         )
     _ensure_owned(owner=quote.owner, client=client, items_data=items_data)
     quote.client = client
-    quote.save(update_fields=["client", "updated_at"])
+    fields = ["client", "updated_at"]
+    if notes is not None:
+        quote.notes = notes.strip()
+        fields.append("notes")
+    if validity_days is not None:
+        quote.validity_days = validity_days
+        fields.append("validity_days")
+    quote.save(update_fields=fields)
     quote.items.all().delete()
     for item in items_data:
         _create_item(
