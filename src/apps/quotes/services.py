@@ -87,3 +87,31 @@ def update_quote(*, quote: Quote, client: Client, items_data: list[dict]) -> Quo
             unit_price=item.get("unit_price"),
         )
     return quote
+
+
+@transaction.atomic
+def delete_quote(*, quote: Quote) -> None:
+    """Borra una cotización que todavía no es proyecto, con sus partidas.
+
+    Los servicios que se dieron de alta sólo para ella —los que no están en el
+    catálogo— se van con ella si ninguna otra cotización ni nadie del personal
+    los usa: nadie más puede verlos ni elegirlos, así que quedarían huérfanos.
+
+    Raises:
+        ValidationError: la cotización ya es un proyecto.
+    """
+    # Import local: los proyectos conocen las cotizaciones, no al revés.
+    from apps.projects.models import Project
+
+    if Project.objects.filter(quote=quote).exists():
+        raise ValidationError("No se puede borrar: la cotización ya es un proyecto.")
+
+    unique_ids = list(
+        quote.items.filter(tariff__in_catalog=False).values_list("tariff_id", flat=True)
+    )
+    quote_id = str(quote.pk)
+    quote.delete()
+    Tariff.objects.filter(
+        id__in=unique_ids, quote_items__isnull=True, worker_services__isnull=True
+    ).delete()
+    logger.info("Quote deleted", extra={"quote_id": quote_id})

@@ -3,6 +3,38 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.16.0] — 2026-09-26
+
+### Added
+- **apps/projects (US-113):** los avances se **corrigen y se borran**.
+  `PATCH /progresses/{id}/` cambia cantidad, fecha o quién lo hizo; lo que el
+  avance ya tenía vuelve a estar disponible, así que se puede subir de 5 a 7
+  aunque falten sólo 2, pero nunca pasar de lo cotizado. Cambiar a quien lo
+  hizo toma el precio acordado con esa persona; corregir sólo la cantidad
+  conserva el trato con el que se hizo el trabajo. `DELETE` lo quita junto con
+  sus fotos. Un proyecto finalizado no cambia.
+- **apps/projects (US-16):** `DELETE /evidences/{id}/` quita una foto, también
+  del almacenamiento —después de confirmar el borrado, para que un fallo no
+  deje un registro apuntando a nada—.
+- **apps/clients, apps/catalog, apps/quotes (US-109, US-110, US-111):** borrar
+  con reglas. Un cliente o un servicio sólo si no está en ninguna cotización;
+  una cotización sólo si no es proyecto. Antes el borrado tropezaba con la
+  protección de la base y respondía **500**; ahora dice por qué no, en una
+  frase. Al borrar una cotización se van con ella los servicios que se
+  crearon sólo para ella, si nadie más los usa.
+- **apps/clients, apps/catalog:** cada cliente y cada servicio dicen en
+  cuántas cotizaciones están (`quotes_count`), para que la lista sepa de
+  antemano cuáles se pueden borrar.
+
+### Fixed
+- **apps/projects (US-16):** la evidencia fotográfica se subía y **no se
+  volvía a ver**: el proyecto no devolvía las fotos. Ahora cada avance viene
+  con su id, su partida, lo que vale y sus fotos con la dirección desde la que
+  se ven.
+
+### Tests
+- 258 en verde (32 nuevas).
+
 ## [1.15.3] — 2026-09-25
 
 ### Fixed

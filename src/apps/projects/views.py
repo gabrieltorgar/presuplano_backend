@@ -1,25 +1,33 @@
-"""Projects views: start project, register progress, attach evidence."""
+"""Projects views: start project, register and correct progress, evidence."""
 
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.projects.selectors import list_projects_for_owner, progresses_for_owner
+from apps.projects.selectors import (
+    evidences_for_owner,
+    list_projects_for_owner,
+    progresses_for_owner,
+)
 from apps.projects.serializers import (
     EvidenceSerializer,
     ProgressInputSerializer,
     ProgressSerializer,
+    ProgressUpdateSerializer,
     ProjectSerializer,
     StartProjectSerializer,
 )
 from apps.projects.services import (
     add_evidence,
+    delete_evidence,
+    delete_progress,
     finalize_project,
     register_progress,
     start_project,
+    update_progress,
 )
 
 
@@ -64,14 +72,25 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
-    """Retrieve a progress entry; attach photographic evidence."""
+    """Retrieve, correct or delete a progress entry; attach its photos."""
 
     serializer_class = ProgressSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
         return progresses_for_owner(owner=self.request.user)
+
+    def partial_update(self, request: Request, pk: str | None = None) -> Response:
+        progress = self.get_object()
+        serializer = ProgressUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        progress = update_progress(progress=progress, **serializer.validated_data)
+        return Response(ProgressSerializer(progress).data)
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        delete_progress(progress=self.get_object())
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def evidence(self, request: Request, pk: str | None = None) -> Response:
@@ -84,5 +103,19 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
             )
         evidence = add_evidence(progress=progress, image=image)
         return Response(
-            EvidenceSerializer(evidence).data, status=status.HTTP_201_CREATED
+            EvidenceSerializer(evidence, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
         )
+
+
+class EvidenceViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Quitar una foto de un avance."""
+
+    serializer_class = EvidenceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return evidences_for_owner(owner=self.request.user)
+
+    def perform_destroy(self, instance) -> None:
+        delete_evidence(evidence=instance)

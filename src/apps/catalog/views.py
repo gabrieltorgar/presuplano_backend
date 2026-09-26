@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.catalog.selectors import list_tariffs_for_owner
 from apps.catalog.serializers import TariffSerializer
+from apps.catalog.services import delete_tariff
 
 
 class TariffViewSet(viewsets.ModelViewSet):
@@ -18,3 +19,6 @@ class TariffViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer) -> None:
         serializer.save(owner=self.request.user)
+
+    def perform_destroy(self, instance) -> None:
+        delete_tariff(tariff=instance)

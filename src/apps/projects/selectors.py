@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.db.models import QuerySet
 
-from apps.projects.models import Progress, Project
+from apps.projects.models import Evidence, Progress, Project
 
 
 def list_projects_for_owner(*, owner) -> QuerySet[Project]:
@@ -17,6 +17,8 @@ def list_projects_for_owner(*, owner) -> QuerySet[Project]:
             "quote__items__progresses",
             "progresses",
             "progresses__quote_item",
+            "progresses__worker",
+            "progresses__evidences",
         )
     )
 
@@ -36,4 +38,13 @@ def advanced_value(project: Project) -> Decimal:
 
 def progresses_for_owner(*, owner) -> QuerySet[Progress]:
     """Progress entries belonging to the owner's projects."""
-    return Progress.objects.filter(project__owner=owner).select_related("quote_item")
+    return Progress.objects.filter(project__owner=owner).select_related(
+        "quote_item", "project", "worker"
+    )
+
+
+def evidences_for_owner(*, owner) -> QuerySet[Evidence]:
+    """Las fotos de los avances de los proyectos de la cuenta."""
+    return Evidence.objects.filter(progress__project__owner=owner).select_related(
+        "progress__project"
+    )
