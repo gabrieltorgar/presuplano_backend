@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from apps.accounts.models import OtpCode, User
+from apps.legal.tests.consent import accepted
 
 REGISTER = "/api/auth/register/"
 LOGIN = "/api/auth/login/"
@@ -39,7 +40,7 @@ class TestIdentidad:
     ) -> None:
         """Flujo principal - Alta con correo."""
         response = api_client.post(
-            REGISTER, {"email": "Ana@Estudio.mx", "password": "secret123"}
+            REGISTER, {"email": "Ana@Estudio.mx", "password": "secret123", **accepted()}
         )
 
         assert response.status_code == status.HTTP_201_CREATED
@@ -49,7 +50,9 @@ class TestIdentidad:
 
     def test_the_code_travels_to_that_email(self, api_client, correo) -> None:
         """Flujo principal - El código sale hacia el correo del alta."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
 
         assert correo.called
         assert len(codigo_enviado(correo)) == 6
@@ -57,7 +60,9 @@ class TestIdentidad:
 
     def test_that_code_verifies_the_account(self, api_client, correo) -> None:
         """Flujo principal - Con su código la cuenta queda verificada."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
 
         response = api_client.post(
             VERIFY, {"email": "ana@estudio.mx", "code": codigo_enviado(correo)}
@@ -70,7 +75,9 @@ class TestIdentidad:
         self, api_client, correo, settings
     ) -> None:
         """Caso de borde - Quien puede recibir el suyo necesita el suyo."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
 
         response = api_client.post(
             VERIFY, {"email": "ana@estudio.mx", "code": settings.OTP_UNIVERSAL_CODE}
@@ -80,7 +87,9 @@ class TestIdentidad:
 
     def test_a_code_is_spent_when_used(self, api_client, correo) -> None:
         """Caso de borde - El mismo código no sirve dos veces."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
         code = codigo_enviado(correo)
         api_client.post(VERIFY, {"email": "ana@estudio.mx", "code": code})
         User.objects.filter(email="ana@estudio.mx").update(is_email_verified=False)
@@ -91,7 +100,9 @@ class TestIdentidad:
 
     def test_an_expired_code_does_not_work(self, api_client, correo) -> None:
         """Caso de borde - Un código vencido es un código muerto."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
         code = codigo_enviado(correo)
         OtpCode.objects.update(
             expires_at=timezone.now() - timezone.timedelta(minutes=1)
@@ -105,7 +116,9 @@ class TestIdentidad:
         self, api_client, correo
     ) -> None:
         """Flujo principal - Se entra con el correo, como sea que se escriba."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
         api_client.post(
             VERIFY, {"email": "ana@estudio.mx", "code": codigo_enviado(correo)}
         )
@@ -143,7 +156,7 @@ class TestIdentidad:
     def test_registering_without_an_email_is_refused(self, api_client) -> None:
         """Caso de borde - Sin correo no hay cuenta."""
         response = api_client.post(
-            REGISTER, {"phone": "5512345678", "password": "secret123"}
+            REGISTER, {"phone": "5512345678", "password": "secret123", **accepted()}
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -152,10 +165,12 @@ class TestIdentidad:
 
     def test_an_email_already_taken_is_refused(self, api_client, correo) -> None:
         """Caso alternativo - Un correo es de una sola cuenta."""
-        api_client.post(REGISTER, {"email": "ana@estudio.mx", "password": "secret123"})
+        api_client.post(
+            REGISTER, {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
+        )
 
         response = api_client.post(
-            REGISTER, {"email": "ANA@estudio.mx", "password": "secret123"}
+            REGISTER, {"email": "ANA@estudio.mx", "password": "secret123", **accepted()}
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -164,33 +179,23 @@ class TestIdentidad:
 
 @pytest.mark.django_db
 class TestPerfilDeIdentidad:
-    """Desde el perfil se cambia el correo con el que se entra."""
+    """PATCH /auth/me/ sigue sirviendo, pero ya no cambia el correo de golpe."""
 
-    def test_changing_the_email_leaves_it_pending(
+    def test_patching_the_email_leaves_it_waiting_for_its_code(
         self, authenticated_client, user, correo
     ) -> None:
-        """Flujo principal - El correo nuevo entra sin verificar."""
+        """Flujo principal - El correo nuevo espera; el de siempre sigue."""
+        anterior = user.email
+
         response = authenticated_client.patch(
             ME, {"email": "nuevo@estudio.mx"}, format="json"
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["email"] == "nuevo@estudio.mx"
-        assert response.data["is_email_verified"] is False
-        assert "phone" not in response.data
-        assert correo.called
-
-    def test_the_same_email_changes_nothing(
-        self, authenticated_client, user, correo
-    ) -> None:
-        """Caso alternativo - Guardar el mismo correo no lo deja pendiente."""
-        response = authenticated_client.patch(
-            ME, {"email": user.email.upper()}, format="json"
-        )
-
-        assert response.status_code == status.HTTP_200_OK
+        assert response.data["email"] == anterior
         assert response.data["is_email_verified"] is True
-        assert not correo.called
+        assert response.data["pending_email"] == "nuevo@estudio.mx"
+        assert correo.call_args.kwargs["to"] == "nuevo@estudio.mx"
 
     def test_an_email_of_another_account_is_refused(
         self, authenticated_client, user_factory
@@ -204,15 +209,6 @@ class TestPerfilDeIdentidad:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Ese correo ya está registrado" in str(response.data)
-
-    def test_an_account_cannot_be_left_without_an_email(
-        self, authenticated_client, user
-    ) -> None:
-        """Caso de borde - Quedarse sin correo cerraría la puerta."""
-        response = authenticated_client.patch(ME, {"email": ""}, format="json")
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Tu cuenta necesita un correo" in str(response.data)
 
     def test_without_a_session_nothing_changes(self, api_client) -> None:
         """Caso de borde - Sin sesión no se toca la cuenta."""
@@ -249,17 +245,18 @@ class TestCorreoSinVerificar:
 
         assert correo.called
 
-    def test_changing_the_email_closes_the_door_until_it_is_verified(
+    def test_while_the_new_email_waits_the_old_one_still_opens_the_account(
         self, authenticated_client, api_client, user, correo
     ) -> None:
-        """Caso de borde - Cambiar el correo obliga a confirmarlo."""
+        """Caso de borde - Un correo nuevo sin confirmar no cierra la puerta."""
         user.set_password("testpass123")
         user.save(update_fields=["password"])
         authenticated_client.patch(ME, {"email": "nuevo@estudio.mx"}, format="json")
 
-        response = api_client.post(
+        viejo = api_client.post(LOGIN, {"email": user.email, "password": "testpass123"})
+        nuevo = api_client.post(
             LOGIN, {"email": "nuevo@estudio.mx", "password": "testpass123"}
         )
 
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.data["identity"] == "nuevo@estudio.mx"
+        assert viejo.status_code == status.HTTP_200_OK
+        assert nuevo.status_code == status.HTTP_401_UNAUTHORIZED

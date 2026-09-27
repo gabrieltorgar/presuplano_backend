@@ -41,6 +41,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=False,
         verbose_name=_("correo verificado"),
     )
+    # El correo nuevo espera aquí hasta que se demuestra con su código: la
+    # cuenta sigue entrando con el de siempre, y un error de dedo no la deja
+    # sin acceso.
+    pending_email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name=_("correo por confirmar"),
+    )
     is_active = models.BooleanField(default=True, verbose_name=_("activo"))
     is_staff = models.BooleanField(default=False, verbose_name=_("es staff"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("creado en"))
@@ -186,6 +194,7 @@ class OtpCode(models.Model):
     class Purpose(models.TextChoices):
         SIGNUP = "signup", _("Verificación de la cuenta")
         PASSWORD_RESET = "password_reset", _("Cambio de contraseña")
+        EMAIL_CHANGE = "email_change", _("Cambio de correo")
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

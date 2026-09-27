@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     "apps.dashboard",
     "apps.assets",
     "apps.documents",
+    "apps.legal",
 ]
 
 MIDDLEWARE = [

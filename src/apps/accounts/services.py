@@ -18,8 +18,10 @@ from rest_framework.exceptions import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.emails import send_otp_email
+from apps.accounts.deletion import purge_account
+from apps.accounts.emails import send_email_changed_notice, send_otp_email
 from apps.accounts.models import Organization, OtpCode, Subscription, User
+from apps.legal.services import record_acceptance
 from common import mail
 
 logger = logging.getLogger("apps")
@@ -110,12 +112,13 @@ def check_otp(*, user: User, purpose: str, code: str) -> bool:
 
 
 def send_verification_code(
-    *, user: User, purpose: str = OtpCode.Purpose.SIGNUP
+    *, user: User, purpose: str = OtpCode.Purpose.SIGNUP, to: str | None = None
 ) -> None:
     """Hacer llegar a su dueño, por correo, el código que abre su cuenta.
 
     Con el correo sin configurar no hay nada que mandar —sigue valiendo el
-    código universal—; queda anotado que tocaba enviarlo.
+    código universal—; queda anotado que tocaba enviarlo. ``to`` manda el
+    código a otra dirección: la del correo nuevo que se quiere confirmar.
     """
     if uses_universal_code(user):
         logger.info(
@@ -126,7 +129,11 @@ def send_verification_code(
 
     code = issue_otp(user=user, purpose=purpose)
     send_otp_email(
-        user=user, code=code, purpose=purpose, minutes=settings.OTP_TTL_MINUTES
+        user=user,
+        code=code,
+        purpose=purpose,
+        minutes=settings.OTP_TTL_MINUTES,
+        to=to,
     )
     logger.info(
         "Verification code requested",
@@ -136,12 +143,21 @@ def send_verification_code(
 
 
 @transaction.atomic
-def register_user(*, email: str, password: str) -> User:
+def register_user(
+    *,
+    email: str,
+    password: str,
+    terms_version: str,
+    privacy_version: str,
+    ip_address: str | None = None,
+    user_agent: str = "",
+) -> User:
     """Create a pending (unverified) account, its subscription and letterhead.
 
-    La cuenta nace sin verificar, con su suscripción del plan inicial y un
-    membrete vacío en la misma transacción, y el código sale de inmediato
-    hacia su correo.
+    La cuenta nace sin verificar, con su suscripción del plan inicial, un
+    membrete vacío y la constancia de que aceptó los términos y la política de
+    privacidad vigentes, todo en la misma transacción; el código sale de
+    inmediato hacia su correo.
     """
     email = normalize_email(email)
     if not email:
@@ -156,6 +172,13 @@ def register_user(*, email: str, password: str) -> User:
     # Empty letterhead, but already there: the documents screen never has to
     # deal with an account that has no organization row at all.
     Organization.objects.create(user=user)
+    record_acceptance(
+        user=user,
+        terms_version=terms_version,
+        privacy_version=privacy_version,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
     logger.info("Account registered", extra={"user_id": str(user.pk)})
     # Y el código sale de inmediato: la pantalla siguiente ya lo está pidiendo.
     send_verification_code(user=user)
@@ -262,34 +285,128 @@ def reset_password(*, email: str, code: str, password: str) -> User:
     return user
 
 
-@transaction.atomic
-def update_my_account(*, user: User, email: str) -> User:
-    """Cambiar desde el perfil el correo con el que se entra.
+def _email_taken(email: str, *, by_other_than: User) -> bool:
+    return (
+        User.objects.filter(email__iexact=email).exclude(pk=by_other_than.pk).exists()
+    )
 
-    El correo nuevo entra sin verificar y con su código en camino: hasta que
-    se escriba, la cuenta vuelve a pedirlo al entrar.
+
+@transaction.atomic
+def request_email_change(*, user: User, email: str) -> User:
+    """Empezar a cambiar el correo: el nuevo espera hasta demostrarse.
+
+    La cuenta sigue entrando con su correo de siempre; el nuevo queda por
+    confirmar y su código sale hacia él. Pedir otro correo reemplaza al
+    anterior pendiente.
 
     Raises:
-        ValidationError: el correo está vacío o ya es de otra cuenta.
+        ValidationError: vacío, igual al actual o ya de otra cuenta.
     """
     nuevo = normalize_email(email)
     if not nuevo:
-        raise ValidationError({"email": "Tu cuenta necesita un correo"})
-    if nuevo == user.email:
-        return user
-    if User.objects.filter(email__iexact=nuevo).exclude(pk=user.pk).exists():
+        raise ValidationError({"email": "Escribe el correo nuevo"})
+    if nuevo == normalize_email(user.email):
+        raise ValidationError({"email": "Ese ya es el correo de tu cuenta"})
+    if _email_taken(nuevo, by_other_than=user):
         raise ValidationError({"email": "Ese correo ya está registrado"})
 
-    user.email = nuevo
-    user.is_email_verified = False
-    user.save(update_fields=["email", "is_email_verified", "updated_at"])
-    logger.info(
-        "Account identity updated",
-        extra={"user_id": str(user.pk), "fields": "email"},
-    )
-    # El correo nuevo hay que demostrarlo: el código sale hacia él.
-    send_verification_code(user=user)
+    user.pending_email = nuevo
+    user.save(update_fields=["pending_email", "updated_at"])
+    send_verification_code(user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, to=nuevo)
+    logger.info("Email change requested", extra={"user_id": str(user.pk)})
     return user
+
+
+def resend_email_change(*, user: User) -> User:
+    """Volver a mandar el código al correo nuevo que está por confirmar.
+
+    Raises:
+        ValidationError: no hay un cambio de correo pendiente.
+    """
+    if not user.pending_email:
+        raise ValidationError("No tienes un cambio de correo pendiente")
+    send_verification_code(
+        user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, to=user.pending_email
+    )
+    return user
+
+
+@transaction.atomic
+def confirm_email_change(*, user: User, code: str) -> User:
+    """Con el código del correo nuevo, la cuenta pasa a usarlo.
+
+    El correo nuevo queda verificado —el código lo prueba— y al de antes le
+    llega un aviso: si el cambio no lo hizo su dueño, así se entera.
+
+    Raises:
+        ValidationError: no hay cambio pendiente, el código no es válido o el
+            correo lo tomó otra cuenta mientras tanto.
+    """
+    if not user.pending_email:
+        raise ValidationError("No tienes un cambio de correo pendiente")
+    if not check_otp(user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, code=code):
+        raise ValidationError({"code": "Código de verificación inválido"})
+    if _email_taken(user.pending_email, by_other_than=user):
+        raise ValidationError({"email": "Ese correo ya está registrado"})
+
+    anterior = user.email
+    user.email = user.pending_email
+    user.pending_email = ""
+    user.is_email_verified = True
+    user.save(
+        update_fields=["email", "pending_email", "is_email_verified", "updated_at"]
+    )
+    logger.info("Email changed", extra={"user_id": str(user.pk)})
+    transaction.on_commit(
+        lambda: send_email_changed_notice(old_email=anterior, new_email=user.email)
+    )
+    return user
+
+
+def cancel_email_change(*, user: User) -> User:
+    """Olvidar el correo nuevo pendiente; su código deja de servir."""
+    OtpCode.objects.filter(
+        user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, used_at__isnull=True
+    ).update(used_at=timezone.now())
+    if user.pending_email:
+        user.pending_email = ""
+        user.save(update_fields=["pending_email", "updated_at"])
+    return user
+
+
+def change_password(*, user: User, current_password: str, new_password: str) -> User:
+    """Cambiar la contraseña sabiendo la de ahora.
+
+    Raises:
+        ValidationError: la actual no es correcta, o la nueva es la misma.
+    """
+    if not user.check_password(current_password):
+        raise ValidationError(
+            {"current_password": "La contraseña actual no es correcta"}
+        )
+    if current_password == new_password:
+        raise ValidationError(
+            {"new_password": "La contraseña nueva debe ser distinta de la actual"}
+        )
+    user.set_password(new_password)
+    user.save(update_fields=["password", "updated_at"])
+    logger.info("Password changed", extra={"user_id": str(user.pk)})
+    return user
+
+
+def delete_account(*, user: User, password: str) -> dict[str, int]:
+    """Eliminar la cuenta y todo lo suyo, confirmándolo con la contraseña.
+
+    Se borra, no se anonimiza: la cuenta, su organización y logotipo, su
+    información de trabajo, sus fotografías, planos, texturas y modelos, sus
+    códigos y sus constancias de aceptación.
+
+    Raises:
+        ValidationError: la contraseña no es correcta.
+    """
+    if not user.check_password(password):
+        raise ValidationError({"password": "La contraseña no es correcta"})
+    return purge_account(user=user)
 
 
 def get_my_organization(*, user: User) -> Organization:

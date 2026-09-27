@@ -10,6 +10,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 
 from apps.accounts.models import DEFAULT_ORGANIZATION_COLOR, Organization
+from apps.legal.tests.consent import accepted
 
 ORGANIZATION_URL = "/api/auth/organization/"
 
@@ -158,7 +159,7 @@ class TestMyOrganization:
         """Flujo principal - Registrarse ya crea la organización vacía."""
         response = api_client.post(
             "/api/auth/register/",
-            {"email": "nueva@estudio.mx", "password": "secreta123"},
+            {"email": "nueva@estudio.mx", "password": "secreta123", **accepted()},
             format="json",
         )
 

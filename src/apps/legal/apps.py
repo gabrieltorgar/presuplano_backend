@@ -1,0 +1,9 @@
+"""App config for legal (términos, privacidad y su aceptación)."""
+
+from django.apps import AppConfig
+
+
+class LegalConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.legal"
+    verbose_name = "documentos legales"

@@ -8,28 +8,37 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.serializers import (
+    DeleteAccountSerializer,
+    EmailChangeConfirmSerializer,
+    EmailChangeSerializer,
     LoginSerializer,
     MyAccountSerializer,
     OrganizationSerializer,
+    PasswordChangeSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
     ResendOtpSerializer,
-    UpdateMyAccountSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
 from apps.accounts.services import (
+    cancel_email_change,
+    change_password,
+    confirm_email_change,
+    delete_account,
     get_my_organization,
     login_user,
     organization_logo_data_url,
     register_user,
+    request_email_change,
+    resend_email_change,
     resend_otp,
     reset_password,
     start_password_reset,
-    update_my_account,
     verify_account,
 )
+from apps.legal.services import client_ip
 
 
 class RegisterView(APIView):
@@ -40,7 +49,11 @@ class RegisterView(APIView):
     def post(self, request: Request) -> Response:
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = register_user(**serializer.validated_data)
+        user = register_user(
+            ip_address=client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            **serializer.validated_data,
+        )
         return Response(
             UserAccountSerializer(user).data, status=status.HTTP_201_CREATED
         )
@@ -136,11 +149,83 @@ class MyAccountView(APIView):
         return Response(MyAccountSerializer(request.user).data)
 
     def patch(self, request: Request) -> Response:
-        """Cambiar el correo con el que se entra."""
-        serializer = UpdateMyAccountSerializer(data=request.data)
+        """Empezar a cambiar el correo; es lo mismo que ``POST me/email/``."""
+        serializer = EmailChangeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = update_my_account(user=request.user, **serializer.validated_data)
+        user = request_email_change(user=request.user, **serializer.validated_data)
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class MyEmailView(APIView):
+    """POST/DELETE /api/auth/me/email/ — pedir un correo nuevo, o desistir.
+
+    El correo nuevo queda pendiente y recibe su código; la cuenta sigue
+    entrando con el de siempre hasta que se confirma.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = EmailChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request_email_change(user=request.user, **serializer.validated_data)
+        return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+    def delete(self, request: Request) -> Response:
+        user = cancel_email_change(user=request.user)
+        return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class MyEmailVerifyView(APIView):
+    """POST /api/auth/me/email/verify/ — confirmar el correo nuevo con su código."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = EmailChangeConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = confirm_email_change(user=request.user, **serializer.validated_data)
+        return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class MyEmailResendView(APIView):
+    """POST /api/auth/me/email/resend/ — volver a mandar el código al correo nuevo."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        user = resend_email_change(user=request.user)
+        return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class MyPasswordView(APIView):
+    """POST /api/auth/me/password/ — cambiar la contraseña sabiendo la actual."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = PasswordChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        change_password(user=request.user, **serializer.validated_data)
+        return Response(
+            {"detail": "Tu contraseña quedó cambiada."}, status=status.HTTP_200_OK
+        )
+
+
+class MyAccountDeleteView(APIView):
+    """POST /api/auth/me/delete/ — eliminar la cuenta con todo lo suyo.
+
+    Es un POST y no un DELETE porque lleva cuerpo —la contraseña que lo
+    confirma— y no todos los intermediarios respetan el cuerpo de un DELETE.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = DeleteAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        delete_account(user=request.user, **serializer.validated_data)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MyOrganizationView(APIView):
