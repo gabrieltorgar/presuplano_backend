@@ -5,9 +5,14 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.accounts.views import (
     LoginView,
+    MyAccountDeleteView,
     MyAccountView,
+    MyEmailResendView,
+    MyEmailVerifyView,
+    MyEmailView,
     MyOrganizationLogoView,
     MyOrganizationView,
+    MyPasswordView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RegisterView,
@@ -33,6 +38,11 @@ urlpatterns = [
         name="password-reset-confirm",
     ),
     path("me/", MyAccountView.as_view(), name="me"),
+    path("me/email/", MyEmailView.as_view(), name="me-email"),
+    path("me/email/verify/", MyEmailVerifyView.as_view(), name="me-email-verify"),
+    path("me/email/resend/", MyEmailResendView.as_view(), name="me-email-resend"),
+    path("me/password/", MyPasswordView.as_view(), name="me-password"),
+    path("me/delete/", MyAccountDeleteView.as_view(), name="me-delete"),
     path("organization/", MyOrganizationView.as_view(), name="organization"),
     path(
         "organization/logo/",

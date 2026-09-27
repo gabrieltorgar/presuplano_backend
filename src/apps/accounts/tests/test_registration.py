@@ -7,6 +7,7 @@ import pytest
 from rest_framework import status
 
 from apps.accounts.models import Organization, Subscription, User
+from apps.legal.tests.consent import accepted
 
 REGISTER_URL = "/api/auth/register/"
 
@@ -19,7 +20,7 @@ class TestRegistration:
         self, api_client
     ) -> None:
         """Flujo principal - Registro crea cuenta, suscripción y membrete."""
-        payload = {"email": "ana@estudio.mx", "password": "secret123"}
+        payload = {"email": "ana@estudio.mx", "password": "secret123", **accepted()}
 
         response = api_client.post(REGISTER_URL, payload)
 
@@ -38,7 +39,7 @@ class TestRegistration:
 
     def test_register_with_existing_email_returns_400(self, api_client, user) -> None:
         """Caso alternativo - Correo ya registrado."""
-        payload = {"email": user.email, "password": "secret123"}
+        payload = {"email": user.email, "password": "secret123", **accepted()}
 
         response = api_client.post(REGISTER_URL, payload)
 
@@ -48,7 +49,7 @@ class TestRegistration:
 
     def test_register_with_an_invalid_email_returns_400(self, api_client) -> None:
         """Caso alternativo - Lo escrito no es un correo."""
-        payload = {"email": "5512345678", "password": "secret123"}
+        payload = {"email": "5512345678", "password": "secret123", **accepted()}
 
         response = api_client.post(REGISTER_URL, payload)
 
@@ -58,7 +59,7 @@ class TestRegistration:
 
     def test_register_with_short_password_returns_400(self, api_client) -> None:
         """Caso de borde - Contraseña demasiado corta."""
-        payload = {"email": "corta@estudio.mx", "password": "short"}
+        payload = {"email": "corta@estudio.mx", "password": "short", **accepted()}
 
         response = api_client.post(REGISTER_URL, payload)
 

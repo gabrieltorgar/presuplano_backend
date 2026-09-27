@@ -3,6 +3,36 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [1.18.0] — 2026-09-27
+
+### Added
+- **apps/legal (US-121):** los términos y la política de privacidad viven en
+  `apps/legal/documents/` como Markdown con cabecera (`title`, `version`).
+  `GET /api/legal/` y `GET /api/legal/{terms|privacy}/` los sirven sin cuenta.
+  Cambiar la `version` de un archivo es lo que vuelve a pedirlos a todos.
+- **apps/legal (US-122, US-123):** `LegalAcceptance` guarda qué versión aceptó
+  cada cuenta, cuándo, desde qué IP y con qué navegador. El registro exige
+  `terms_version` y `privacy_version` vigentes; `POST /api/legal/accept/` las
+  acepta después; `GET /auth/me/` dice en `legal` qué rige, qué se aceptó y si
+  falta algo.
+- **apps/accounts (US-124):** cambiar el correo en dos pasos: `POST
+  /auth/me/email/` lo deja en `pending_email` y manda el código al correo
+  nuevo; `.../verify/` lo confirma y avisa al de antes; `.../resend/` y
+  `DELETE` reenvían o desisten. `PATCH /auth/me/` hace lo mismo que el primer
+  paso.
+- **apps/accounts (US-125):** `POST /auth/me/password/` cambia la contraseña
+  con la actual.
+- **apps/accounts (US-126):** `POST /auth/me/delete/` elimina la cuenta con su
+  contraseña: borra en orden todas sus filas —pagos, proyectos con avances,
+  fotos y reparto, cotizaciones, personal, servicios, clientes, planos,
+  archivos del editor, organización, suscripción, códigos y constancias— y,
+  confirmado el borrado, sus archivos del bucket: los que la base nombra y
+  todo lo que cuelga de sus carpetas. No se anonimiza nada.
+
+### Migrations
+- **accounts 0007:** `pending_email` y el motivo de código «cambio de correo».
+- **legal 0001:** constancias de aceptación.
+
 ## [1.17.0] — 2026-09-26
 
 ### Added

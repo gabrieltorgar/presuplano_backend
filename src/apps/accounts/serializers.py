@@ -3,12 +3,15 @@
 from rest_framework import serializers
 
 from apps.accounts.models import HEX_COLOR_VALIDATOR, Organization, Subscription, User
+from apps.legal.serializers import AcceptanceSerializer
+from apps.legal.services import check_versions, status_for
 
 MIN_PASSWORD_LENGTH = 8
 
 
-class RegisterSerializer(serializers.Serializer):
-    """Validates registration input: email, uniqueness and password length."""
+class RegisterSerializer(AcceptanceSerializer):
+    """Validates registration input: email, uniqueness, password length and the
+    acceptance of the legal documents in force."""
 
     email = serializers.EmailField(
         error_messages={
@@ -30,6 +33,15 @@ class RegisterSerializer(serializers.Serializer):
                 "La contraseña debe tener al menos 8 caracteres"
             )
         return value
+
+    def validate(self, attrs: dict) -> dict:
+        # Lo aceptado tiene que ser lo que rige: si cambió mientras se llenaba
+        # el formulario, se vuelve a pedir en vez de registrar otro texto.
+        check_versions(
+            terms_version=attrs["terms_version"],
+            privacy_version=attrs["privacy_version"],
+        )
+        return attrs
 
 
 class EmailIdentitySerializer(serializers.Serializer):
@@ -101,15 +113,65 @@ class LoginSerializer(EmailIdentitySerializer):
         return {**super().validate(attrs), "password": password}
 
 
-class UpdateMyAccountSerializer(serializers.Serializer):
-    """Lo que el perfil deja cambiar de la cuenta: el correo con el que se entra."""
+class EmailChangeSerializer(serializers.Serializer):
+    """El correo nuevo al que se quiere cambiar la cuenta."""
 
     email = serializers.EmailField(
         error_messages={
-            "required": "Tu cuenta necesita un correo",
-            "blank": "Tu cuenta necesita un correo",
+            "required": "Escribe el correo nuevo",
+            "blank": "Escribe el correo nuevo",
             "invalid": "Escribe un correo válido",
         }
+    )
+
+
+class EmailChangeConfirmSerializer(serializers.Serializer):
+    """El código que llegó al correo nuevo."""
+
+    code = serializers.CharField(
+        max_length=6,
+        error_messages={
+            "required": "Escribe el código que te llegó",
+            "blank": "Escribe el código que te llegó",
+        },
+    )
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    """La contraseña de ahora y la nueva."""
+
+    current_password = serializers.CharField(
+        write_only=True,
+        error_messages={
+            "required": "Escribe tu contraseña actual",
+            "blank": "Escribe tu contraseña actual",
+        },
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        error_messages={
+            "required": "Escribe la contraseña nueva",
+            "blank": "Escribe la contraseña nueva",
+        },
+    )
+
+    def validate_new_password(self, value: str) -> str:
+        if len(value) < MIN_PASSWORD_LENGTH:
+            raise serializers.ValidationError(
+                "La contraseña debe tener al menos 8 caracteres"
+            )
+        return value
+
+
+class DeleteAccountSerializer(serializers.Serializer):
+    """Borrar la cuenta se confirma con la contraseña."""
+
+    password = serializers.CharField(
+        write_only=True,
+        error_messages={
+            "required": "Escribe tu contraseña para confirmar",
+            "blank": "Escribe tu contraseña para confirmar",
+        },
     )
 
 
@@ -200,6 +262,7 @@ class MyAccountSerializer(serializers.ModelSerializer):
 
     subscription = SubscriptionSerializer(read_only=True)
     organization = OrganizationSerializer(read_only=True)
+    legal = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -207,8 +270,14 @@ class MyAccountSerializer(serializers.ModelSerializer):
             "id",
             "email",
             "is_email_verified",
+            "pending_email",
+            "legal",
             "created_at",
             "subscription",
             "organization",
         ]
         read_only_fields = fields
+
+    def get_legal(self, obj: User) -> dict:
+        """Qué documentos rigen, cuáles aceptó y si le falta aceptar alguno."""
+        return status_for(obj)
