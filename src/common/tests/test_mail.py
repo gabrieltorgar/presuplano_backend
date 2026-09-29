@@ -27,7 +27,7 @@ class FakeResponse:
 @pytest.fixture
 def configurado(settings):
     settings.RESEND_API_KEY = "re_test"
-    settings.RESEND_FROM = "presuplano <hola@presuplano.mx>"
+    settings.RESEND_FROM = "CUOTREKA <hola@cuotreka.mx>"
 
 
 class TestResend:
@@ -48,6 +48,33 @@ class TestResend:
         body = json.loads(request.data)
         assert body["to"] == ["ana@estudio.mx"]
         assert body["subject"] == "Hola"
+
+    def test_the_sender_reads_as_the_brand(self, settings, configurado, mocker) -> None:
+        """US-127 - En la bandeja se lee la marca, con su dirección.
+
+        El nombre de la variable del servidor puede haberse quedado con el de
+        antes: lo que manda es la marca, y de la variable sólo se toma la
+        dirección del dominio verificado.
+        """
+        settings.RESEND_FROM = "presuplano <hola@cuotreka.mx>"
+        urlopen = mocker.patch("urllib.request.urlopen", return_value=FakeResponse(200))
+
+        mail.send_email(to="ana@estudio.mx", subject="Hola", html="<p>Hola</p>")
+
+        body = json.loads(urlopen.call_args.args[0].data)
+        assert body["from"] == "CUOTREKA <hola@cuotreka.mx>"
+
+    def test_a_bare_address_gets_the_brand_too(
+        self, settings, configurado, mocker
+    ) -> None:
+        """US-127 - Con la pura dirección, también firma la marca."""
+        settings.RESEND_FROM = "hola@cuotreka.mx"
+        urlopen = mocker.patch("urllib.request.urlopen", return_value=FakeResponse(200))
+
+        mail.send_email(to="ana@estudio.mx", subject="Hola", html="<p>Hola</p>")
+
+        body = json.loads(urlopen.call_args.args[0].data)
+        assert body["from"] == "CUOTREKA <hola@cuotreka.mx>"
 
     def test_the_client_says_who_it_is(self, configurado, mocker) -> None:
         """Caso de borde - Sin nombre, Cloudflare corta la petición.
@@ -86,7 +113,7 @@ class TestResend:
         entender por qué la cotización nunca llegó.
         """
         settings.RESEND_API_KEY = "re_test"
-        settings.RESEND_FROM = "presuplano <onboarding@resend.dev>"
+        settings.RESEND_FROM = "CUOTREKA <onboarding@resend.dev>"
         mocker.patch("urllib.request.urlopen", return_value=FakeResponse(200))
 
         with caplog.at_level(logging.WARNING, logger="apps"):

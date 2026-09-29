@@ -21,7 +21,7 @@ class TestCorreosDeLaCuenta:
 
         envio = enviado.call_args.kwargs
         assert envio["to"] == user.email
-        assert envio["subject"] == "Tu código de presuplano"
+        assert envio["subject"] == "Tu código de CUOTREKA"
         assert "123456" in envio["html"]
 
     def test_the_email_change_code_goes_to_the_new_address(self, user, enviado) -> None:
@@ -36,7 +36,7 @@ class TestCorreosDeLaCuenta:
 
         envio = enviado.call_args.kwargs
         assert envio["to"] == "nuevo@estudio.mx"
-        assert envio["subject"] == "Confirma tu correo nuevo en presuplano"
+        assert envio["subject"] == "Confirma tu correo nuevo en CUOTREKA"
         assert "654321" in envio["html"]
 
     def test_the_old_address_is_told_about_the_change(self, enviado) -> None:

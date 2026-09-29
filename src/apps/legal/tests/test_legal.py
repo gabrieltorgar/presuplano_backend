@@ -76,6 +76,16 @@ class TestLosDocumentos:
         assert "No se anonimiza nada: se borra" in terms
         assert "No se anonimiza: se borra." in privacy
 
+    def test_the_texts_carry_the_new_name(self, api_client) -> None:
+        """US-127 - Los dos hablan de CUOTREKA y dicen cómo se llamaba."""
+        for kind in ("terms", "privacy"):
+            body = api_client.get(f"{LEGAL}{kind}/").data["body"]
+
+            assert "CUOTREKA antes se llamaba presuplano." in body
+            # Fuera de esa nota, el nombre de antes sólo sobrevive en el dominio.
+            resto = body.replace("CUOTREKA antes se llamaba presuplano.", "")
+            assert "presuplano" not in resto.replace("presuplano.vercel.app", "")
+
     def test_an_unknown_document_is_not_found(self, api_client) -> None:
         """Caso de borde - Sólo hay dos documentos."""
         assert (

@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.accounts.managers import UserManager
 from common.uploads import organization_logo_upload_to
 
-#: presuplano's own blue: what a document is painted with until the account
+#: CUOTREKA's own blue: what a document is painted with until the account
 #: chooses its own color.
 DEFAULT_ORGANIZATION_COLOR = "#1E56D6"
 
@@ -124,7 +124,7 @@ class Organization(models.Model):
 
     Accounts are one-person workspaces, so this is not a tenancy boundary —
     it is the letterhead. It stays optional: with no name the documents are
-    signed by presuplano itself, which is how every account started.
+    signed by CUOTREKA itself, which is how every account started.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -139,7 +139,7 @@ class Organization(models.Model):
         blank=True,
         default="",
         verbose_name=_("nombre"),
-        help_text=_("Nombre que llevan los documentos; vacío los firma presuplano."),
+        help_text=_("Nombre que llevan los documentos; vacío los firma CUOTREKA."),
     )
     color = models.CharField(
         max_length=7,

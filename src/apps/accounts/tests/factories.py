@@ -12,7 +12,7 @@ class UserFactory(factory.django.DjangoModelFactory):
         model = User
         skip_postgeneration_save = True
 
-    email = factory.Sequence(lambda n: f"cuenta{n:03d}@presuplano.test")
+    email = factory.Sequence(lambda n: f"cuenta{n:03d}@cuotreka.test")
     is_email_verified = True
     is_active = True
 

@@ -1,6 +1,8 @@
-# presuplano — Backend
+# CUOTREKA — Backend
 
-API del cotizador para arquitectos **presuplano**. Permite registrar tarifas
+> Del plano a la obra, todo conectado.
+
+API del cotizador para arquitectos **CUOTREKA**. Permite registrar tarifas
 (precio por m², metro lineal, piso/muro, etc.), clientes, cotizaciones,
 avances de proyecto con evidencia fotográfica, y pagos (totales o parciales)
 con su comprobante, hasta el cierre del proyecto con documento resumen.

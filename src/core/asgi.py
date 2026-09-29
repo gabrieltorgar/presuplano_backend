@@ -1,4 +1,4 @@
-"""ASGI config for presuplano backend."""
+"""ASGI config for CUOTREKA backend."""
 
 import os
 import sys

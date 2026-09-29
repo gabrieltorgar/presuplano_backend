@@ -1,4 +1,4 @@
-"""Django settings for presuplano backend.
+"""Django settings for CUOTREKA backend.
 
 Modular settings: this file holds Django's own config and initializes
 ``environ`` once. STATIC/MEDIA/security live in ``core.env``; each third-party
@@ -178,9 +178,7 @@ DOCUMENT_EMAIL_MAX_BYTES = env.int("DOCUMENT_EMAIL_MAX_BYTES", default=8 * 1024 
 # Se recortan: un salto de línea o un espacio pegado al pegar el valor
 # invalida la llave —Resend contesta 401— sin que se vea en ningún lado.
 RESEND_API_KEY = env.str("RESEND_API_KEY", default="").strip()
-RESEND_FROM = env.str(
-    "RESEND_FROM", default="presuplano <onboarding@resend.dev>"
-).strip()
+RESEND_FROM = env.str("RESEND_FROM", default="CUOTREKA <onboarding@resend.dev>").strip()
 # A dónde llevan los enlaces de los correos: la aplicación, no la API.
 APP_BASE_URL = env.str("APP_BASE_URL", default="https://presuplano.vercel.app")
 

@@ -1,4 +1,4 @@
-# Deploy — presuplano backend (Vercel + Neon)
+# Deploy — CUOTREKA backend (Vercel + Neon)
 
 El backend se despliega en **Vercel** como **función serverless de Python**
 (soporte nativo de Django) y usa **Neon Postgres** como base de datos. Config
@@ -94,7 +94,7 @@ correo que no sale se anota y la pantalla sigue.
 | Variable | Obligatoria | Valor |
 |---|---|---|
 | `RESEND_API_KEY` | para mandar correo | la llave `re_…` de Resend |
-| `RESEND_FROM` | **sí, en cuanto haya llave** | remitente de un dominio verificado, p. ej. `presuplano <no-reply@tudominio.com>` |
+| `RESEND_FROM` | **sí, en cuanto haya llave** | remitente de un dominio verificado, p. ej. `CUOTREKA <no-reply@tudominio.com>` |
 | `APP_BASE_URL` | opcional | a dónde llevan los enlaces; def. `https://presuplano.vercel.app` |
 | `DOCUMENT_EMAIL_MAX_BYTES` | opcional | tope del adjunto; def. 8 MB |
 
