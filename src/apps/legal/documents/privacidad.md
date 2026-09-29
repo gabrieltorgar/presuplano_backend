@@ -1,15 +1,17 @@
 ---
 title: Política de privacidad
-version: 2026-09-27
+version: 2026-09-29
 ---
 
-Esta política explica qué datos personales trata **presuplano** (presuplano.vercel.app), para qué, con quién los comparte y cómo puedes ejercer tus derechos. Se emite conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.
+Esta política explica qué datos personales trata **CUOTREKA** (presuplano.vercel.app), para qué, con quién los comparte y cómo puedes ejercer tus derechos. Se emite conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.
+
+**CUOTREKA antes se llamaba presuplano.** El cambio es sólo de nombre: el servicio, tu cuenta, tus datos y todo lo que ya capturaste siguen igual.
 
 ## 1. Responsable
 
-El responsable del tratamiento de tus datos es **[Pendiente: nombre o razón social del responsable]**, con domicilio en **[Pendiente: domicilio]** (en adelante, «presuplano», «nosotros»).
+El responsable del tratamiento de tus datos es **[Pendiente: nombre o razón social del responsable]**, con domicilio en **[Pendiente: domicilio]** (en adelante, «CUOTREKA», «nosotros»).
 
-Para cualquier asunto de privacidad —incluido el ejercicio de tus derechos— escríbenos por el formulario de contacto de la página principal de presuplano. Si ya tienes cuenta, muchas de estas acciones puedes hacerlas tú mismo desde la aplicación (ver la sección 9).
+Para cualquier asunto de privacidad —incluido el ejercicio de tus derechos— escríbenos por el formulario de contacto de la página principal de CUOTREKA. Si ya tienes cuenta, muchas de estas acciones puedes hacerlas tú mismo desde la aplicación (ver la sección 9).
 
 ## 2. Qué datos tratamos
 
@@ -31,7 +33,7 @@ Para cualquier asunto de privacidad —incluido el ejercicio de tus derechos— 
 - Los datos de tus **clientes** (nombre, teléfono, correo) y de tu **personal** (nombre, teléfono, correo, notas, servicios y pagos).
 - Las **fotografías** de avance de obra. Antes de subir una fotografía, la aplicación intenta reducirla y, al hacerlo, descarta sus metadatos (como la ubicación GPS); si la foto ya era ligera, se sube tal cual, con los metadatos que traiga.
 - Tus **planos**, y las texturas, modelos y fichas de mobiliario que importas al editor.
-- Los correos que envías desde presuplano: la dirección del destinatario, el asunto y el documento adjunto.
+- Los correos que envías desde CUOTREKA: la dirección del destinatario, el asunto y el documento adjunto.
 
 **De quien nos escribe desde la página principal**
 
@@ -41,7 +43,7 @@ Para cualquier asunto de privacidad —incluido el ejercicio de tus derechos— 
 
 - Registros del servidor sobre la operación del servicio (por ejemplo, accesos y errores), asociados al identificador de tu cuenta, y los datos técnicos de cada petición que registra nuestro proveedor de alojamiento, como la dirección IP.
 
-presuplano **no te pide datos personales sensibles** y te pedimos no capturarlos.
+CUOTREKA **no te pide datos personales sensibles** y te pedimos no capturarlos.
 
 ## 3. Para qué los usamos
 
@@ -59,11 +61,11 @@ Usamos tus datos únicamente para **prestarte el servicio**:
 
 ## 4. Datos de tus clientes y de tu personal
 
-Los datos de tus clientes y de tu personal los decides y los capturas tú. Frente a esas personas, **tú eres el responsable** y presuplano actúa como **encargado**: los trata sólo por tu cuenta y para prestarte el servicio. Te corresponde contar con su consentimiento o con otra base legal y darles tu propio aviso de privacidad cuando la ley lo pida. Si una de esas personas nos contacta directamente, te trasladaremos su solicitud.
+Los datos de tus clientes y de tu personal los decides y los capturas tú. Frente a esas personas, **tú eres el responsable** y CUOTREKA actúa como **encargado**: los trata sólo por tu cuenta y para prestarte el servicio. Te corresponde contar con su consentimiento o con otra base legal y darles tu propio aviso de privacidad cuando la ley lo pida. Si una de esas personas nos contacta directamente, te trasladaremos su solicitud.
 
 ## 5. Con quién los compartimos
 
-Para funcionar, presuplano se apoya en proveedores de infraestructura que tratan los datos **por nuestra cuenta y sólo para prestar el servicio**:
+Para funcionar, CUOTREKA se apoya en proveedores de infraestructura que tratan los datos **por nuestra cuenta y sólo para prestar el servicio**:
 
 - **Vercel**, que aloja la aplicación y el servidor.
 - **Neon**, que aloja la base de datos.
@@ -74,7 +76,7 @@ Estos proveedores pueden almacenar y procesar datos **fuera de México**, princi
 
 ## 6. Cookies y almacenamiento en tu navegador
 
-presuplano **no usa cookies de rastreo ni herramientas de analítica o publicidad**. Para funcionar guarda en tu navegador:
+CUOTREKA **no usa cookies de rastreo ni herramientas de analítica o publicidad**. Para funcionar guarda en tu navegador:
 
 - Tu sesión (las credenciales de acceso y los datos básicos de tu cuenta), para no pedirte la contraseña a cada rato.
 - Tu preferencia de tema claro u oscuro.
@@ -82,7 +84,7 @@ presuplano **no usa cookies de rastreo ni herramientas de analítica o publicida
 - Copias locales de tus planos, texturas y modelos, para que el editor abra rápido.
 - Los archivos de la aplicación, para que se pueda instalar y abrir como app.
 
-Puedes borrar todo esto cerrando sesión y limpiando los datos del sitio en tu navegador. Al eliminar tu cuenta, presuplano borra también lo que guardaba en el navegador desde el que la eliminas.
+Puedes borrar todo esto cerrando sesión y limpiando los datos del sitio en tu navegador. Al eliminar tu cuenta, CUOTREKA borra también lo que guardaba en el navegador desde el que la eliminas.
 
 ## 7. Cuánto tiempo los conservamos
 
@@ -112,8 +114,8 @@ Para cualquier otra solicitud, escríbenos por el formulario de contacto indican
 
 ## 10. Menores de edad
 
-presuplano está dirigido a profesionales y no a menores de 18 años. No recabamos a sabiendas datos de menores.
+CUOTREKA está dirigido a profesionales y no a menores de 18 años. No recabamos a sabiendas datos de menores.
 
 ## 11. Cambios a esta política
 
-Si actualizamos esta política, cambiará su versión y la fecha de arriba. La siguiente vez que entres a presuplano te la mostraremos y te pediremos aceptarla para seguir usando tu cuenta.
+Si actualizamos esta política, cambiará su versión y la fecha de arriba. La siguiente vez que entres a CUOTREKA te la mostraremos y te pediremos aceptarla para seguir usando tu cuenta.

@@ -42,7 +42,7 @@ class TestResendOtp:
 
         conocido = api_client.post(URL, {"email": pendiente.email}, format="json")
         desconocido = api_client.post(
-            URL, {"email": "nadie@presuplano.test"}, format="json"
+            URL, {"email": "nadie@cuotreka.test"}, format="json"
         )
 
         assert conocido.status_code == desconocido.status_code == status.HTTP_200_OK

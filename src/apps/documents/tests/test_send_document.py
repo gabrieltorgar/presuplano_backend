@@ -10,7 +10,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 
 from apps.accounts.services import get_my_organization
-from common.branding import OPTIMIZED_BY, PRESUPLANO_NAME
+from common.brand import BRAND_NAME
+from common.branding import OPTIMIZED_BY
 
 URL = "/api/documents/send/"
 
@@ -50,20 +51,20 @@ class TestEnvioDeDocumentos:
         assert "COT-0007" in enviado["html"]
         assert "$12,500.00" in enviado["html"]
 
-    def test_without_a_letterhead_it_is_presuplano_who_signs(
+    def test_without_a_letterhead_the_house_brand_signs(
         self, authenticated_client, correo
     ) -> None:
-        """Flujo principal - Sin organización configurada firma presuplano."""
+        """Flujo principal - Sin organización configurada firma CUOTREKA."""
         enviar(authenticated_client)
 
         html = correo.call_args.kwargs["html"]
-        assert PRESUPLANO_NAME in html
+        assert BRAND_NAME in html
         assert OPTIMIZED_BY not in html
 
     def test_with_a_letterhead_it_carries_its_colors_and_a_footer(
         self, authenticated_client, user, correo
     ) -> None:
-        """Flujo principal - Con membrete, su color y el pie de presuplano."""
+        """Flujo principal - Con membrete, su color y el pie de CUOTREKA."""
         organizacion = get_my_organization(user=user)
         organizacion.name = "Estudio Reyes"
         organizacion.color = "#0F766E"

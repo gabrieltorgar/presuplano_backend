@@ -1,7 +1,31 @@
-# Changelog — presuplano (backend)
+# Changelog — CUOTREKA (backend)
 
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
+
+## [1.19.0] — 2026-09-29
+
+### Changed
+- **common/brand (US-127):** el producto se llama **CUOTREKA**, con el eslogan
+  «Del plano a la obra, todo conectado.», escritos en un solo módulo sin
+  dependencias. `common/branding` firma con él los correos sin membrete y el
+  pie «optimizado por CUOTREKA» de los que sí lo llevan; los asuntos de los
+  códigos y del aviso de cambio de correo dicen CUOTREKA.
+- **common/mail (US-127):** el nombre que se lee en la bandeja es siempre el
+  de la marca; de `RESEND_FROM` sólo se toma la dirección. Así el cambio de
+  nombre no depende de editar la variable en el servidor.
+- **apps/legal (US-123, US-127):** términos y privacidad en su versión
+  **2026-09-29**, con el nombre nuevo y la nota de que CUOTREKA antes se
+  llamaba presuplano. Como cambió la versión, todas las cuentas los vuelven a
+  aceptar al entrar.
+
+### Migrations
+- **accounts 0008:** sólo el texto de ayuda del nombre de la organización
+  («vacío los firma CUOTREKA»); no toca datos.
+
+### Notes
+- Se quedan como estaban: el dominio, el nombre del paquete, el del bucket y
+  la base de la integración continua, que son identificadores y no la marca.
 
 ## [1.18.0] — 2026-09-27
 

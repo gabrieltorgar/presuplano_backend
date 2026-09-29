@@ -30,10 +30,10 @@ class TestPasswordReset:
         pregunta por mil correos sabría cuáles tienen cuenta.
         """
         conocido = api_client.post(
-            REQUEST_URL, {"email": "otra@presuplano.test"}, format="json"
+            REQUEST_URL, {"email": "otra@cuotreka.test"}, format="json"
         )
         desconocido = api_client.post(
-            REQUEST_URL, {"email": "nadie@presuplano.test"}, format="json"
+            REQUEST_URL, {"email": "nadie@cuotreka.test"}, format="json"
         )
 
         assert conocido.status_code == desconocido.status_code == status.HTTP_200_OK
@@ -97,7 +97,7 @@ class TestPasswordReset:
         response = api_client.post(
             CONFIRM_URL,
             {
-                "email": "nadie@presuplano.test",
+                "email": "nadie@cuotreka.test",
                 "code": str(settings.OTP_UNIVERSAL_CODE),
                 "password": "nuevaclave123",
             },

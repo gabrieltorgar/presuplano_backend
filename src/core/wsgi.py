@@ -1,4 +1,4 @@
-"""WSGI config for presuplano backend."""
+"""WSGI config for CUOTREKA backend."""
 
 import os
 import sys

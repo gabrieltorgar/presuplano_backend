@@ -1,9 +1,9 @@
-"""Con qué cara sale un correo: la de la organización, o la de presuplano.
+"""Con qué cara sale un correo: la de la organización, o la de CUOTREKA.
 
 Es la misma regla que ya siguen los PDF —el membrete manda cuando está
 configurado— con una diferencia que pidió el negocio: cuando el documento sale
-con la marca del arquitecto, el pie dice que va «optimizado por presuplano».
-Cuando la cuenta no ha configurado nada, el correo es de presuplano y ese pie
+con la marca del arquitecto, el pie dice que va «optimizado por CUOTREKA».
+Cuando la cuenta no ha configurado nada, el correo es de CUOTREKA y ese pie
 sobraría.
 """
 
@@ -12,13 +12,13 @@ from dataclasses import dataclass
 from django.conf import settings
 
 from apps.accounts.models import DEFAULT_ORGANIZATION_COLOR
+from common.brand import BRAND_NAME
 
-#: La marca propia, para cuando la cuenta todavía no tiene la suya.
-PRESUPLANO_NAME = "presuplano"
-PRESUPLANO_LOGO_PATH = "/pwa-192x192.png"
+#: El logotipo propio, para cuando la cuenta todavía no tiene el suyo.
+BRAND_LOGO_PATH = "/pwa-192x192.png"
 
 #: El pie que acompaña a los documentos con marca del arquitecto.
-OPTIMIZED_BY = "optimizado por presuplano"
+OPTIMIZED_BY = f"optimizado por {BRAND_NAME}"
 
 
 @dataclass(frozen=True)
@@ -28,16 +28,16 @@ class Brand:
     name: str
     color: str
     logo_url: str
-    #: Si el pie lleva el «optimizado por presuplano».
+    #: Si el pie lleva el «optimizado por CUOTREKA».
     optimized: bool
 
 
-def presuplano_brand() -> Brand:
+def house_brand() -> Brand:
     """La marca de la casa."""
     return Brand(
-        name=PRESUPLANO_NAME,
+        name=BRAND_NAME,
         color=DEFAULT_ORGANIZATION_COLOR,
-        logo_url=f"{settings.APP_BASE_URL.rstrip('/')}{PRESUPLANO_LOGO_PATH}",
+        logo_url=f"{settings.APP_BASE_URL.rstrip('/')}{BRAND_LOGO_PATH}",
         optimized=False,
     )
 
@@ -50,14 +50,14 @@ def brand_for(*, user) -> Brand:
     """
     organization = getattr(user, "organization", None)
     if organization is None:
-        return presuplano_brand()
+        return house_brand()
 
     logo = organization.logo.url if organization.logo else ""
     if not organization.name and not logo:
-        return presuplano_brand()
+        return house_brand()
 
     return Brand(
-        name=organization.name or PRESUPLANO_NAME,
+        name=organization.name or BRAND_NAME,
         color=organization.color or DEFAULT_ORGANIZATION_COLOR,
         logo_url=logo,
         optimized=True,

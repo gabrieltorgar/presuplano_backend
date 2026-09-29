@@ -15,8 +15,11 @@ import logging
 import urllib.error
 import urllib.request
 from base64 import b64encode
+from email.utils import formataddr, parseaddr
 
 from django.conf import settings
+
+from common.brand import BRAND_NAME
 
 logger = logging.getLogger("apps")
 
@@ -37,7 +40,19 @@ SANDBOX_SENDER = "onboarding@resend.dev"
 #: que pone la biblioteca por omisión, la respuesta era un 403 con «error code:
 #: 1010» —una página de Cloudflare, no de Resend— y el envío no llegaba ni a
 #: aparecer en el registro de la cuenta.
-USER_AGENT = "presuplano/1.0 (+https://presuplano.vercel.app)"
+USER_AGENT = f"{BRAND_NAME}/1.0 (+https://presuplano.vercel.app)"
+
+
+def sender() -> str:
+    """Quién firma el correo: la marca, con la dirección configurada.
+
+    La dirección vive en `RESEND_FROM` porque depende del dominio verificado en
+    Resend; el nombre que se ve en la bandeja es el de la marca y no se deja a
+    la configuración: así un cambio de nombre no espera a que alguien edite
+    una variable en el servidor.
+    """
+    _, address = parseaddr(settings.RESEND_FROM)
+    return formataddr((BRAND_NAME, address or settings.RESEND_FROM))
 
 
 class Attachment:
@@ -89,7 +104,7 @@ def send_email(
         )
 
     body: dict = {
-        "from": settings.RESEND_FROM,
+        "from": sender(),
         "to": [to],
         "subject": subject,
         "html": html,
