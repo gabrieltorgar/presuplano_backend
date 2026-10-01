@@ -18,7 +18,10 @@ con su comprobante, hasta el cierre del proyecto con documento resumen.
 ## Estructura de ramas
 
 - `main` → producción.
-- `dev` → integración y trabajo diario (todas las US se desarrollan aquí).
+- `develop` → integración (protegida: sólo pull requests con pruebas en verde y
+  cobertura ≥ 90 %).
+- `iteracion-N` → rama de trabajo de cada iteración, que entra a `develop` por
+  pull request.
 
 ## Desarrollo
 
