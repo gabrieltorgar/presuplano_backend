@@ -34,6 +34,8 @@ entrypoint = "wsgi:application"
 
 [tool.ruff]
 line-length = 88
+# scripts/test_gate.py es la herramienta del quality gate, copiada tal cual del flujo.
+extend-exclude = ["scripts/test_gate.py"]
 target-version = "py312"
 src = ["src"]
 
@@ -54,3 +56,20 @@ pythonpath = ["src"]
 python_files = ["test_*.py", "tests.py"]
 addopts = "--reuse-db"
 testpaths = ["src"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "src/conftest.py",
+    "src/core/settings*.py",
+    "src/core/asgi.py",
+    "src/core/wsgi.py",
+    "src/manage.py",
+]
+
+[tool.coverage.report]
+show_missing = false
+skip_covered = true
