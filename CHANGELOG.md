@@ -3,6 +3,13 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [Unreleased] — En curso
+
+### Removed
+- **docs — La documentación pasa a la memoria del proyecto:** `DEPLOY.md` se
+  mueve a `cuotreka_docs` en Google Drive (`legado/backend/`). La API no
+  cambia.
+
 ## [1.19.0] — 2026-09-29
 
 ### Changed
