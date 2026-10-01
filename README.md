@@ -18,14 +18,20 @@ con su comprobante, hasta el cierre del proyecto con documento resumen.
 ## Estructura de ramas
 
 - `main` → producción.
-- `dev` → integración y trabajo diario (todas las US se desarrollan aquí).
+- `develop` → integración (protegida: sólo pull requests con pruebas en verde y
+  cobertura ≥ 90 %).
+- `iteracion-N` → rama de trabajo de cada iteración, que entra a `develop` por
+  pull request.
 
 ## Desarrollo
 
 El código se construye por *user story* siguiendo el flujo de entrega del
 equipo (Producto → Desarrollo TDD → Testing → Deploy). El backlog formal, la
-fuente única de alcance, vive en el repositorio del frontend
-(`docs/4.0_Backlog_Producto.json`).
+fuente única de alcance, vive en la memoria del proyecto `cuotreka_docs`
+(carpeta de Google Drive `claude/apps/cuotreka/cuotreka_docs`,
+`producto/4.0_Backlog_Producto.json`), junto con la guía de despliegue que antes
+era `DEPLOY.md` (`legado/backend/DEPLOY.md`). Variables de entorno: ver
+`src/core/.env.example`.
 
 > El scaffold del proyecto Django se genera al iniciar el desarrollo, tras la
 > aprobación del backlog (GATE 1).

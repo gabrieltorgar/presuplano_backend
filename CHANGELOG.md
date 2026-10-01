@@ -3,6 +3,27 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [2.35.0] — 2026-10-01 · iteracion-1: quality gate y memoria del proyecto
+
+### Added
+- **ci — TEC Quality gate de CI:** workflow `quality-gate` en cada pull request
+  a `main` y `develop`: corre las pruebas con cobertura y falla si alguna no
+  pasa o si la cobertura de líneas baja de 90 % (`scripts/test_gate.py`). La
+  cobertura se mide sobre `src/`, sin migraciones, pruebas ni ajustes.
+
+### Changed
+- **ci:** la integración continua corre en `main` y `develop` (antes `dev`).
+
+### Notes
+- Desde esta entrega la API comparte la **versión del producto** con la
+  interfaz (antes llevaba su propia numeración; la última fue 1.19.0).
+
+
+### Removed
+- **docs — La documentación pasa a la memoria del proyecto:** `DEPLOY.md` se
+  mueve a `cuotreka_docs` en Google Drive (`legado/backend/`). La API no
+  cambia.
+
 ## [1.19.0] — 2026-09-29
 
 ### Changed
