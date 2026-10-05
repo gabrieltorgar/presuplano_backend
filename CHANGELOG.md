@@ -3,6 +3,13 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [2.35.1] — 2026-10-05 · iteracion-2: enlace a la memoria en git
+
+### Fixed
+- **docs — TEC Enlace a la memoria del proyecto en git:** el README apuntaba a
+  la carpeta de Google Drive; ahora enlaza al repositorio `cuotreka_docs` y al
+  sitio https://cuotreka-docs.vercel.app. Sin cambios de código.
+
 ## [2.35.0] — 2026-10-01 · iteracion-1: quality gate y memoria del proyecto
 
 ### Added
