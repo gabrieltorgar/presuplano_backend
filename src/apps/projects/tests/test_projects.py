@@ -13,12 +13,13 @@ from apps.catalog.tests.factories import TariffFactory
 from apps.clients.tests.factories import ClientFactory
 from apps.projects.models import Project
 from apps.projects.services import register_progress, start_project
-from apps.quotes.services import create_quote, generate_quote_document
+from apps.quotes.models import Quote
+from apps.quotes.services import create_quote
 
 PROJECTS_URL = "/api/projects/"
 
 
-def make_documented_quote(user):
+def make_quote(user):
     client = ClientFactory(owner=user, name="Constructora Reyes")
     muro = TariffFactory(owner=user, name="Muro de tablaroca", unit_price="350")
     zocalo = TariffFactory(
@@ -32,12 +33,11 @@ def make_documented_quote(user):
             {"tariff": zocalo, "quantity": Decimal("20")},
         ],
     )
-    generate_quote_document(quote=quote)
     return quote, muro, zocalo
 
 
 def make_project(user):
-    quote, muro, zocalo = make_documented_quote(user)
+    quote, muro, zocalo = make_quote(user)
     project = start_project(owner=user, quote=quote)
     muro_item = quote.items.get(tariff=muro)
     zocalo_item = quote.items.get(tariff=zocalo)
@@ -52,13 +52,13 @@ def png_file(name="e.png") -> SimpleUploadedFile:
 
 @pytest.mark.django_db
 class TestStartProject:
-    """US-14: start a project from a documented quote."""
+    """US-14: start a project from a quote of the account."""
 
-    def test_start_from_documented_quote_returns_201(
+    def test_start_from_a_quote_returns_201(
         self, authenticated_client, user
     ) -> None:
-        """Flujo principal - Proyecto creado desde cotización con documento."""
-        quote, _muro, _zocalo = make_documented_quote(user)
+        """Flujo principal - Proyecto creado desde la cotización."""
+        quote, _muro, _zocalo = make_quote(user)
 
         response = authenticated_client.post(PROJECTS_URL, {"quote": str(quote.id)})
 
@@ -66,26 +66,27 @@ class TestStartProject:
         assert response.data["status"] == Project.Status.IN_PROGRESS
         assert Decimal(response.data["quoted_value"]) == Decimal("5100.00")
 
-    def test_start_from_draft_quote_returns_400(
+    def test_a_draft_quote_can_start_a_project(
         self, authenticated_client, user
     ) -> None:
-        """Caso alternativo - Cotización aún en borrador."""
+        """Flujo principal - No hay documento que generar antes de empezar."""
         client = ClientFactory(owner=user)
         muro = TariffFactory(owner=user, unit_price="350")
         quote = create_quote(
             owner=user,
             client=client,
             items_data=[{"tariff": muro, "quantity": Decimal("10")}],
-        )  # still DRAFT
+        )
 
         response = authenticated_client.post(PROJECTS_URL, {"quote": str(quote.id)})
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Genera el documento de la cotización" in str(response.data)
+        assert response.status_code == status.HTTP_201_CREATED
+        quote.refresh_from_db()
+        assert quote.status == Quote.Status.IN_PROJECT
 
     def test_start_twice_returns_400(self, authenticated_client, user) -> None:
         """Caso de borde - Cotización ya con proyecto."""
-        quote, _muro, _zocalo = make_documented_quote(user)
+        quote, _muro, _zocalo = make_quote(user)
         start_project(owner=user, quote=quote)
 
         response = authenticated_client.post(PROJECTS_URL, {"quote": str(quote.id)})

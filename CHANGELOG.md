@@ -1,7 +1,542 @@
-# Changelog — presuplano (backend)
+# Changelog — CUOTREKA (backend)
 
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
+
+## [2.35.0] — 2026-10-01 · iteracion-1: quality gate y memoria del proyecto
+
+### Added
+- **ci — TEC Quality gate de CI:** workflow `quality-gate` en cada pull request
+  a `main` y `develop`: corre las pruebas con cobertura y falla si alguna no
+  pasa o si la cobertura de líneas baja de 90 % (`scripts/test_gate.py`). La
+  cobertura se mide sobre `src/`, sin migraciones, pruebas ni ajustes.
+
+### Changed
+- **ci:** la integración continua corre en `main` y `develop` (antes `dev`).
+
+### Notes
+- Desde esta entrega la API comparte la **versión del producto** con la
+  interfaz (antes llevaba su propia numeración; la última fue 1.19.0).
+
+
+### Removed
+- **docs — La documentación pasa a la memoria del proyecto:** `DEPLOY.md` se
+  mueve a `cuotreka_docs` en Google Drive (`legado/backend/`). La API no
+  cambia.
+
+## [1.19.0] — 2026-09-29
+
+### Changed
+- **common/brand (US-127):** el producto se llama **CUOTREKA**, con el eslogan
+  «Del plano a la obra, todo conectado.», escritos en un solo módulo sin
+  dependencias. `common/branding` firma con él los correos sin membrete y el
+  pie «optimizado por CUOTREKA» de los que sí lo llevan; los asuntos de los
+  códigos y del aviso de cambio de correo dicen CUOTREKA.
+- **common/mail (US-127):** el nombre que se lee en la bandeja es siempre el
+  de la marca; de `RESEND_FROM` sólo se toma la dirección. Así el cambio de
+  nombre no depende de editar la variable en el servidor.
+- **apps/legal (US-123, US-127):** términos y privacidad en su versión
+  **2026-09-29**, con el nombre nuevo y la nota de que CUOTREKA antes se
+  llamaba presuplano. Como cambió la versión, todas las cuentas los vuelven a
+  aceptar al entrar.
+
+### Migrations
+- **accounts 0008:** sólo el texto de ayuda del nombre de la organización
+  («vacío los firma CUOTREKA»); no toca datos.
+
+### Notes
+- Se quedan como estaban: el dominio, el nombre del paquete, el del bucket y
+  la base de la integración continua, que son identificadores y no la marca.
+
+## [1.18.0] — 2026-09-27
+
+### Added
+- **apps/legal (US-121):** los términos y la política de privacidad viven en
+  `apps/legal/documents/` como Markdown con cabecera (`title`, `version`).
+  `GET /api/legal/` y `GET /api/legal/{terms|privacy}/` los sirven sin cuenta.
+  Cambiar la `version` de un archivo es lo que vuelve a pedirlos a todos.
+- **apps/legal (US-122, US-123):** `LegalAcceptance` guarda qué versión aceptó
+  cada cuenta, cuándo, desde qué IP y con qué navegador. El registro exige
+  `terms_version` y `privacy_version` vigentes; `POST /api/legal/accept/` las
+  acepta después; `GET /auth/me/` dice en `legal` qué rige, qué se aceptó y si
+  falta algo.
+- **apps/accounts (US-124):** cambiar el correo en dos pasos: `POST
+  /auth/me/email/` lo deja en `pending_email` y manda el código al correo
+  nuevo; `.../verify/` lo confirma y avisa al de antes; `.../resend/` y
+  `DELETE` reenvían o desisten. `PATCH /auth/me/` hace lo mismo que el primer
+  paso.
+- **apps/accounts (US-125):** `POST /auth/me/password/` cambia la contraseña
+  con la actual.
+- **apps/accounts (US-126):** `POST /auth/me/delete/` elimina la cuenta con su
+  contraseña: borra en orden todas sus filas —pagos, proyectos con avances,
+  fotos y reparto, cotizaciones, personal, servicios, clientes, planos,
+  archivos del editor, organización, suscripción, códigos y constancias— y,
+  confirmado el borrado, sus archivos del bucket: los que la base nombra y
+  todo lo que cuelga de sus carpetas. No se anonimiza nada.
+
+### Migrations
+- **accounts 0007:** `pending_email` y el motivo de código «cambio de correo».
+- **legal 0001:** constancias de aceptación.
+
+## [1.17.0] — 2026-09-26
+
+### Added
+- **apps/quotes (US-115, US-116):** la cotización guarda `notes`
+  (observaciones, hasta 2000 caracteres) y `validity_days` (1 a 365; 20 por
+  omisión). Una pantalla que no los manda al editar —una versión vieja todavía
+  abierta— conserva los que la cotización ya tenía.
+- **apps/accounts (US-118):** la organización guarda `email` y `phone` de
+  contacto, los que imprimen los documentos. Son opcionales y se pueden vaciar;
+  el correo se valida.
+
+### Changed
+- **apps/accounts (US-01, US-02, US-03, US-82, US-89, US-104):** la cuenta
+  **es su correo**. `User` pierde `phone` e `is_phone_verified`, y `email` pasa
+  a ser obligatorio. Registro, acceso, verificación, reenvío y recuperación
+  aceptan sólo correo (`email`; también `identifier`, el nombre del campo en
+  las pantallas anteriores), sin distinguir mayúsculas; un número se rechaza
+  con «Escribe un correo válido». `PATCH /auth/me/` cambia sólo el correo, que
+  queda por verificar y recibe su código. El código universal sirve sólo
+  mientras el correo no esté configurado.
+- **apps/catalog (US-117):** la unidad `unit` se lee **«Por lote (único)»**. El
+  valor guardado no cambia.
+
+### Migrations
+- **accounts 0006:** antes de exigir el correo, cualquier cuenta que sólo
+  tuviera teléfono recibe uno de relleno (`sin-correo-<id>@presuplano.invalid`,
+  un dominio que no existe), para no perderla; después se quitan `phone` e
+  `is_phone_verified` y se agregan el correo y el teléfono de la organización.
+  Probada de ida y de vuelta.
+- **catalog 0005, quotes 0005:** etiqueta de la unidad; observaciones y
+  vigencia de la cotización.
+
+## [1.16.0] — 2026-09-26
+
+### Added
+- **apps/projects (US-113):** los avances se **corrigen y se borran**.
+  `PATCH /progresses/{id}/` cambia cantidad, fecha o quién lo hizo; lo que el
+  avance ya tenía vuelve a estar disponible, así que se puede subir de 5 a 7
+  aunque falten sólo 2, pero nunca pasar de lo cotizado. Cambiar a quien lo
+  hizo toma el precio acordado con esa persona; corregir sólo la cantidad
+  conserva el trato con el que se hizo el trabajo. `DELETE` lo quita junto con
+  sus fotos. Un proyecto finalizado no cambia.
+- **apps/projects (US-16):** `DELETE /evidences/{id}/` quita una foto, también
+  del almacenamiento —después de confirmar el borrado, para que un fallo no
+  deje un registro apuntando a nada—.
+- **apps/clients, apps/catalog, apps/quotes (US-109, US-110, US-111):** borrar
+  con reglas. Un cliente o un servicio sólo si no está en ninguna cotización;
+  una cotización sólo si no es proyecto. Antes el borrado tropezaba con la
+  protección de la base y respondía **500**; ahora dice por qué no, en una
+  frase. Al borrar una cotización se van con ella los servicios que se
+  crearon sólo para ella, si nadie más los usa.
+- **apps/clients, apps/catalog:** cada cliente y cada servicio dicen en
+  cuántas cotizaciones están (`quotes_count`), para que la lista sepa de
+  antemano cuáles se pueden borrar.
+
+### Fixed
+- **apps/projects (US-16):** la evidencia fotográfica se subía y **no se
+  volvía a ver**: el proyecto no devolvía las fotos. Ahora cada avance viene
+  con su id, su partida, lo que vale y sus fotos con la dirección desde la que
+  se ven.
+
+### Tests
+- 258 en verde (32 nuevas).
+
+## [1.15.3] — 2026-09-25
+
+### Fixed
+- **common/mail (crítico):** ningún correo salía. La API de Resend está detrás
+  de Cloudflare, que corta las peticiones cuya firma parece un script suelto:
+  con el `User-Agent` que pone `urllib` por omisión la respuesta era un **403
+  con «error code: 1010»** —una página de Cloudflare, no de Resend—, y el
+  intento no llegaba siquiera a aparecer en el registro de la cuenta. El
+  cliente se presenta ahora con su propio nombre.
+
+## [1.15.2] — 2026-09-25
+
+### Fixed
+- **common/mail:** un envío rechazado decía sólo «Email refused by Resend». El
+  motivo viajaba en los campos extra del registro, que el visor de la
+  plataforma no muestra, así que no había con qué corregir nada. Ahora el
+  mensaje lleva el código HTTP, el remitente, el destinatario y lo que contestó
+  Resend.
+- **core/settings:** la llave y el remitente se recortan al leerlos. Un salto
+  de línea pegado al copiar el valor invalida la llave —Resend contesta 401— y
+  no se ve en ningún lado.
+
+## [1.15.1] — 2026-09-25
+
+### Changed
+- **apps/accounts:** una cuenta con correo **lo verifica antes de entrar**. El
+  correo es el canal que existe de verdad —por ahí llega el código y por ahí
+  salen los comprobantes—, así que dejar entrar con uno sin confirmar era dejar
+  una cuenta a la que no se le puede escribir. El teléfono sigue mandando en
+  las cuentas que sólo tienen teléfono, que es lo único que se les puede pedir.
+- **apps/accounts:** el 403 de acceso sin verificar dice ahora **a dónde salió
+  el código** (`identity`). Quien entra con su teléfono y tiene el correo sin
+  confirmar recibe el código en el correo; sin este dato la pantalla siguiente
+  le pediría el del teléfono y confirmaría el canal equivocado.
+
+### Added
+- **apps/accounts:** `GET /api/auth/organization/logo/` entrega el logotipo
+  **incrustado** en la respuesta. El PDF lo dibuja el navegador, y el navegador
+  no puede bajar del bucket un archivo de otro dominio que no lo autoriza: por
+  eso los documentos salían sin marca. La API sí puede leerlo.
+
+### Notes
+- El remitente por omisión (`onboarding@resend.dev`) es el de pruebas de
+  Resend: entrega sólo al dueño de la cuenta, así que a un cliente no le llega.
+  Con la llave puesta hay que fijar `RESEND_FROM` a un dominio verificado, y
+  mientras no lo esté cada envío lo deja anotado.
+
+### Tests
+- 225 tests (10 nuevos): el correo sin verificar que no abre la cuenta, el
+  código que sale solo al intentar entrar, el 403 que dice a dónde fue, la
+  cuenta con sólo teléfono que no cambia, el correo agregado desde el perfil
+  que cierra la puerta hasta confirmarlo, y el logotipo servido en bytes.
+
+## [1.15.0] — 2026-09-25
+
+### Added
+- **apps/accounts (US-104):** una cuenta se identifica por **teléfono, correo, o
+  ambos**. `register/`, `login/`, `verify-otp/`, `resend-otp/` y
+  `password-reset/` aceptan `identifier` (y siguen entendiendo `phone`, que es
+  lo que mandan las pantallas publicadas). `PATCH /api/auth/me/` cambia el
+  teléfono y el correo desde el perfil: el dato nuevo entra sin verificar y con
+  su código en camino, y la cuenta no puede quedarse sin ninguno de los dos.
+- **apps/accounts (US-105):** **código de un solo uso de verdad**
+  (`OtpCode`). Una cuenta con correo recibe el suyo, de seis cifras, guardado
+  cifrado, con vencimiento (`OTP_TTL_MINUTES`) y que muere al usarse. El
+  universal (`OTP_UNIVERSAL_CODE`) queda para quien no tiene por dónde recibir
+  el suyo: las cuentas con sólo teléfono, mientras no haya SMS.
+- **common/mail (US-105):** **Resend por su API HTTP**, no por el mailer de
+  Django: en serverless no hay conexión SMTP que sostener y una llamada HTTPS es
+  lo único que la plataforma siempre permite. Nunca lanza —un correo que no sale
+  se anota y la pantalla sigue— y la plantilla se pinta con el membrete de la
+  organización cuando lo hay, con un pie de «optimizado por presuplano», y con
+  el de presuplano cuando no.
+- **apps/documents (US-105):** `POST /api/documents/send/` entrega los cuatro
+  documentos por correo —cotización, estatus de proyecto, comprobante de pago y
+  de cobro— con el PDF adjunto. El PDF llega hecho desde el navegador, que es
+  donde están las fuentes y el logotipo ya descargado; el servidor pone el
+  sobre. Tope de 8 MB por adjunto (`DOCUMENT_EMAIL_MAX_BYTES`).
+- **apps/assets (US-103):** `/api/plan-models/` guarda el **catálogo de
+  mobiliario** de la cuenta. Los bytes de las mallas ya viajaban, pero la ficha
+  que las nombra —nombre, categoría, medidas reales— se quedaba en el navegador
+  que importó la biblioteca: el catálogo aparecía vacío en el teléfono aunque el
+  plano dibujara los muebles. Las fichas van y vienen en lote y se guardan tal
+  como las escribe el editor.
+
+### Notes
+- Sin `RESEND_API_KEY` no hay envío: el código vuelve a ser el universal para
+  todas las cuentas y `documents/send/` responde 400 diciendo que no está
+  configurado, en vez de fingir que envió. Ver `DEPLOY.md`.
+- `phone` pasa a admitir nulo para que una cuenta pueda existir sólo con su
+  correo. Van nulos —y no en blanco— cuando faltan: dos cadenas vacías chocarían
+  contra el índice único, mientras que dos nulos conviven.
+
+### Tests
+- 215 tests (16 nuevos): alta y acceso con correo, el código propio que vence y
+  se gasta, el universal que deja de abrir una cuenta con correo, el cambio de
+  identidad desde el perfil, el catálogo de modelos que no se duplica ni se ve
+  entre cuentas, el envío de cada documento con y sin membrete, y la llamada a
+  Resend —con su adjunto en base64— que no tumba nada cuando falla.
+
+## [1.14.0] — 2026-09-25
+
+### Added
+- **apps/assets (US-101):** `/api/plan-assets/` guarda en la cuenta los
+  binarios del editor —las texturas y las mallas del mobiliario—, que hasta
+  ahora vivían sólo en el navegador que los importó: abrir el plano en otro
+  dispositivo dejaba cajas grises y muros en blanco. Se guardan una sola vez,
+  direccionados por la misma ruta con la que el plano ya los nombra, y `missing/`
+  dice cuáles faltan para no volver a subir una biblioteca entera en cada
+  importación.
+- **apps/accounts (US-102):** la organización puede llevar **logotipo**. Se sube
+  a la misma cuenta y sale en los documentos junto al nombre.
+- **En el bucket, una carpeta por organización**, con los nombres del oficio:
+  `<uuid>/logo/`, `<uuid>/texturas/` y `<uuid>/inmobiliario/`. Lo que hay en el
+  almacenamiento se puede leer sin conocer este código.
+
+### Notes
+- Los bytes **nunca viajan dentro del documento del plano**: un escaneo de fondo
+  o una biblioteca de texturas se saltaría cualquier tamaño razonable, y la
+  misma textura usada en diez planos se guardaría diez veces.
+- Subir dos veces la misma ruta no es un error: es el mismo archivo y la cuenta
+  ya lo tiene. Importar una biblioteca dos veces —o desde dos dispositivos— no
+  cuesta nada.
+- Tope de 10 MB por archivo del editor (`PLAN_ASSET_MAX_BYTES`) y de 2 MB por
+  logotipo: es una marca, no una fotografía.
+
+### Fixed
+- **apps/staff:** el precio que se le paga a alguien viajaba como número y el
+  formulario que lo lee espera texto. Ahora va como cadena, igual que el resto
+  del dinero de esta API.
+
+### Tests
+- 178 tests (10 nuevos): subir una textura y una malla, la carpeta que cuelga de
+  la organización, la ruta repetida que no duplica, el cotejo de lo que falta,
+  el archivo por encima del tope, el aislamiento entre cuentas, y el logotipo
+  que se sube, se lee y se quita.
+
+## [1.13.0] — 2026-09-25
+
+### Added
+- **apps/dashboard (US-99):** `/api/dashboard/` responde, en un solo viaje, lo
+  que el arquitecto abre la aplicación a preguntar: cuántas obras están en
+  marcha, cuántas cotizaciones se hicieron y cuántas se volvieron proyecto —y
+  **cuánto representan en dinero** del total cotizado, que es lo que dice si se
+  están ganando las que importan—, las cuentas por cobrar y las cuentas por
+  pagar, los ingresos de los últimos seis meses terminando en el actual, y las
+  tablas de lo más vendido: diez servicios, cinco clientes y cinco personas del
+  personal.
+
+### Notes
+- **Vendido es lo que se volvió obra:** las tablas de servicios y clientes leen
+  las cotizaciones convertidas en proyecto, no todas. Una cotización que nunca
+  se ganó no vendió nada.
+- **Ingreso es lo cobrado**, no lo ganado: lo que la cuenta puede contar es lo
+  que el cliente ya pagó.
+- «Yo» —el propio despacho— no aparece entre el personal con más trabajos: no
+  es alguien a quien contarle trabajos.
+- La conversión se mide **en dinero**: dos cotizaciones chicas ganadas y una
+  grande perdida no son un 66 % de nada.
+
+### Tests
+- 168 tests (11 nuevos): lo que hay en marcha, la conversión en dinero, lo que
+  se cobra y lo que se debe, los seis meses terminando hoy —con un cobro viejo
+  que no se cuela—, los más vendidos leyendo sólo lo vendido, los clientes que
+  compran, el personal con más trabajos sin contar a la casa, la cuenta recién
+  abierta y el aislamiento entre cuentas.
+
+## [1.12.0] — 2026-09-24
+
+### Added
+- **apps/staff (US-96):** el personal —la persona o la empresa que ejecuta el
+  trabajo— con lo que sabe hacer y **a cómo se le paga**, que no es lo que se
+  le cobra al cliente: la diferencia es el margen de la obra. Un servicio lo
+  pueden hacer varios y cada quien puede hacer varios. `/api/workers/`.
+- **El reparto (US-97):** `/api/assignments/` entrega parte de una partida a
+  alguien, a un precio acordado que se **congela ahí** —cambiar un trato de hoy
+  no puede reescribir lo ya repartido—. No se puede repartir más de lo que la
+  partida tiene, y repartir dos veces lo mismo a la misma persona corrige el
+  reparto en vez de duplicarlo. `/api/projects/:id/distribution/` dice, partida
+  por partida, quién lleva qué y qué falta por repartir.
+- **El avance dice quién lo hizo (US-98):** `POST /projects/:id/progress/`
+  acepta `worker`, y con él copia el precio de mano de obra del reparto. Así lo
+  ejecutado se convierte en lo devengado: dos cifras separadas a propósito —lo
+  **comprometido**, que es todo lo repartido, y lo **devengado**, que es lo que
+  ya se trabajó—. Se paga contra lo devengado.
+- **Pagos al personal (US-98):** `/api/worker-payments/` registra el pago de un
+  proyecto o el de la semana entera, y `summary/` devuelve comprometido,
+  devengado, pagado, saldo y anticipo. A «Yo» —el registro del propio despacho,
+  uno solo por cuenta— se le reparte trabajo pero no se le paga.
+
+### Notes
+- El saldo nunca es negativo: lo entregado de más se informa aparte como
+  anticipo, para que no se lea como deuda.
+- Un avance sin autor no le debe nada a nadie; es trabajo de la casa.
+
+### Tests
+- 157 tests (17 nuevos + 1 app): alta de persona y de empresa, el mismo
+  servicio en varias manos, «Yo» único por cuenta, aislamiento entre cuentas,
+  el reparto con y sin precio acordado, el tope de lo repartible, lo que falta
+  por repartir, el devengo por autor, el pago que baja el saldo, el pago
+  general sin proyecto y los dos rechazos: pagarse a uno mismo y pagarle al
+  personal de otra cuenta.
+
+## [1.11.0] — 2026-09-24
+
+### Added
+- **apps/planner (US-92):** los planos dejan de vivir sólo en el navegador que
+  los dibujó. `/api/plans/` los guarda por cuenta y los devuelve a cualquier
+  dispositivo: la lista trae resúmenes —pintar cinco renglones no puede costar
+  cinco planos enteros por la red del teléfono— y el detalle, el documento
+  completo, tal como lo serializa el editor, con su propio número de versión de
+  formato.
+- El plano conserva **el id que le puso el editor**: es el de su dirección, y
+  con otro el plano del teléfono y el de la computadora serían dos. El resumen
+  incluye además la fecha que estampó el editor, que es con la que cada
+  dispositivo decide qué copia es la nueva sin depender de que su reloj y el
+  del servidor coincidan.
+- Tope de 4 MB por documento (`PLAN_MAX_BYTES`), con un mensaje que dice qué
+  suele pesar: el plano de fondo escaneado o una textura suelta, que viajan
+  dentro del documento.
+
+### Tests
+- 139 tests (11 nuevos): guardar y volver a abrir, que la lista no carga el
+  documento, que guardar otra vez reemplaza, que un plano ajeno no existe, que
+  sin sesión no hay planos, el nombre obligatorio, el tope de peso explicado,
+  el borrado, el orden por lo último tocado, el id propio y la fecha del
+  documento.
+
+## [1.10.0] — 2026-09-24
+
+### Changed
+- **apps/accounts (US-90):** entrar con un teléfono sin verificar ya no es un
+  callejón. `POST /api/auth/login/` manda el código otra vez antes de negar el
+  paso, y responde 403 con `code: "phone_not_verified"` junto al mensaje de
+  siempre: la pantalla necesita distinguir esto de una contraseña equivocada
+  para llevar a escribir el código, y hacerlo comparando el texto del mensaje
+  se rompería el día que cambie la redacción.
+- **apps/accounts:** el envío del código vive en un solo sitio
+  (`send_verification_code`), que es donde se colgará el SMS de verdad. Lo usan
+  el reenvío y el acceso sin verificar.
+
+### Tests
+- 128 tests (1 nuevo): que entrar sin verificar deja el código enviado y nombra
+  el motivo con su propio código.
+
+## [1.9.0] — 2026-09-24
+
+### Added
+- **apps/accounts (US-89):** `POST /api/auth/resend-otp/` vuelve a enviar el
+  código de verificación. Quien no lo recibía se quedaba mirando la pantalla:
+  la única salida era registrarse otra vez, que además falla porque el teléfono
+  ya existe. Responde igual exista o no la cuenta y esté o no verificada —lo
+  contrario convertiría el endpoint en un detector de clientes—; en el MVP el
+  código es el OTP universal, así que lo que deja es registro del intento, con
+  el envío real de SMS por detrás el día que lo haya.
+
+### Tests
+- 127 tests (5 nuevos): que una cuenta pendiente puede pedir el código otra vez
+  y queda anotado, que un teléfono desconocido y uno ya verificado responden lo
+  mismo, que el teléfono es obligatorio y que sólo se acepta por POST.
+
+## [1.8.0] — 2026-09-19
+
+### Added
+- **apps/accounts (US-82):** recuperar la contraseña.
+  `POST /api/auth/password-reset/` la pide y
+  `POST /api/auth/password-reset/confirm/` la cambia con el mismo código que
+  verifica el teléfono. No existía: quien la olvidaba quedaba fuera para
+  siempre, y tampoco tenía a quién escribirle. Pedirla responde igual exista o
+  no la cuenta —responder distinto convertiría el endpoint en un detector de
+  clientes— y quien la recupera queda con el teléfono verificado, porque ha
+  demostrado lo mismo que verificándolo.
+- **apps/leads (US-83):** `POST /api/contact/` recibe un mensaje de quien
+  todavía no tiene cuenta —nombre y un teléfono o un correo para responderle—.
+  Se leen en el admin: la página deja mensajes, no los consulta.
+
+### Tests
+- 122 tests. Dieciséis nuevos: ocho de la recuperación (incluido que un teléfono
+  desconocido responde igual y que un código inválido no cambia nada) y ocho del
+  contacto.
+
+## [1.7.0] — 2026-09-18
+
+### Added
+- **apps/accounts (US-71):** la cuenta guarda el membrete con el que firma sus
+  documentos. `GET/PATCH /api/auth/organization/` lee y edita el nombre del
+  despacho y su color, y `GET /api/auth/me/` lo devuelve junto a la suscripción.
+  El nombre es opcional —vacío, el papel lo sigue firmando presuplano, que es
+  como venía funcionando— y el color se valida como hexadecimal de seis dígitos
+  y se guarda en mayúsculas, para que el mismo color escrito de dos formas sea
+  uno. Pedir la organización la crea si no existía, así que ninguna pantalla se
+  topa con un 404 que no pueda resolver.
+- Migraciones `0002_organization` y `0003_organization_for_existing_accounts`:
+  la segunda le da un membrete vacío a las cuentas anteriores, porque `/auth/me/`
+  solo lo reporta y lo habrían leído como `null` hasta abrir esa pantalla.
+
+### Tests
+- 106 tests. Trece casos nuevos: el membrete vacío de una cuenta nueva, guardar
+  nombre y color, la cuenta que ya lo trae, guardar dos veces sin duplicarlo,
+  cuatro colores inválidos, la normalización a mayúsculas, el recorte de
+  espacios, el acceso sin sesión y el aislamiento entre cuentas.
+
+## [1.6.0] — 2026-09-18
+
+### Added
+- **apps/accounts (US-69):** `GET /api/auth/me/` devuelve la cuenta de quien
+  pregunta —teléfono, verificación, fecha de alta— y su suscripción con plan y
+  estado. La sesión solo llevaba el teléfono, que no alcanza para una pantalla
+  de perfil. Una cuenta sin suscripción responde `null` en ese campo en lugar de
+  fallar, porque la pantalla tiene que poder decir «sin suscripción».
+
+### Tests
+- 93 tests. Cuatro casos nuevos: los datos de la cuenta, la suscripción, la
+  cuenta sin suscripción y el acceso sin sesión (401).
+
+## [1.5.0] — 2026-09-18
+
+### Changed
+- **apps/quotes (US-12, US-11):** «documento generado» deja de ser un estado de
+  la cotización. El documento se construye a partir de ella cada vez que se
+  pide, así que existe desde que existe la cotización: desaparece la operación
+  `POST /quotes/:id/generate-document/` y el estado queda en **borrador** hasta
+  que se convierte en proyecto. Editar está permitido mientras no lo sea, en
+  lugar de bloquearse al imprimir el papel.
+- **apps/projects (US-14):** un proyecto arranca desde cualquier cotización de
+  la cuenta, sin el paso previo de documentarla.
+- Migración `0004_quote_document_is_not_a_state`: devuelve a borrador las
+  cotizaciones marcadas como documentadas, que es lo que son.
+
+### Tests
+- 89 tests. La suite cubre que una cotización nace y sigue siendo borrador por
+  muchas veces que se edite, que deja de editarse al ser proyecto, y que la
+  operación de generar documento ya no existe.
+
+## [1.4.0] — 2026-09-17
+
+### Fixed
+- **apps/quotes (US-63):** un total acordado que no se reparte en centavos ya
+  no pierde dinero. 32 000 entre 15 dejaba el precio en 2 133,33 y la partida
+  se cobraba a 31 999,95. `QuoteItem.unit_price` pasa a **seis decimales** —los
+  que admite el valor unitario de un CFDI, que nace del mismo problema— y
+  `subtotal` redondea a centavos una sola vez (`ROUND_HALF_UP`), que es lo que
+  de verdad se factura; así 3 × 33,333333 se cobran como 100,00 y el total
+  vuelve a ser el pactado. El serializador de entrada acepta esos decimales.
+  Migración `0003_alter_quoteitem_unit_price` (solo amplía la columna: ningún
+  dato existente cambia de valor).
+
+### Tests
+- 89 tests. Tres casos nuevos: el total que no divide en centavos, la línea
+  cobrada en centavos enteros y el precio de siempre, que sigue comportándose
+  igual.
+
+## [1.3.1] — 2026-09-17
+
+### Fixed
+- **vercel.json, pyproject.toml, wsgi.py (incidencia de despliegue):** la API
+  respondía **404 a todo** en producción. No era el código: Vercel pasó a
+  entregar a la aplicación la ruta **ya reescrita** cuando hay un rewrite
+  interno —lo avisa el propio build: *«Internal rewrites in backend framework
+  projects now route requests using the rewritten destination path»*—, así que
+  el `/(.*)` → `/api/index` que llevaba aquí desde el principio hacía que
+  Django resolviera siempre `/api/index`, no encontrara ninguna URL y devolviera
+  su página de «Not Found». Se quita el rewrite y se le declara a Vercel la
+  instancia WSGI a servir (`[tool.vercel] entrypoint = "wsgi:application"`),
+  que es la forma que hoy documenta para Django; con ella desaparece
+  `api/index.py`, que además compartía nombre con la app `api` del proyecto.
+
+### Tests
+- **api/tests/test_deploy_entrypoint.py:** importa el entrypoint como lo hace
+  Vercel, comprueba que resuelven rutas reales de la API y del admin, y falla si
+  vuelve a aparecer un rewrite general. 86 tests. Nada bajo `src/` podía ver
+  esto, que es por lo que 80 tests en verde convivieron con una API que no
+  respondía a nada.
+
+## [1.3.0] — 2026-09-17
+
+### Added
+- **apps/quotes (US-63):** `unit_price` opcional en cada partida enviada. El
+  precio del catálogo es un punto de partida, no una condena: un cliente
+  negocia, o se acuerda un total redondo que hay que repartir entre la
+  cantidad. El precio enviado vale solo para esa cotización; omitido, se sigue
+  tomando el del servicio, y el servicio conserva el suyo en cualquier caso. Un
+  precio de cero o negativo se rechaza con 400.
+
+### Changed
+- **apps/catalog, apps/quotes (v2.9 del producto):** lo que la aplicación
+  llamaba «tarifas» y «partidas» se llama ahora «servicios» en todo lo que se
+  lee —el error que llega a la pantalla («Servicio no encontrado.»), los
+  nombres del admin—. El recurso de la API sigue siendo `tariffs`: renombrarlo
+  rompería a cualquier cliente ya instalado. Las migraciones 0004 (catalog) y
+  0002 (quotes) solo cambian opciones de modelo, sin tocar el esquema.
+
+### Tests
+- 80 tests, ruff limpio. Cinco casos nuevos para el precio ajustable, incluido
+  el que comprueba que el catálogo no se altera al ajustar una partida.
 
 ## [1.2.0] — 2026-07-24
 

@@ -1,0 +1,275 @@
+"""RED tests for US-71 — la organización que firma los documentos.
+
+Los documentos salían firmados por «presuplano» y por un teléfono. El
+arquitecto necesita que salgan con el nombre de su despacho y su color, así que
+la cuenta guarda esa identidad y la API la deja leer y editar.
+"""
+
+import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from rest_framework import status
+
+from apps.accounts.models import DEFAULT_ORGANIZATION_COLOR, Organization
+from apps.legal.tests.consent import accepted
+
+ORGANIZATION_URL = "/api/auth/organization/"
+
+#: Un PNG de 1×1: lo mínimo que Pillow acepta como imagen.
+PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+ME_URL = "/api/auth/me/"
+
+
+@pytest.mark.django_db
+class TestMyOrganization:
+    """US-71: consultar y editar la identidad que llevan los documentos."""
+
+    def test_returns_an_empty_organization_when_never_configured(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Una cuenta recién creada ya puede preguntar."""
+        assert not Organization.objects.filter(user=user).exists()
+
+        response = authenticated_client.get(ORGANIZATION_URL)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["name"] == ""
+        assert response.data["color"] == DEFAULT_ORGANIZATION_COLOR
+
+    def test_saves_a_logo_and_keeps_it_in_its_own_folder(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - El despacho sube su logotipo (US-102)."""
+        imagen = SimpleUploadedFile("logo.png", PNG, content_type="image/png")
+
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"logo": imagen}, format="multipart"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["logo"]
+        organizacion = Organization.objects.get(user=user)
+        # En el bucket cuelga de la organización, junto a sus texturas.
+        assert organizacion.logo.name.startswith(f"{organizacion.id}/logo/")
+
+    def test_the_logo_can_be_taken_off(self, authenticated_client, user) -> None:
+        """Caso de borde - Quitar el logotipo deja los documentos sin él."""
+        authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"logo": SimpleUploadedFile("logo.png", PNG, content_type="image/png")},
+            format="multipart",
+        )
+
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"logo": None}, format="json"
+        )
+
+        assert response.data["logo"] is None
+        assert not Organization.objects.get(user=user).logo
+
+    def test_saves_the_name_and_the_color(self, authenticated_client, user) -> None:
+        """Flujo principal - El despacho pone su nombre y su color."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"name": "Taller Reyes Arquitectos", "color": "#0F766E"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["name"] == "Taller Reyes Arquitectos"
+        assert response.data["color"] == "#0F766E"
+        organization = Organization.objects.get(user=user)
+        assert organization.name == "Taller Reyes Arquitectos"
+        assert organization.color == "#0F766E"
+
+    def test_the_account_carries_its_organization(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Quien lee su cuenta ya lee con qué firma."""
+        Organization.objects.create(user=user, name="Estudio Vega", color="#B91C1C")
+
+        response = authenticated_client.get(ME_URL)
+
+        assert response.data["organization"]["name"] == "Estudio Vega"
+        assert response.data["organization"]["color"] == "#B91C1C"
+
+    def test_editing_twice_keeps_one_organization(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Guardar dos veces no crea dos organizaciones."""
+        authenticated_client.patch(ORGANIZATION_URL, {"name": "Uno"}, format="json")
+        authenticated_client.patch(ORGANIZATION_URL, {"name": "Dos"}, format="json")
+
+        assert Organization.objects.filter(user=user).count() == 1
+        assert Organization.objects.get(user=user).name == "Dos"
+
+    @pytest.mark.parametrize("color", ["rojo", "#12345", "1E56D6", "#1E56D6X"])
+    def test_rejects_a_color_that_is_not_a_hex(
+        self, authenticated_client, color
+    ) -> None:
+        """Caso alternativo - El color tiene que servir para pintar el papel."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"color": color}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "color" in response.data
+
+    def test_normalizes_the_color_to_uppercase(self, authenticated_client) -> None:
+        """Caso de borde - El mismo color escrito de dos formas se guarda igual."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"color": "#0f766e"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["color"] == "#0F766E"
+
+    def test_trims_the_name(self, authenticated_client) -> None:
+        """Caso de borde - Los espacios de sobra no llegan al documento."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"name": "  Taller Reyes  "}, format="json"
+        )
+
+        assert response.data["name"] == "Taller Reyes"
+
+    def test_without_a_session_returns_401(self, api_client) -> None:
+        """Caso alternativo - Sin sesión no hay organización que mostrar."""
+        assert api_client.get(ORGANIZATION_URL).status_code == (
+            status.HTTP_401_UNAUTHORIZED
+        )
+        assert api_client.patch(ORGANIZATION_URL, {"name": "x"}).status_code == (
+            status.HTTP_401_UNAUTHORIZED
+        )
+
+    def test_one_account_does_not_see_another_organization(
+        self, authenticated_client, user_factory
+    ) -> None:
+        """Caso alternativo - La identidad es de cada cuenta."""
+        other = user_factory()
+        Organization.objects.create(user=other, name="Ajena", color="#111111")
+
+        response = authenticated_client.get(ORGANIZATION_URL)
+
+        assert response.data["name"] == ""
+
+    def test_registration_leaves_the_organization_ready(self, api_client) -> None:
+        """Flujo principal - Registrarse ya crea la organización vacía."""
+        response = api_client.post(
+            "/api/auth/register/",
+            {"email": "nueva@estudio.mx", "password": "secreta123", **accepted()},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        organization = Organization.objects.get(user__email="nueva@estudio.mx")
+        assert organization.name == ""
+        assert organization.color == DEFAULT_ORGANIZATION_COLOR
+
+
+@pytest.mark.django_db
+class TestLogotipoParaElDocumento:
+    """El logotipo se entrega en bytes, no como dirección.
+
+    El PDF lo dibuja el navegador, y el navegador no puede bajar del bucket un
+    archivo de otro dominio que no lo autoriza: el documento salía sin marca.
+    """
+
+    URL = "/api/auth/organization/logo/"
+
+    def test_the_logo_comes_embedded(self, authenticated_client) -> None:
+        """Flujo principal - Con logotipo, llega listo para imprimirse."""
+        authenticated_client.patch(
+            "/api/auth/organization/",
+            {"logo": SimpleUploadedFile("logo.png", PNG, "image/png")},
+            format="multipart",
+        )
+
+        response = authenticated_client.get(self.URL)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data_url"].startswith("data:image/png;base64,")
+
+    def test_without_a_logo_it_says_so(self, authenticated_client) -> None:
+        """Caso de borde - Sin logotipo no hay nada que incrustar."""
+        response = authenticated_client.get(self.URL)
+
+        assert response.data["data_url"] is None
+
+    def test_without_a_session_there_is_no_logo(self, api_client) -> None:
+        """Caso de borde - Sin sesión no se sirve el logotipo."""
+        assert api_client.get(self.URL).status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestContactoDeLaOrganizacion:
+    """El correo y el teléfono que imprimen los documentos son del despacho.
+
+    Antes salía el teléfono con el que se entraba a la cuenta. Ahora se entra
+    con correo, y el contacto que se le da a un cliente no tiene por qué ser
+    ese: se guarda aparte, y vacío no sale nada.
+    """
+
+    def test_a_new_organization_has_no_contact(self, authenticated_client) -> None:
+        """Caso de borde - Sin configurar, los documentos no llevan contacto."""
+        response = authenticated_client.get(ORGANIZATION_URL)
+
+        assert response.data["email"] == ""
+        assert response.data["phone"] == ""
+
+    def test_saves_the_contact_the_documents_print(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - El despacho guarda su correo y su teléfono."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"email": "contacto@taller.mx", "phone": " 55 1234 5678 "},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["email"] == "contacto@taller.mx"
+        assert response.data["phone"] == "55 1234 5678"
+        organizacion = Organization.objects.get(user=user)
+        assert organizacion.email == "contacto@taller.mx"
+        # El de la cuenta no se toca: son dos cosas distintas.
+        user.refresh_from_db()
+        assert user.email != "contacto@taller.mx"
+
+    def test_the_contact_can_be_cleared(self, authenticated_client) -> None:
+        """Flujo alternativo - Vaciarlo quita el contacto de los documentos."""
+        authenticated_client.patch(
+            ORGANIZATION_URL,
+            {"email": "contacto@taller.mx", "phone": "5512345678"},
+            format="json",
+        )
+
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"email": "", "phone": ""}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["email"] == ""
+        assert response.data["phone"] == ""
+
+    def test_a_malformed_email_is_refused(self, authenticated_client) -> None:
+        """Caso alternativo - Un correo mal escrito no llega al documento."""
+        response = authenticated_client.patch(
+            ORGANIZATION_URL, {"email": "contacto@"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Escribe un correo válido" in str(response.data["email"])
+
+    def test_the_profile_carries_the_contact(self, authenticated_client) -> None:
+        """Flujo principal - El perfil lo trae junto con el membrete."""
+        authenticated_client.patch(
+            ORGANIZATION_URL, {"phone": "5512345678"}, format="json"
+        )
+
+        response = authenticated_client.get(ME_URL)
+
+        assert response.data["organization"]["phone"] == "5512345678"
+        assert "phone" not in {k for k in response.data if k != "organization"}

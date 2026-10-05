@@ -113,3 +113,67 @@ class TestListClients:
 
         names = {c["name"] for c in response.data}
         assert names == {"Constructora Reyes"}
+
+
+def quote_for(user, client) -> None:
+    """Una cotización de ``client`` con un servicio cualquiera."""
+    from decimal import Decimal
+
+    from apps.catalog.tests.factories import TariffFactory
+    from apps.quotes.services import create_quote
+
+    create_quote(
+        owner=user,
+        client=client,
+        items_data=[{"tariff": TariffFactory(owner=user), "quantity": Decimal("1")}],
+    )
+
+
+@pytest.mark.django_db
+class TestDeleteClient:
+    """US-109: borrar un cliente que no está en ninguna cotización."""
+
+    def test_client_without_quotes_is_deleted(self, authenticated_client, user) -> None:
+        """Flujo principal - Cliente capturado por error y sin cotizaciones."""
+        client = ClientFactory(owner=user)
+
+        response = authenticated_client.delete(detail_url(client.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Client.objects.filter(id=client.id).exists()
+
+    def test_client_in_a_quote_is_kept(self, authenticated_client, user) -> None:
+        """Caso alternativo - El cliente ya está en una cotización."""
+        client = ClientFactory(owner=user)
+        quote_for(user, client)
+
+        response = authenticated_client.delete(detail_url(client.id))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "está en 1 cotización" in str(response.data)
+        assert Client.objects.filter(id=client.id).exists()
+
+    def test_list_says_how_many_quotes_hold_each_client(
+        self, authenticated_client, user
+    ) -> None:
+        """La lista dice de antemano cuáles se pueden borrar."""
+        libre = ClientFactory(owner=user, name="Libre")
+        ocupado = ClientFactory(owner=user, name="Ocupado")
+        quote_for(user, ocupado)
+        quote_for(user, ocupado)
+
+        response = authenticated_client.get(CLIENTS_URL)
+
+        counts = {c["name"]: c["quotes_count"] for c in response.data}
+        assert counts == {libre.name: 0, ocupado.name: 2}
+
+    def test_another_accounts_client_is_not_found(
+        self, authenticated_client, user_factory
+    ) -> None:
+        """Caso de borde - Aislamiento entre cuentas."""
+        ajeno = ClientFactory(owner=user_factory())
+
+        response = authenticated_client.delete(detail_url(ajeno.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert Client.objects.filter(id=ajeno.id).exists()

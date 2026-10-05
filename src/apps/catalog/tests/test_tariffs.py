@@ -202,3 +202,67 @@ class TestListTariffs:
 
         row = next(t for t in response.data if t["name"] == "Muro")
         assert row["description"] == "Acabado fino"
+
+
+@pytest.mark.django_db
+class TestDeleteTariff:
+    """US-110: borrar un servicio que no está en ninguna cotización."""
+
+    def _quote_with(self, user, tariff) -> None:
+        from apps.clients.tests.factories import ClientFactory
+        from apps.quotes.services import create_quote
+
+        create_quote(
+            owner=user,
+            client=ClientFactory(owner=user),
+            items_data=[{"tariff": tariff, "quantity": Decimal("2")}],
+        )
+
+    def test_tariff_without_quotes_is_deleted(self, authenticated_client, user) -> None:
+        """Flujo principal - Servicio que nunca se cotizó."""
+        tariff = TariffFactory(owner=user)
+
+        response = authenticated_client.delete(detail_url(tariff.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Tariff.objects.filter(id=tariff.id).exists()
+
+    def test_tariff_in_quotes_is_kept(self, authenticated_client, user) -> None:
+        """Caso alternativo - El servicio ya está en cotizaciones."""
+        tariff = TariffFactory(owner=user)
+        self._quote_with(user, tariff)
+        self._quote_with(user, tariff)
+
+        response = authenticated_client.delete(detail_url(tariff.id))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "está en 2 cotizaciones" in str(response.data)
+        assert Tariff.objects.filter(id=tariff.id).exists()
+
+    def test_deleting_it_takes_it_off_the_staff(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Lo hacía alguien del personal: deja de hacerlo."""
+        from apps.staff.models import Worker, WorkerService
+
+        tariff = TariffFactory(owner=user)
+        worker = Worker.objects.create(owner=user, name="Juan Pérez")
+        WorkerService.objects.create(worker=worker, tariff=tariff, unit_price="90")
+
+        response = authenticated_client.delete(detail_url(tariff.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert worker.services.count() == 0
+
+    def test_list_says_how_many_quotes_use_each_tariff(
+        self, authenticated_client, user
+    ) -> None:
+        """La lista dice de antemano cuáles se pueden borrar."""
+        libre = TariffFactory(owner=user, name="Libre")
+        usado = TariffFactory(owner=user, name="Usado")
+        self._quote_with(user, usado)
+
+        response = authenticated_client.get(TARIFFS_URL)
+
+        counts = {t["name"]: t["quotes_count"] for t in response.data}
+        assert counts == {libre.name: 0, usado.name: 1}

@@ -1,7 +1,7 @@
 [project]
 name = "presuplano-backend"
-version = "0.1.0"
-description = "presuplano — cotizador multi-tenant para arquitectos (backend API)"
+version = "2.35.0"
+description = "CUOTREKA — cotizador multi-tenant para arquitectos (backend API)"
 requires-python = ">=3.12"
 dependencies = [
     "django>=5.2,<5.3",
@@ -27,8 +27,15 @@ dev = [
     "ruff>=0.6,<1",
 ]
 
+[tool.vercel]
+# Donde Vercel encuentra la instancia WSGI. Sin esto tendría que adivinarla, y
+# el proyecto vive bajo src/, que no es donde importa.
+entrypoint = "wsgi:application"
+
 [tool.ruff]
 line-length = 88
+# scripts/test_gate.py es la herramienta del quality gate, copiada tal cual del flujo.
+extend-exclude = ["scripts/test_gate.py"]
 target-version = "py312"
 src = ["src"]
 
@@ -49,3 +56,20 @@ pythonpath = ["src"]
 python_files = ["test_*.py", "tests.py"]
 addopts = "--reuse-db"
 testpaths = ["src"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "src/conftest.py",
+    "src/core/settings*.py",
+    "src/core/asgi.py",
+    "src/core/wsgi.py",
+    "src/manage.py",
+]
+
+[tool.coverage.report]
+show_missing = false
+skip_covered = true

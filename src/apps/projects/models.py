@@ -70,6 +70,25 @@ class Progress(TimestampedModel):
         max_digits=12, decimal_places=2, verbose_name=_("cantidad avanzada")
     )
     date = models.DateField(verbose_name=_("fecha"))
+    worker = models.ForeignKey(
+        "staff.Worker",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="progresses",
+        verbose_name=_("quién lo hizo"),
+    )
+    labor_unit_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("precio unitario de mano de obra"),
+        help_text=_(
+            "Lo que se le paga a quien lo hizo, copiado del reparto. Se guarda "
+            "aquí para que cambiar un trato de hoy no reescriba lo ya trabajado."
+        ),
+    )
 
     class Meta:
         db_table = "projects_progress"
@@ -81,6 +100,13 @@ class Progress(TimestampedModel):
     def earned_value(self) -> Decimal:
         """Earned value = advanced quantity × snapshotted unit price."""
         return self.quantity * self.quote_item.unit_price
+
+    @property
+    def labor_value(self) -> Decimal:
+        """Lo que este avance le ganó a quien lo hizo. Sin autor, nada."""
+        if self.worker_id is None or self.labor_unit_price is None:
+            return Decimal("0.00")
+        return self.quantity * self.labor_unit_price
 
 
 class Evidence(TimestampedModel):

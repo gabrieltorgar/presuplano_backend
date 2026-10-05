@@ -19,9 +19,9 @@ class TestTokenRefresh:
         self, api_client, user_factory
     ) -> None:
         """A refresh token obtained at login yields a new access token."""
-        account = user_factory(is_phone_verified=True, password="testpass123")
+        account = user_factory(is_email_verified=True, password="testpass123")
         login = api_client.post(
-            LOGIN_URL, {"phone": account.phone, "password": "testpass123"}
+            LOGIN_URL, {"email": account.email, "password": "testpass123"}
         )
         refresh = login.data["refresh"]
 

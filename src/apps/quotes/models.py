@@ -4,21 +4,37 @@ Each line item snapshots the tariff's name, unit type and unit price at quoting
 time, so later tariff edits never change an already-issued quote (US-05 edge).
 """
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from common.models import TimestampedModel
+
+#: Días que valen los precios de una cotización si nadie dice otra cosa.
+DEFAULT_VALIDITY_DAYS = 20
+
+#: Hasta dónde se puede estirar la vigencia: un año de obra.
+MAX_VALIDITY_DAYS = 365
+
+#: Lo que caben las observaciones: un par de párrafos, no un contrato.
+NOTES_MAX_LENGTH = 2000
 
 
 class Quote(TimestampedModel):
     """A quote for a client, composed of line items with an automatic total."""
 
     class Status(models.TextChoices):
+        """Where the quote is, which is not about its document.
+
+        The document exists from the moment the quote does and is rebuilt from
+        it on every edit, so «documented» was never a state of the quote: it
+        stays a draft until it becomes a project, and only then stops changing.
+        """
+
         DRAFT = "draft", _("Borrador")
-        DOCUMENT_GENERATED = "document_generated", _("Documento generado")
         IN_PROJECT = "in_project", _("En proyecto")
 
     owner = models.ForeignKey(
@@ -38,6 +54,20 @@ class Quote(TimestampedModel):
         choices=Status.choices,
         default=Status.DRAFT,
         verbose_name=_("estado"),
+    )
+    # Lo que el documento dice además de los precios: qué incluye, qué no,
+    # cómo se paga. Sale impreso tal como se escribe.
+    notes = models.TextField(
+        blank=True,
+        default="",
+        max_length=NOTES_MAX_LENGTH,
+        verbose_name=_("observaciones"),
+    )
+    validity_days = models.PositiveSmallIntegerField(
+        default=DEFAULT_VALIDITY_DAYS,
+        validators=[MinValueValidator(1), MaxValueValidator(MAX_VALIDITY_DAYS)],
+        verbose_name=_("días de vigencia"),
+        help_text=_("Cuántos días valen los precios desde la fecha de emisión."),
     )
 
     class Meta:
@@ -63,12 +93,18 @@ class QuoteItem(TimestampedModel):
         "catalog.Tariff",
         on_delete=models.PROTECT,
         related_name="quote_items",
-        verbose_name=_("tarifa"),
+        verbose_name=_("servicio"),
     )
     name = models.CharField(max_length=150, verbose_name=_("nombre"))
     unit_type = models.CharField(max_length=20, verbose_name=_("tipo de unidad"))
     unit_price = models.DecimalField(
-        max_digits=12, decimal_places=2, verbose_name=_("precio unitario")
+        max_digits=16,
+        decimal_places=6,
+        verbose_name=_("precio unitario"),
+        help_text=_(
+            "Hasta seis decimales: un total acordado no siempre se reparte en "
+            "centavos entre la cantidad."
+        ),
     )
     quantity = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name=_("cantidad")
@@ -77,13 +113,22 @@ class QuoteItem(TimestampedModel):
     class Meta:
         db_table = "quotes_quote_item"
         ordering = ["created_at"]
-        verbose_name = _("partida")
-        verbose_name_plural = _("partidas")
+        verbose_name = _("servicio cotizado")
+        verbose_name_plural = _("servicios cotizados")
 
     @property
     def subtotal(self) -> Decimal:
-        """Line subtotal = quantity × snapshotted unit price (pure fields)."""
-        return self.quantity * self.unit_price
+        """What this line charges: quantity × unit price, in whole cents.
+
+        The price carries six decimals so that a total agreed with the client
+        survives being split across the quantity — 32 000 between 15 is
+        2 133,333333 — and the line is rounded back to cents here, which is
+        what is actually invoiced and what makes the agreed total come out
+        exact instead of five cents short.
+        """
+        return (self.quantity * self.unit_price).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
 
     def __str__(self) -> str:
         return f"{self.name} × {self.quantity}"

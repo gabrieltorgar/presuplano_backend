@@ -115,12 +115,12 @@ class TestUpdateQuote:
         assert response.status_code == status.HTTP_200_OK
         assert Decimal(response.data["total"]) == Decimal("5800.00")
 
-    def test_update_documented_quote_returns_400(
+    def test_update_a_quote_already_in_a_project_returns_400(
         self, authenticated_client, user
     ) -> None:
-        """Caso alternativo - Cotización con documento ya generado."""
+        """Caso alternativo - La cotización ya es un proyecto en marcha."""
         quote, client, muro, _zocalo = self._draft(user)
-        quote.status = Quote.Status.DOCUMENT_GENERATED
+        quote.status = Quote.Status.IN_PROJECT
         quote.save(update_fields=["status"])
 
         payload = {
@@ -132,7 +132,7 @@ class TestUpdateQuote:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "ya tiene documento generado" in str(response.data)
+        assert "proyecto" in str(response.data)
 
     def test_remove_item_recalculates_total(self, authenticated_client, user) -> None:
         """Caso de borde - Eliminar una partida recalcula el total."""
@@ -151,62 +151,60 @@ class TestUpdateQuote:
 
 
 @pytest.mark.django_db
-class TestGenerateDocument:
-    """US-12: generate the quote document."""
+class TestTheDocumentIsNotAState:
+    """US-12: el documento existe desde que existe la cotización."""
 
-    def test_generate_marks_document_generated(
-        self, authenticated_client, user
-    ) -> None:
-        """Flujo principal - Documento con detalle y total."""
-        client, muro, zocalo = build_catalog(user)
-        quote = create_quote(
-            owner=user,
-            client=client,
-            items_data=[
-                {"tariff": muro, "quantity": Decimal("10")},
-                {"tariff": zocalo, "quantity": Decimal("20")},
-            ],
-        )
-
-        response = authenticated_client.post(
-            f"{detail_url(quote.id)}generate-document/"
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["status"] == Quote.Status.DOCUMENT_GENERATED
-        assert Decimal(response.data["total"]) == Decimal("5100.00")
-        assert response.data["client_name"] == "Constructora Reyes"
-
-    def test_generate_without_items_returns_400(
-        self, authenticated_client, user
-    ) -> None:
-        """Caso alternativo - Cotización sin partidas."""
-        client, _muro, _zocalo = build_catalog(user)
-        quote = Quote.objects.create(owner=user, client=client)
-
-        response = authenticated_client.post(
-            f"{detail_url(quote.id)}generate-document/"
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "sin partidas" in str(response.data)
-
-    def test_regenerate_does_not_duplicate(self, authenticated_client, user) -> None:
-        """Caso de borde - Regenerar no duplica la cotización."""
+    def _quote(self, user):
         client, muro, _zocalo = build_catalog(user)
         quote = create_quote(
             owner=user,
             client=client,
             items_data=[{"tariff": muro, "quantity": Decimal("10")}],
         )
-        url = f"{detail_url(quote.id)}generate-document/"
+        return quote, client, muro
 
-        authenticated_client.post(url)
-        response = authenticated_client.post(url)
+    def test_a_new_quote_is_a_draft(self, authenticated_client, user) -> None:
+        """Flujo principal - Nace en borrador, con su documento ya disponible."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [{"tariff": str(muro.id), "quantity": "10"}],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.data["status"] == Quote.Status.DRAFT
+
+    def test_it_stays_a_draft_however_many_times_it_is_edited(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Editar no cambia el estado; el documento se rehace."""
+        quote, client, muro = self._quote(user)
+        payload = {
+            "client": str(client.id),
+            "items": [{"tariff": str(muro.id), "quantity": "12"}],
+        }
+
+        for _ in range(2):
+            response = authenticated_client.patch(
+                detail_url(quote.id), payload, format="json"
+            )
 
         assert response.status_code == status.HTTP_200_OK
-        assert Quote.objects.filter(owner=user).count() == 1
-        assert Decimal(response.data["total"]) == Decimal("3500.00")
+        assert response.data["status"] == Quote.Status.DRAFT
+        assert Decimal(response.data["total"]) == Decimal("4200.00")
+
+    def test_there_is_no_generate_document_endpoint(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Generar el documento ya no es una operación."""
+        quote, _client, _muro = self._quote(user)
+
+        response = authenticated_client.post(
+            f"{detail_url(quote.id)}generate-document/"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.django_db
@@ -270,3 +268,224 @@ class TestQuotePriceSnapshot:
         # Quote keeps the price it was quoted at (350 × 10 = 3500).
         assert Decimal(response.data["total"]) == Decimal("3500.00")
         assert Decimal(response.data["items"][0]["unit_price"]) == Decimal("350.00")
+
+
+@pytest.mark.django_db
+class TestCustomUnitPrice:
+    """US-63: el precio de una partida se puede ajustar sin tocar el servicio."""
+
+    def test_custom_unit_price_overrides_the_catalog_price(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Precio ajustado para esta cotización."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "2", "unit_price": "150"},
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Decimal(response.data["items"][0]["unit_price"]) == Decimal("150.00")
+        assert Decimal(response.data["total"]) == Decimal("300.00")
+
+    def test_the_service_keeps_its_own_price(self, authenticated_client, user) -> None:
+        """Caso de borde - El catálogo no se altera al ajustar una partida."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "1", "unit_price": "150"},
+            ],
+        }
+
+        authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        muro.refresh_from_db()
+        assert muro.unit_price == Decimal("350.00")
+
+    def test_without_unit_price_takes_the_one_from_the_service(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Sin precio propio se toma el del servicio."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [{"tariff": str(muro.id), "quantity": "2"}],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert Decimal(response.data["items"][0]["unit_price"]) == Decimal("350.00")
+
+    def test_unit_price_of_zero_returns_400(self, authenticated_client, user) -> None:
+        """Caso alternativo - Un precio de cero no es un precio."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "2", "unit_price": "0"},
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_update_changes_the_custom_price(self, authenticated_client, user) -> None:
+        """Flujo principal - Ajustar el precio al editar el borrador."""
+        client, muro, _zocalo = build_catalog(user)
+        quote = create_quote(
+            owner=user,
+            client=client,
+            items_data=[{"tariff": muro, "quantity": Decimal("2")}],
+        )
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "2", "unit_price": "75"},
+            ],
+        }
+
+        response = authenticated_client.patch(
+            detail_url(quote.id), payload, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Decimal(response.data["total"]) == Decimal("150.00")
+
+
+@pytest.mark.django_db
+class TestAgreedTotalSurvives:
+    """US-63: el total acordado es el total, aunque no se reparta en centavos."""
+
+    def test_a_total_that_does_not_divide_in_cents_is_respected(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - 32 000 entre 15 siguen siendo 32 000."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {
+                    "tariff": str(muro.id),
+                    "quantity": "15",
+                    "unit_price": "2133.333333",
+                },
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Decimal(response.data["items"][0]["subtotal"]) == Decimal("32000.00")
+        assert Decimal(response.data["total"]) == Decimal("32000.00")
+
+    def test_the_line_is_charged_in_whole_cents(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Lo que se cobra son centavos, no millonésimas."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [
+                {"tariff": str(muro.id), "quantity": "3", "unit_price": "33.333333"},
+            ],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        # 3 × 33,333333 = 99,999999, que se cobra como 100,00
+        assert Decimal(response.data["items"][0]["subtotal"]) == Decimal("100.00")
+
+    def test_a_price_with_cents_keeps_working_as_before(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - El precio de siempre no cambia de comportamiento."""
+        client, muro, _zocalo = build_catalog(user)
+        payload = {
+            "client": str(client.id),
+            "items": [{"tariff": str(muro.id), "quantity": "10"}],
+        }
+
+        response = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert Decimal(response.data["total"]) == Decimal("3500.00")
+
+
+@pytest.mark.django_db
+class TestDeleteQuote:
+    """US-111: borrar una cotización que todavía no es proyecto."""
+
+    def _quote(self, user, *, tariff=None):
+        client, muro, _zocalo = build_catalog(user)
+        return create_quote(
+            owner=user,
+            client=client,
+            items_data=[{"tariff": tariff or muro, "quantity": Decimal("3")}],
+        )
+
+    def test_draft_quote_is_deleted_with_its_items(
+        self, authenticated_client, user
+    ) -> None:
+        """Flujo principal - Cotización que no prosperó."""
+        from apps.quotes.models import QuoteItem
+
+        quote = self._quote(user)
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Quote.objects.filter(id=quote.id).exists()
+        assert not QuoteItem.objects.filter(quote_id=quote.id).exists()
+
+    def test_quote_with_a_project_is_kept(self, authenticated_client, user) -> None:
+        """Caso alternativo - La cotización ya es un proyecto."""
+        from apps.projects.services import start_project
+
+        quote = self._quote(user)
+        start_project(owner=user, quote=quote)
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ya es un proyecto" in str(response.data)
+        assert Quote.objects.filter(id=quote.id).exists()
+
+    def test_services_made_only_for_it_go_with_it(
+        self, authenticated_client, user
+    ) -> None:
+        """Caso de borde - Sus servicios únicos no quedan huérfanos."""
+        from apps.catalog.models import Tariff
+
+        unico = TariffFactory(owner=user, name="Único", in_catalog=False)
+        quote = self._quote(user, tariff=unico)
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Tariff.objects.filter(id=unico.id).exists()
+
+    def test_catalogue_services_stay(self, authenticated_client, user) -> None:
+        """Los servicios del catálogo no se tocan al borrar la cotización."""
+        from apps.catalog.models import Tariff
+
+        quote = self._quote(user)
+        tariff_id = quote.items.get().tariff_id
+
+        authenticated_client.delete(detail_url(quote.id))
+
+        assert Tariff.objects.filter(id=tariff_id).exists()
+
+    def test_another_accounts_quote_is_not_found(
+        self, authenticated_client, user_factory
+    ) -> None:
+        """Aislamiento entre cuentas."""
+        quote = self._quote(user_factory())
+
+        response = authenticated_client.delete(detail_url(quote.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
