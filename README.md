@@ -27,9 +27,9 @@ con su comprobante, hasta el cierre del proyecto con documento resumen.
 
 El código se construye por *user story* siguiendo el flujo de entrega del
 equipo (Producto → Desarrollo TDD → Testing → Deploy). El backlog formal, la
-fuente única de alcance, vive en la memoria del proyecto `cuotreka_docs`
-(carpeta de Google Drive `claude/apps/cuotreka/cuotreka_docs`,
-`producto/4.0_Backlog_Producto.json`), junto con la guía de despliegue que antes
+fuente única de alcance, vive en la memoria del proyecto, el repositorio
+[`cuotreka_docs`](https://github.com/gabrieltorgar/cuotreka_docs)
+(`producto/4.0_Backlog_Producto.json`; sitio en https://cuotreka-docs.vercel.app), junto con la guía de despliegue que antes
 era `DEPLOY.md` (`legado/backend/DEPLOY.md`). Variables de entorno: ver
 `src/core/.env.example`.
 
