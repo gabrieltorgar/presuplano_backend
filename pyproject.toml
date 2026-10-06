@@ -1,6 +1,6 @@
 [project]
 name = "presuplano-backend"
-version = "2.35.1"
+version = "2.36.0"
 description = "CUOTREKA — cotizador multi-tenant para arquitectos (backend API)"
 requires-python = ">=3.12"
 dependencies = [
