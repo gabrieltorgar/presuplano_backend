@@ -6,6 +6,7 @@ coordenadas relativas a la foto (0 a 1) para que el editor las ponga sobre ella.
 La IA nunca se llama de verdad aquí: cuesta dinero y necesita red.
 """
 
+import base64
 import io
 import json
 from datetime import timedelta
@@ -98,6 +99,21 @@ class TestPhotoConversionEndpoint:
         # Relativo a la foto: el primer muro recorre todo el borde de arriba.
         assert walls[0] == {"start": {"x": 0.0, "y": 0.0}, "end": {"x": 1.0, "y": 0.0}}
         assert walls[2]["start"] == {"x": 0.5, "y": 0.0}
+
+    def test_the_polished_photo_comes_back_for_the_background(
+        self, authenticated_client, reads_a_house
+    ):
+        """Flujo principal - La foto pulida queda de fondo, con su tamaño."""
+        response = authenticated_client.post(
+            URL, {"photo": upload(photo_bytes(800, 600))}, format="multipart"
+        )
+
+        image = response.data["image"]
+        assert image["src"].startswith("data:image/png;base64,")
+        assert (image["width"], image["height"]) == (1568, 1176)
+        # Es la misma imagen que leyó la IA: los muros caen exactos sobre ella.
+        sent = reads_a_house.call_args.args[0]
+        assert image["src"].endswith(base64.b64encode(sent).decode())
 
     def test_closed_spaces_come_back_as_rooms(
         self, authenticated_client, reads_a_house
@@ -271,18 +287,21 @@ class TestPhotoConversionEndpoint:
 
 
 class TestPreparePhoto:
-    """La foto que viaja a la IA: derecha, liviana y en JPG."""
+    """La foto que viaja a la IA: derecha, pulida, en blanco y negro y en PNG."""
 
-    def test_a_big_photo_is_scaled_down(self) -> None:
+    def test_the_photo_comes_out_polished_at_the_standard_size(self) -> None:
         prepared, media_type = photo_conversion.prepare_photo(photo_bytes(4000, 3000))
 
-        assert media_type == "image/jpeg"
-        assert Image.open(io.BytesIO(prepared)).size == (1568, 1176)
+        assert media_type == "image/png"
+        image = Image.open(io.BytesIO(prepared))
+        assert image.size == (1568, 1176)
+        assert image.mode == "L"
+        assert set(image.getdata()) <= {0, 255}
 
-    def test_a_small_photo_keeps_its_size(self) -> None:
+    def test_a_small_photo_is_brought_to_the_standard_size(self) -> None:
         prepared, _ = photo_conversion.prepare_photo(photo_bytes(800, 600, "WEBP"))
 
-        assert Image.open(io.BytesIO(prepared)).size == (800, 600)
+        assert Image.open(io.BytesIO(prepared)).size == (1568, 1176)
 
     def test_a_phone_photo_is_turned_upright(self) -> None:
         """El teléfono guarda la foto acostada y dice cómo girarla (EXIF)."""
@@ -292,7 +311,7 @@ class TestPreparePhoto:
 
         prepared, _ = photo_conversion.prepare_photo(raw)
 
-        assert Image.open(io.BytesIO(prepared)).size == (600, 800)
+        assert Image.open(io.BytesIO(prepared)).size == (1176, 1568)
 
     def test_a_transparent_png_still_travels(self) -> None:
         buffer = io.BytesIO()
@@ -300,7 +319,8 @@ class TestPreparePhoto:
 
         prepared, _ = photo_conversion.prepare_photo(buffer.getvalue())
 
-        assert Image.open(io.BytesIO(prepared)).mode == "RGB"
+        # Lo transparente cuenta como papel: blanco, no negro.
+        assert set(Image.open(io.BytesIO(prepared)).getdata()) == {255}
 
 
 class TestToPlan:

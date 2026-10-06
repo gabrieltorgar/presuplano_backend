@@ -12,25 +12,26 @@ import json
 import logging
 
 import anthropic
+import numpy as np
 from django.conf import settings
 from django.utils import timezone
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from apps.planner import photo_cleanup
 from apps.planner.models import PhotoConversion
 
 logger = logging.getLogger(__name__)
 
 # Lo que el navegador entrega de una foto o un escaneo; un GIF o un HEIC no.
 SUPPORTED_FORMATS = {"PNG", "JPEG", "WEBP"}
-# Más píxeles no le dan a Claude más muros, sólo más costo por foto.
-MAX_SIDE = 1568
 # El escenario «El servicio no responde» espera un minuto y se rinde.
 TIMEOUT_SECONDS = 60
 ROOM_NAME_MAX = 60
 
 PROMPT = """\
-This is a photo of a floor plan on paper: printed, or sketched by hand. The \
-image is {width} × {height} pixels.
+This is a floor plan on paper — printed, or sketched by hand — photographed and \
+cleaned up: straightened, cropped and turned black and white. The image is \
+{width} × {height} pixels.
 
 Trace the plan so an architect can keep editing it:
 - walls: one straight segment per wall, centred on the drawn wall, from end to \
@@ -97,11 +98,12 @@ class ConversionUnavailable(Exception):
 
 
 def prepare_photo(data: bytes) -> tuple[bytes, str]:
-    """The photo as Claude should see it: upright, at most 1568 px, in JPG.
+    """The photo as Claude should see it: upright, polished, black and white.
 
-    A phone stores the picture sideways and says how to turn it (EXIF); the
-    browser shows it turned, so Claude has to see it turned too, or the walls
-    would come back rotated against the background.
+    A phone stores the picture sideways and says how to turn it (EXIF), so it
+    is turned first. Then OpenCV straightens, crops, scales and cleans it
+    (``photo_cleanup``); the result travels as PNG, which keeps black and white
+    exact and weighs little.
     """
     try:
         image = Image.open(io.BytesIO(data))
@@ -113,16 +115,16 @@ def prepare_photo(data: bytes) -> tuple[bytes, str]:
         raise UnsupportedPhoto
 
     image = ImageOps.exif_transpose(image)
-    image.thumbnail((MAX_SIDE, MAX_SIDE))
     if image.mode != "RGB":
-        # JPG no tiene transparencia: lo transparente de un PNG queda en blanco.
+        # Lo transparente de un PNG es papel: blanco, no negro.
         rgba = image.convert("RGBA")
         image = Image.new("RGB", rgba.size, "white")
         image.paste(rgba, mask=rgba.getchannel("A"))
 
+    cleaned = photo_cleanup.clean_photo(np.asarray(image.convert("L")))
     buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=90)
-    return buffer.getvalue(), "image/jpeg"
+    Image.fromarray(cleaned.image).save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue(), "image/png"
 
 
 def read_plan(image: bytes, media_type: str) -> dict:
@@ -250,9 +252,18 @@ def convert_photo(*, owner, data: bytes) -> dict:
     does not take a photo away from the architect.
     """
     image, media_type = prepare_photo(data)
-    plan = to_plan(read_plan(image, media_type))
+    reading = read_plan(image, media_type)
+    plan = to_plan(reading)
     PhotoConversion.objects.create(
         owner=owner, walls=len(plan["walls"]), rooms=len(plan["rooms"])
     )
     remaining = settings.PHOTO_PLAN_DAILY_LIMIT - conversions_today(owner)
-    return {**plan, "remaining_today": max(remaining, 0)}
+    # La foto pulida vuelve para quedar de fondo: es la que leyó Claude, así
+    # que los muros caen exactos sobre ella.
+    width, height = Image.open(io.BytesIO(image)).size
+    src = f"data:{media_type};base64,{base64.standard_b64encode(image).decode()}"
+    return {
+        **plan,
+        "image": {"src": src, "width": width, "height": height},
+        "remaining_today": max(remaining, 0),
+    }
