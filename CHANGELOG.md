@@ -3,6 +3,29 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [2.36.0] — 2026-10-06 · iteracion-4: de la foto de un plano en papel al plano editable
+
+### Added
+- **planner — US-129 Convertir la foto de un plano en un plano editable:**
+  `POST /api/plans/photo-conversions/` recibe la foto (PNG, JPG o WEBP; hasta
+  4 MB) y devuelve los muros y las habitaciones relativos a la foto, la foto
+  pulida para el fondo y cuántas fotos le quedan hoy a la cuenta. La lee Claude
+  con visión (`claude-opus-5-5`, salida JSON estructurada, un minuto como
+  máximo). Tope de 5 fotos por cuenta al día (`PhotoConversion`, en el admin);
+  lo que falla no cuenta. Sin `ANTHROPIC_API_KEY`, con error de la API o pasado
+  el minuto, responde 503 «No pudimos convertir la foto ahora…».
+- **planner — US-129 La foto se pule antes de la IA (OpenCV):** corrección de
+  perspectiva (sin borde de hoja, como un escaneo, se sigue sin enderezar),
+  recorte al dibujo, escala a 1568 px, corrección de iluminación, reducción de
+  ruido, contraste y binarización. Menos de 1 s por foto.
+
+### Notes
+- Dependencias nuevas: `anthropic`, `opencv-python-headless`, `numpy`. El
+  paquete de la función en Vercel pasa a 309 MB (Vercel lo optimiza al construir).
+- Migración `planner.0002_photo_conversion` (tabla nueva).
+- Variables nuevas: `ANTHROPIC_API_KEY` (obligatoria para convertir),
+  `PHOTO_PLAN_MODEL`, `PHOTO_PLAN_DAILY_LIMIT`, `PHOTO_PLAN_MAX_BYTES`.
+
 ## [2.35.1] — 2026-10-05 · iteracion-2: enlace a la memoria en git
 
 ### Fixed

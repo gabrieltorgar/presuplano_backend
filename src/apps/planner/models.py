@@ -36,3 +36,31 @@ class Plan(TimestampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class PhotoConversion(TimestampedModel):
+    """One photo of a paper plan read by the AI (US-129).
+
+    It keeps no photo — the plan carries it as its background — only who asked
+    and what came out, which is what the daily cap counts: every reading costs
+    money whether it finds walls or not.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="photo_conversions",
+        verbose_name=_("propietario"),
+    )
+    walls = models.PositiveIntegerField(default=0, verbose_name=_("muros"))
+    rooms = models.PositiveIntegerField(default=0, verbose_name=_("habitaciones"))
+
+    class Meta:
+        db_table = "planner_photo_conversion"
+        ordering = ["-created_at"]
+        verbose_name = _("conversión de foto")
+        verbose_name_plural = _("conversiones de foto")
+        indexes = [models.Index(fields=["owner", "-created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.owner} · {self.walls} muros · {self.rooms} habitaciones"
