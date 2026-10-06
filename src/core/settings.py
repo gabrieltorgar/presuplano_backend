@@ -189,6 +189,17 @@ PLAN_MAX_BYTES = env.int("PLAN_MAX_BYTES", default=4 * 1024 * 1024)
 # Tope por archivo del editor (una textura, una malla). Lo que no cabe en el
 # documento del plano vive en el bucket, pero tampoco sin límite.
 PLAN_ASSET_MAX_BYTES = env.int("PLAN_ASSET_MAX_BYTES", default=10 * 1024 * 1024)
+
+# --- Foto de un plano en papel → plano editable (US-129) ---
+# La lee Claude con visión. Sin llave la conversión responde «no disponible»
+# en vez de romperse; también se recorta, como la de Resend.
+ANTHROPIC_API_KEY = env.str("ANTHROPIC_API_KEY", default="").strip()
+PHOTO_PLAN_MODEL = env.str("PHOTO_PLAN_MODEL", default="claude-opus-5-5")
+# Cada foto cuesta dinero: cinco por cuenta al día (decidido en GATE PROPUESTA).
+PHOTO_PLAN_DAILY_LIMIT = env.int("PHOTO_PLAN_DAILY_LIMIT", default=5)
+# El navegador la comprime antes de enviarla; Vercel no acepta cuerpos de más
+# de ~4.5 MB en una función, así que lo que pase de 4 MB ni se intenta.
+PHOTO_PLAN_MAX_BYTES = env.int("PHOTO_PLAN_MAX_BYTES", default=4 * 1024 * 1024)
 OTP_TTL_MINUTES = env("OTP_TTL_MINUTES")
 
 # --- CORS ---

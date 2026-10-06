@@ -74,3 +74,21 @@ class PlanSerializer(serializers.ModelSerializer):
                 "plano de fondo escaneado o una textura suelta."
             )
         return value
+
+
+class PhotoInputSerializer(serializers.Serializer):
+    """The photo of a paper plan, already shrunk by the browser (US-129)."""
+
+    photo = serializers.FileField(
+        error_messages={
+            "required": "Sube la foto del plano",
+            "empty": "Sube la foto del plano",
+            "invalid": "Sube la foto del plano",
+        }
+    )
+
+    def validate_photo(self, value):
+        if value.size > settings.PHOTO_PLAN_MAX_BYTES:
+            limit = settings.PHOTO_PLAN_MAX_BYTES // (1024 * 1024)
+            raise serializers.ValidationError(f"La foto pesa más de {limit} MB")
+        return value
