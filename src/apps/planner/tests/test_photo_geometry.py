@@ -28,10 +28,15 @@ def opening(kind: str, x1: float, y1: float, x2: float, y2: float) -> dict:
     return {"kind": kind, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
 
 
+def cota(x1: float, y1: float, x2: float, y2: float, metres: float) -> dict:
+    return {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "metres": metres}
+
+
 def reading(
     walls: list[dict],
     rooms: list[dict] | None = None,
     openings: list[dict] | None = None,
+    dimensions: list[dict] | None = None,
 ) -> dict:
     return {
         "is_floor_plan": True,
@@ -40,6 +45,7 @@ def reading(
         "walls": walls,
         "rooms": rooms or [],
         "openings": openings or [],
+        "dimensions": dimensions or [],
     }
 
 
@@ -297,3 +303,63 @@ class TestDoorsAndWindows:
         result = photo_conversion.to_plan({"is_floor_plan": False})
 
         assert result["openings"] == []
+
+
+class TestDimensions:
+    """Cambio iteracion-5 - Las cotas se importan."""
+
+    def test_the_cotas_on_paper_come_back_with_their_value(self) -> None:
+        """Cambio iteracion-5 - Las cotas del papel aparecen en el plano."""
+        walls = [wall(100, 400, 550, 400)]
+        written = cota(100, 450, 550, 450, 4.5)
+
+        result = photo_conversion.to_plan(reading(walls, dimensions=[written]))
+
+        assert result["dimensions"] == [
+            {
+                "start": {"x": 0.1, "y": 0.45},
+                "end": {"x": 0.55, "y": 0.45},
+                "value": 4.5,
+            }
+        ]
+
+    def test_a_cota_without_value_or_length_is_dropped(self) -> None:
+        walls = [wall(100, 400, 550, 400)]
+        unreadable = [cota(100, 450, 550, 450, 0), cota(300, 450, 300, 450, 2.0)]
+
+        result = photo_conversion.to_plan(reading(walls, dimensions=unreadable))
+
+        assert result["dimensions"] == []
+
+    def test_a_cota_gives_the_scale_of_what_is_close(self) -> None:
+        """Cambio iteracion-5 - Una cota da la escala."""
+        # Dos extremos a 20 px: a la escala provisional son 20 cm, otra esquina.
+        walls = [wall(100, 100, 500, 100), wall(520, 100, 520, 400)]
+        assert (
+            photo_conversion.to_plan(reading(walls))["walls"][0]["end"]
+            != (photo_conversion.to_plan(reading(walls))["walls"][1]["start"])
+        )
+
+        # Pero la cota dice que 800 px son 4 m: 20 px son 10 cm, la misma esquina.
+        written = cota(100, 450, 900, 450, 4.0)
+        result = photo_conversion.to_plan(reading(walls, dimensions=[written]))
+
+        assert result["walls"][0]["end"] == result["walls"][1]["start"]
+
+    def test_with_several_cotas_the_middle_one_rules(self) -> None:
+        # Una cota mal leída no arrastra la escala: manda la del medio.
+        cotas = [
+            cota(0, 900, 800, 900, 4.0),
+            cota(0, 950, 400, 950, 2.0),
+            cota(0, 980, 100, 980, 9.0),
+        ]
+
+        assert photo_conversion.read_scale(reading([], dimensions=cotas)) == 0.005
+
+    def test_without_cotas_the_scale_is_the_provisional_one(self) -> None:
+        assert photo_conversion.read_scale(reading([])) == 0.01
+
+    def test_a_photo_that_is_not_a_plan_has_no_cotas(self) -> None:
+        result = photo_conversion.to_plan({"is_floor_plan": False})
+
+        assert result["dimensions"] == []

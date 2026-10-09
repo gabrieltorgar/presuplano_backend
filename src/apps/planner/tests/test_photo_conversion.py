@@ -356,7 +356,7 @@ class TestToPlan:
             }
         )
 
-        assert result == {"walls": [], "rooms": [], "openings": []}
+        assert result == {"walls": [], "rooms": [], "openings": [], "dimensions": []}
 
     def test_long_names_are_trimmed(self) -> None:
         result = photo_conversion.to_plan(
@@ -423,6 +423,10 @@ class TestReadPlan:
         assert "openings" in schema["required"]
         kinds = schema["properties"]["openings"]["items"]["properties"]["kind"]
         assert kinds["enum"] == ["door", "window"]
+        # Las cotas, con lo que dicen en metros.
+        assert "dimensions" in schema["required"]
+        cota = schema["properties"]["dimensions"]["items"]["properties"]
+        assert set(cota) == {"x1", "y1", "x2", "y2", "metres"}
         assert kwargs["fallbacks"] == "default"
         # Claude sabe de qué tamaño es la foto, y la respuesta lo trae.
         assert "800 × 600" in kwargs["messages"][0]["content"][1]["text"]

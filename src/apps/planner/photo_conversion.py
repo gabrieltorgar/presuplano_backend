@@ -10,6 +10,8 @@ import base64
 import io
 import json
 import logging
+import math
+import statistics
 
 import anthropic
 import numpy as np
@@ -46,10 +48,14 @@ otherwise give an empty string.
 it starts and ends along that wall. A door is a leaf with its swing arc, or a \
 gap in the wall; a window is a set of thin parallel lines inside the wall.
 
+- dimensions: each dimension written on the plan (a cota), as the two ends of \
+its dimension line and the length it states, in metres: 4.5 for «4.50», «4,50» \
+or «450» in centimetres.
+
 Use pixel coordinates of this image, x to the right and y downwards. Trace each \
 wall straight through its doors and windows: they go in openings, not as gaps.
 If the photo is not a floor plan, or it is too blurry to see the walls, set \
-is_floor_plan to false and leave walls, rooms and openings empty."""
+is_floor_plan to false and leave every list empty."""
 
 POINT = {
     "type": "object",
@@ -91,6 +97,21 @@ READING_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "dimensions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "x1": {"type": "number"},
+                    "y1": {"type": "number"},
+                    "x2": {"type": "number"},
+                    "y2": {"type": "number"},
+                    "metres": {"type": "number"},
+                },
+                "required": ["x1", "y1", "x2", "y2", "metres"],
+                "additionalProperties": False,
+            },
+        },
         "rooms": {
             "type": "array",
             "items": {
@@ -104,7 +125,7 @@ READING_SCHEMA = {
             },
         },
     },
-    "required": ["is_floor_plan", "walls", "rooms", "openings"],
+    "required": ["is_floor_plan", "walls", "rooms", "openings", "dimensions"],
     "additionalProperties": False,
 }
 
@@ -233,24 +254,48 @@ def _inside_photo(x: float, y: float, width: float, height: float) -> tuple:
     return (min(max(x, 0.0), width), min(max(y, 0.0), height))
 
 
-def to_plan(
-    reading: dict,
-    *,
-    metres_per_pixel: float = photo_geometry.PROVISIONAL_METRES_PER_PIXEL,
-) -> dict:
+def _cotas(reading: dict) -> list[tuple[tuple, tuple, float]]:
+    """The cotas worth trusting: they measure something and say how much."""
+    width = reading["image_width"]
+    height = reading["image_height"]
+    cotas = []
+    for item in reading.get("dimensions", []):
+        start = _inside_photo(item["x1"], item["y1"], width, height)
+        end = _inside_photo(item["x2"], item["y2"], width, height)
+        if item.get("metres", 0) > 0 and start != end:
+            cotas.append((start, end, float(item["metres"])))
+    return cotas
+
+
+def read_scale(reading: dict) -> float:
+    """Metres per pixel the cotas give the photo; the provisional one without.
+
+    Each cota is a scale on its own. The one in the middle rules, so that a
+    cota read wrong — a 9 taken for a 4 — does not drag the rest with it.
+    """
+    scales = [metres / math.dist(start, end) for start, end, metres in _cotas(reading)]
+    if not scales:
+        return photo_geometry.PROVISIONAL_METRES_PER_PIXEL
+    return round(statistics.median(scales), 8)
+
+
+def to_plan(reading: dict, *, metres_per_pixel: float | None = None) -> dict:
     """Claude's pixels → the walls and rooms the editor places over the photo.
 
     On the way the drawing is tidied (``photo_geometry``): walls almost square
     come out square, corners meet, each door and window lands on its wall —
-    as where it starts and ends along it — and rooms close over their doors. What has
+    as where it starts and ends along it — and rooms close over their doors.
+    How close is close comes from the cotas read on the plan, when there are. What has
     no length or no area is dropped: the architect would only have to find it
     and delete it.
     """
     if not reading.get("is_floor_plan"):
-        return {"walls": [], "rooms": [], "openings": []}
+        return {"walls": [], "rooms": [], "openings": [], "dimensions": []}
 
     width = reading["image_width"]
     height = reading["image_height"]
+    if metres_per_pixel is None:
+        metres_per_pixel = read_scale(reading)
     walls = [
         (
             _inside_photo(wall["x1"], wall["y1"], width, height),
@@ -309,6 +354,14 @@ def to_plan(
         "openings": [
             {"kind": kind, "wall": wall, "from": round(start, 5), "to": round(end, 5)}
             for kind, wall, start, end in openings
+        ],
+        "dimensions": [
+            {
+                "start": _relative(*start, width, height),
+                "end": _relative(*end, width, height),
+                "value": round(metres, 3),
+            }
+            for start, end, metres in _cotas(reading)
         ],
     }
 

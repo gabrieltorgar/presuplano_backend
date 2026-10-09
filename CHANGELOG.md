@@ -12,6 +12,11 @@ Todas las notas de cambios relevantes de la API. El formato sigue
   `walls`) y dónde empieza y acaba a lo largo de él (`from`, `to`, de 0 a 1). Una
   puerta dibujada como hueco entre dos muros en línea une esos muros en uno; la
   que no cae en ningún muro se descarta.
+- **planner — US-129 Las cotas se importan:** la respuesta trae `dimensions`:
+  cada cota escrita en el plano, con la línea en que está dibujada (relativa a
+  la foto) y lo que dice en metros (`value`). La escala que dan las cotas —la
+  del medio, para que una mal leída no arrastre a las demás— decide qué está
+  cerca al ordenar los muros; sin cotas, la provisional (1 px = 1 cm).
 
 ### Fixed
 - **planner — US-129 Habitaciones cerradas aunque haya puertas o huecos:** lo
