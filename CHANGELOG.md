@@ -3,7 +3,7 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
-## [Unreleased] — iteracion-5
+## [3.0.0] — 2026-10-09 · iteracion-5: importación de planos más fiel, edición más ágil y plano ↔ cotización
 
 ### Changed
 - **planner — US-129 Puertas y ventanas:** la respuesta de
