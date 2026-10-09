@@ -17,7 +17,7 @@ from django.conf import settings
 from django.utils import timezone
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from apps.planner import photo_cleanup
+from apps.planner import photo_cleanup, photo_geometry
 from apps.planner.models import PhotoConversion
 
 logger = logging.getLogger(__name__)
@@ -37,9 +37,10 @@ Trace the plan so an architect can keep editing it:
 - walls: one straight segment per wall, centred on the drawn wall, from end to \
 end. Split a wall where another wall meets it. Follow the walls that are drawn; \
 do not trace furniture, dimension lines, text, hatching or the paper's edge.
-- rooms: each space closed by walls, as the polygon of its inner corners in \
-order. If the space has a name written inside it, give the name exactly as \
-written; otherwise give an empty string.
+- rooms: each space enclosed by walls, as the polygon of its corners in order. \
+A door or an open doorway does not open a room: close it along the wall. If the \
+space has a name written inside it, give the name exactly as written; \
+otherwise give an empty string.
 
 Use pixel coordinates of this image, x to the right and y downwards. Doors and \
 windows are gaps in a wall: trace the wall straight through them.
@@ -208,35 +209,70 @@ def _area(points: list[dict]) -> float:
     return abs(sum(a["x"] * b["y"] - b["x"] * a["y"] for a, b in pairs)) / 2
 
 
-def to_plan(reading: dict) -> dict:
+def _inside_photo(x: float, y: float, width: float, height: float) -> tuple:
+    """A pixel of Claude's answer, kept inside the photo."""
+    return (min(max(x, 0.0), width), min(max(y, 0.0), height))
+
+
+def to_plan(
+    reading: dict,
+    *,
+    metres_per_pixel: float = photo_geometry.PROVISIONAL_METRES_PER_PIXEL,
+) -> dict:
     """Claude's pixels → the walls and rooms the editor places over the photo.
 
-    What has no length or no area is dropped: the architect would only have to
-    find it and delete it.
+    On the way the drawing is tidied (``photo_geometry``): corners meet and
+    rooms close over their doors. What has no length or no area is dropped: the
+    architect would only have to find it and delete it.
     """
     if not reading.get("is_floor_plan"):
         return {"walls": [], "rooms": []}
 
     width = reading["image_width"]
     height = reading["image_height"]
-    walls = []
-    for wall in reading.get("walls", []):
-        start = _relative(wall["x1"], wall["y1"], width, height)
-        end = _relative(wall["x2"], wall["y2"], width, height)
-        if start != end:
-            walls.append({"start": start, "end": end})
+    walls = [
+        (
+            _inside_photo(wall["x1"], wall["y1"], width, height),
+            _inside_photo(wall["x2"], wall["y2"], width, height),
+        )
+        for wall in reading.get("walls", [])
+    ]
+    walls = photo_geometry.join_walls(
+        [w for w in walls if w[0] != w[1]],
+        photo_geometry.JOIN_METRES / metres_per_pixel,
+    )
+    read_rooms = [
+        (
+            " ".join((room.get("name") or "").split())[:ROOM_NAME_MAX].strip(),
+            [
+                _inside_photo(p["x"], p["y"], width, height)
+                for p in room.get("points", [])
+            ],
+        )
+        for room in reading.get("rooms", [])
+    ]
+    read_rooms = [(name, points) for name, points in read_rooms if len(points) >= 3]
+    closed = photo_geometry.close_rooms(
+        walls, read_rooms, metres_per_pixel=metres_per_pixel
+    )
 
     rooms = []
-    for room in reading.get("rooms", []):
-        points = [
-            _relative(p["x"], p["y"], width, height) for p in room.get("points", [])
-        ]
-        if len(points) < 3 or _area(points) == 0:
+    for name, points in closed:
+        relative = [_relative(x, y, width, height) for x, y in points]
+        if len(relative) < 3 or _area(relative) == 0:
             continue
-        name = " ".join((room.get("name") or "").split())[:ROOM_NAME_MAX].strip()
-        rooms.append({"name": name or None, "points": points})
+        rooms.append({"name": name or None, "points": relative})
 
-    return {"walls": walls, "rooms": rooms}
+    return {
+        "walls": [
+            {
+                "start": _relative(*start, width, height),
+                "end": _relative(*end, width, height),
+            }
+            for start, end in walls
+        ],
+        "rooms": rooms,
+    }
 
 
 def conversions_today(owner) -> int:
