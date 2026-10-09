@@ -18,6 +18,18 @@ Todas las notas de cambios relevantes de la API. El formato sigue
   del medio, para que una mal leída no arrastre a las demás— decide qué está
   cerca al ordenar los muros; sin cotas, la provisional (1 px = 1 cm).
 
+- **quotes — US-95 La cotización recuerda su plano:** `Quote.plan` (se borra
+  el plano y la cotización se queda, sin el enlace) y `QuoteItem.from_plan`
+  (la partida la midió el plano). `POST /api/quotes/` acepta `plan` y
+  `items[].from_plan`; las lecturas traen `plan`, `plan_name` y
+  `items[].from_plan`. Editar la cotización a mano conserva qué partidas
+  vienen del plano.
+- **quotes — US-95 Recotizar actualiza el borrador:**
+  `POST /api/quotes/{id}/plan-sync/` con `plan` e `items`: las partidas del
+  plano toman las cantidades nuevas y conservan su precio, la que ya no está
+  sale, la nueva entra y las agregadas a mano no se tocan. Una cotización «En
+  proyecto» responde 400.
+
 ### Fixed
 - **planner — US-129 Habitaciones cerradas aunque haya puertas o huecos:** lo
   que traza la IA se ordena antes de volver (`photo_geometry`). Los extremos a
@@ -32,6 +44,10 @@ Todas las notas de cambios relevantes de la API. El formato sigue
   girado sobre su centro, aunque la hoja estuviera pandeada; el que se aparta
   más conserva el ángulo con que se dibujó. Un cuarto rectangular sale con sus
   esquinas a 90°.
+
+### Notes
+- Migración `quotes.0006_plano_de_la_cotizacion` (dos campos nuevos, sin
+  pérdida de datos).
 
 ## [2.36.0] — 2026-10-06 · iteracion-4: de la foto de un plano en papel al plano editable
 

@@ -8,15 +8,20 @@ from rest_framework.exceptions import ValidationError
 
 from apps.catalog.models import Tariff
 from apps.clients.models import Client
+from apps.planner.models import Plan
 from apps.quotes.models import DEFAULT_VALIDITY_DAYS, Quote, QuoteItem
 
 logger = logging.getLogger("apps")
 
 
-def _ensure_owned(*, owner, client: Client, items_data: list[dict]) -> None:
-    """Reject a payload referencing another account's client or services."""
-    if client.owner_id != owner.id:
+def _ensure_owned(
+    *, owner, client: Client | None, items_data: list[dict], plan: Plan | None = None
+) -> None:
+    """Reject a payload referencing another account's client, plan or services."""
+    if client is not None and client.owner_id != owner.id:
         raise ValidationError("Cliente no encontrado.")
+    if plan is not None and plan.owner_id != owner.id:
+        raise ValidationError("Plano no encontrado.")
     for item in items_data:
         if item["tariff"].owner_id != owner.id:
             raise ValidationError("Servicio no encontrado.")
@@ -28,6 +33,7 @@ def _create_item(
     tariff: Tariff,
     quantity: Decimal,
     unit_price: Decimal | None = None,
+    from_plan: bool = False,
 ) -> QuoteItem:
     """Create a line item snapshotting the service's name, unit and price.
 
@@ -41,6 +47,7 @@ def _create_item(
         unit_type=tariff.unit_type,
         unit_price=tariff.unit_price if unit_price is None else unit_price,
         quantity=quantity,
+        from_plan=from_plan,
     )
 
 
@@ -52,16 +59,18 @@ def create_quote(
     items_data: list[dict],
     notes: str | None = None,
     validity_days: int | None = None,
+    plan: Plan | None = None,
 ) -> Quote:
     """Create a draft quote for ``client`` with the given line items.
 
     Without a validity it gets the house one (20 days), which is what every
     quote had before it could be changed.
     """
-    _ensure_owned(owner=owner, client=client, items_data=items_data)
+    _ensure_owned(owner=owner, client=client, items_data=items_data, plan=plan)
     quote = Quote.objects.create(
         owner=owner,
         client=client,
+        plan=plan,
         notes=(notes or "").strip(),
         validity_days=validity_days or DEFAULT_VALIDITY_DAYS,
     )
@@ -71,6 +80,7 @@ def create_quote(
             tariff=item["tariff"],
             quantity=item["quantity"],
             unit_price=item.get("unit_price"),
+            from_plan=bool(item.get("from_plan")),
         )
     logger.info("Quote created", extra={"quote_id": str(quote.pk)})
     return quote
@@ -109,14 +119,64 @@ def update_quote(
         quote.validity_days = validity_days
         fields.append("validity_days")
     quote.save(update_fields=fields)
+    # La pantalla de la cotización no sabe de planos: lo que no dice si viene
+    # del plano conserva lo que era, para que recotizar lo siga reconociendo.
+    measured = set(
+        quote.items.filter(from_plan=True).values_list("tariff_id", flat=True)
+    )
     quote.items.all().delete()
     for item in items_data:
+        from_plan = item.get("from_plan")
         _create_item(
             quote=quote,
             tariff=item["tariff"],
             quantity=item["quantity"],
             unit_price=item.get("unit_price"),
+            from_plan=item["tariff"].id in measured if from_plan is None else from_plan,
         )
+    return quote
+
+
+@transaction.atomic
+def sync_quote_with_plan(*, quote: Quote, plan: Plan, items_data: list[dict]) -> Quote:
+    """Brings a draft quote up to date with what its plan measures now (US-95).
+
+    The lines that came from the plan take the new quantities and keep their
+    price — what was negotiated is still the deal —; a service the plan no
+    longer has leaves; a new one enters. What the architect added by hand is
+    not touched.
+
+    Raises:
+        ValidationError: the quote is already a project, which does not change.
+    """
+    if quote.status == Quote.Status.IN_PROJECT:
+        raise ValidationError(
+            "La cotización ya es un proyecto en marcha; crea una nueva desde el plano"
+        )
+    _ensure_owned(owner=quote.owner, client=None, items_data=items_data, plan=plan)
+
+    current = {item.tariff_id: item for item in quote.items.filter(from_plan=True)}
+    measured = set()
+    for data in items_data:
+        tariff = data["tariff"]
+        measured.add(tariff.id)
+        line = current.get(tariff.id)
+        if line is None:
+            _create_item(
+                quote=quote,
+                tariff=tariff,
+                quantity=data["quantity"],
+                unit_price=data.get("unit_price"),
+                from_plan=True,
+            )
+        else:
+            line.quantity = data["quantity"]
+            line.save(update_fields=["quantity", "updated_at"])
+    quote.items.filter(from_plan=True).exclude(tariff_id__in=measured).delete()
+
+    quote.plan = plan
+    quote.save(update_fields=["plan", "updated_at"])
+    logger.info("Quote synced with its plan", extra={"quote_id": str(quote.pk)})
     return quote
 
 
