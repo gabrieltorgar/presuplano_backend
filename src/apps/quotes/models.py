@@ -63,6 +63,16 @@ class Quote(TimestampedModel):
         max_length=NOTES_MAX_LENGTH,
         verbose_name=_("observaciones"),
     )
+    # El plano del que salió (US-95): volver a cotizarlo actualiza ésta. Si el
+    # plano se borra, la cotización se queda, sin el enlace.
+    plan = models.ForeignKey(
+        "planner.Plan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="quotes",
+        verbose_name=_("plano"),
+    )
     validity_days = models.PositiveSmallIntegerField(
         default=DEFAULT_VALIDITY_DAYS,
         validators=[MinValueValidator(1), MaxValueValidator(MAX_VALIDITY_DAYS)],
@@ -109,6 +119,9 @@ class QuoteItem(TimestampedModel):
     quantity = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name=_("cantidad")
     )
+    # La midió el plano: al volver a cotizarlo toma la cantidad nueva. Las
+    # agregadas a mano (False) no se tocan.
+    from_plan = models.BooleanField(default=False, verbose_name=_("viene del plano"))
 
     class Meta:
         db_table = "quotes_quote_item"

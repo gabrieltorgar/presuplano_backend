@@ -12,6 +12,6 @@ class QuoteItemInline(admin.TabularInline):
 
 @admin.register(Quote)
 class QuoteAdmin(admin.ModelAdmin):
-    list_display = ("id", "client", "status", "owner", "created_at")
+    list_display = ("id", "client", "status", "plan", "owner", "created_at")
     list_filter = ("status",)
     inlines = [QuoteItemInline]

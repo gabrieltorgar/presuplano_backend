@@ -99,6 +99,8 @@ class TestPhotoConversionEndpoint:
         # Relativo a la foto: el primer muro recorre todo el borde de arriba.
         assert walls[0] == {"start": {"x": 0.0, "y": 0.0}, "end": {"x": 1.0, "y": 0.0}}
         assert walls[2]["start"] == {"x": 0.5, "y": 0.0}
+        # Sin puertas ni ventanas leídas, la lista viene vacía, no ausente.
+        assert response.data["openings"] == []
 
     def test_the_polished_photo_comes_back_for_the_background(
         self, authenticated_client, reads_a_house
@@ -354,7 +356,7 @@ class TestToPlan:
             }
         )
 
-        assert result == {"walls": [], "rooms": []}
+        assert result == {"walls": [], "rooms": [], "openings": [], "dimensions": []}
 
     def test_long_names_are_trimmed(self) -> None:
         result = photo_conversion.to_plan(
@@ -417,6 +419,14 @@ class TestReadPlan:
         assert image["source"]["media_type"] == "image/jpeg"
         schema = kwargs["output_config"]["format"]["schema"]
         assert set(schema["required"]) >= {"is_floor_plan", "walls", "rooms"}
+        # Las puertas y ventanas vienen aparte, cada una con su tipo.
+        assert "openings" in schema["required"]
+        kinds = schema["properties"]["openings"]["items"]["properties"]["kind"]
+        assert kinds["enum"] == ["door", "window"]
+        # Las cotas, con lo que dicen en metros.
+        assert "dimensions" in schema["required"]
+        cota = schema["properties"]["dimensions"]["items"]["properties"]
+        assert set(cota) == {"x1", "y1", "x2", "y2", "metres"}
         assert kwargs["fallbacks"] == "default"
         # Claude sabe de qué tamaño es la foto, y la respuesta lo trae.
         assert "800 × 600" in kwargs["messages"][0]["content"][1]["text"]
