@@ -42,10 +42,14 @@ A door or an open doorway does not open a room: close it along the wall. If the 
 space has a name written inside it, give the name exactly as written; \
 otherwise give an empty string.
 
-Use pixel coordinates of this image, x to the right and y downwards. Doors and \
-windows are gaps in a wall: trace the wall straight through them.
+- openings: each door and each window drawn on a wall, as the two points where \
+it starts and ends along that wall. A door is a leaf with its swing arc, or a \
+gap in the wall; a window is a set of thin parallel lines inside the wall.
+
+Use pixel coordinates of this image, x to the right and y downwards. Trace each \
+wall straight through its doors and windows: they go in openings, not as gaps.
 If the photo is not a floor plan, or it is too blurry to see the walls, set \
-is_floor_plan to false and leave walls and rooms empty."""
+is_floor_plan to false and leave walls, rooms and openings empty."""
 
 POINT = {
     "type": "object",
@@ -72,6 +76,21 @@ READING_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "openings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["door", "window"]},
+                    "x1": {"type": "number"},
+                    "y1": {"type": "number"},
+                    "x2": {"type": "number"},
+                    "y2": {"type": "number"},
+                },
+                "required": ["kind", "x1", "y1", "x2", "y2"],
+                "additionalProperties": False,
+            },
+        },
         "rooms": {
             "type": "array",
             "items": {
@@ -85,7 +104,7 @@ READING_SCHEMA = {
             },
         },
     },
-    "required": ["is_floor_plan", "walls", "rooms"],
+    "required": ["is_floor_plan", "walls", "rooms", "openings"],
     "additionalProperties": False,
 }
 
@@ -222,12 +241,13 @@ def to_plan(
     """Claude's pixels → the walls and rooms the editor places over the photo.
 
     On the way the drawing is tidied (``photo_geometry``): walls almost square
-    come out square, corners meet and rooms close over their doors. What has
+    come out square, corners meet, each door and window lands on its wall —
+    as where it starts and ends along it — and rooms close over their doors. What has
     no length or no area is dropped: the architect would only have to find it
     and delete it.
     """
     if not reading.get("is_floor_plan"):
-        return {"walls": [], "rooms": []}
+        return {"walls": [], "rooms": [], "openings": []}
 
     width = reading["image_width"]
     height = reading["image_height"]
@@ -241,6 +261,19 @@ def to_plan(
     walls = photo_geometry.join_walls(
         photo_geometry.square_walls([w for w in walls if w[0] != w[1]]),
         photo_geometry.JOIN_METRES / metres_per_pixel,
+    )
+    walls, openings = photo_geometry.place_openings(
+        walls,
+        [
+            (
+                item["kind"],
+                _inside_photo(item["x1"], item["y1"], width, height),
+                _inside_photo(item["x2"], item["y2"], width, height),
+            )
+            for item in reading.get("openings", [])
+            if item.get("kind") in ("door", "window")
+        ],
+        metres_per_pixel=metres_per_pixel,
     )
     read_rooms = [
         (
@@ -273,6 +306,10 @@ def to_plan(
             for start, end in walls
         ],
         "rooms": rooms,
+        "openings": [
+            {"kind": kind, "wall": wall, "from": round(start, 5), "to": round(end, 5)}
+            for kind, wall, start, end in openings
+        ],
     }
 
 

@@ -24,13 +24,22 @@ def room(name: str, *points: tuple[float, float]) -> dict:
     return {"name": name, "points": [{"x": x, "y": y} for x, y in points]}
 
 
-def reading(walls: list[dict], rooms: list[dict] | None = None) -> dict:
+def opening(kind: str, x1: float, y1: float, x2: float, y2: float) -> dict:
+    return {"kind": kind, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+
+
+def reading(
+    walls: list[dict],
+    rooms: list[dict] | None = None,
+    openings: list[dict] | None = None,
+) -> dict:
     return {
         "is_floor_plan": True,
         "image_width": SIDE,
         "image_height": SIDE,
         "walls": walls,
         "rooms": rooms or [],
+        "openings": openings or [],
     }
 
 
@@ -233,3 +242,58 @@ class TestSquareWalls:
         # Las esquinas se siguen tocando: cada muro empieza donde acaba el anterior.
         assert all(ends[i][1] == ends[(i + 1) % 4][0] for i in range(4))
         assert len(result["rooms"]) == 1
+
+
+class TestDoorsAndWindows:
+    """Cambio iteracion-5 - Puertas y ventanas."""
+
+    def test_a_door_comes_out_on_its_wall(self) -> None:
+        """Cambio iteracion-5 - Las puertas salen como puertas."""
+        walls = [wall(0, 400, 800, 400)]
+        door = opening("door", 300, 400, 390, 403)
+
+        result = photo_conversion.to_plan(reading(walls, openings=[door]))
+
+        assert result["openings"] == [
+            {"kind": "door", "wall": 0, "from": 0.375, "to": 0.4875}
+        ]
+
+    def test_a_window_comes_out_on_its_wall(self) -> None:
+        """Cambio iteracion-5 - Las ventanas salen como ventanas."""
+        walls = [wall(0, 0, 800, 0), wall(800, 0, 800, 400)]
+        window = opening("window", 800, 300, 800, 180)
+
+        result = photo_conversion.to_plan(reading(walls, openings=[window]))
+
+        # De donde empieza a donde acaba a lo largo del muro, en ese orden.
+        assert result["openings"] == [
+            {"kind": "window", "wall": 1, "from": 0.45, "to": 0.75}
+        ]
+
+    def test_a_door_drawn_as_a_gap_joins_its_wall(self) -> None:
+        # El dibujo corta el muro donde va la puerta: es un solo muro con puerta.
+        walls = [wall(0, 400, 300, 400), wall(390, 400, 800, 400)]
+        door = opening("door", 300, 400, 390, 400)
+
+        result = photo_conversion.to_plan(reading(walls, openings=[door]))
+
+        assert [(px(w["start"]), px(w["end"])) for w in result["walls"]] == [
+            ((0.0, 400.0), (800.0, 400.0))
+        ]
+        assert result["openings"] == [
+            {"kind": "door", "wall": 0, "from": 0.375, "to": 0.4875}
+        ]
+
+    def test_what_is_not_on_a_wall_is_not_made_up(self) -> None:
+        """Cambio iteracion-5 - Lo que no cae en un muro no se inventa."""
+        walls = [wall(0, 400, 800, 400)]
+        loose = opening("door", 300, 700, 390, 700)
+
+        result = photo_conversion.to_plan(reading(walls, openings=[loose]))
+
+        assert result["openings"] == []
+
+    def test_a_photo_that_is_not_a_plan_has_no_openings(self) -> None:
+        result = photo_conversion.to_plan({"is_floor_plan": False})
+
+        assert result["openings"] == []

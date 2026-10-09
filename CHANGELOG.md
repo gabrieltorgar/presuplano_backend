@@ -5,6 +5,14 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 
 ## [Unreleased] — iteracion-5
 
+### Changed
+- **planner — US-129 Puertas y ventanas:** la respuesta de
+  `POST /api/plans/photo-conversions/` trae `openings`: cada puerta (`door`) y
+  ventana (`window`) leída, con el muro en que está (`wall`, su lugar en
+  `walls`) y dónde empieza y acaba a lo largo de él (`from`, `to`, de 0 a 1). Una
+  puerta dibujada como hueco entre dos muros en línea une esos muros en uno; la
+  que no cae en ningún muro se descarta.
+
 ### Fixed
 - **planner — US-129 Habitaciones cerradas aunque haya puertas o huecos:** lo
   que traza la IA se ordena antes de volver (`photo_geometry`). Los extremos a

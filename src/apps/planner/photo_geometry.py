@@ -23,6 +23,9 @@ PROVISIONAL_METRES_PER_PIXEL = 0.01
 JOIN_METRES = 0.15
 # El hueco más ancho que todavía es una puerta o un paso entre dos cuartos.
 DOORWAY_METRES = 1.20
+# Lo más lejos que puede quedar del eje del muro el borde de una puerta o una
+# ventana dibujada en él: medio muro grueso, con el pulso del dibujo.
+OPENING_REACH_METRES = 0.30
 # Lo cerrado más chico que se da por cuarto, y su ancho mínimo: un ducto o el
 # hueco entre las dos líneas de un muro grueso no lo son.
 MIN_ROOM_AREA_M2 = 0.5
@@ -197,6 +200,78 @@ def join_walls(walls: list[Segment], tolerance: float) -> list[Segment]:
         segments[k] = (target, own[1]) if end == 0 else (own[0], target)
 
     return [s for s in segments if _distance(*s) > EPS]
+
+
+def _holder(walls: list[Segment], p: Point, q: Point, reach: float) -> int | None:
+    """The wall both edges of a door or window lie on, if any."""
+    best = None
+    for k, (a, b) in enumerate(walls):
+        far = max(_distance(e, _closest(e, a, b)[1]) for e in (p, q))
+        if far <= reach and (best is None or far < best[0]):
+            best = (far, k)
+    return None if best is None else best[1]
+
+
+def _close_gap(
+    walls: list[Segment], p: Point, q: Point, reach: float, tolerance: float
+) -> list[Segment]:
+    """One wall across a door the drawing left as a gap between two walls.
+
+    Many plans cut the wall where the door goes. The door then sits on no wall;
+    the two walls in line on each side of it are one wall with a door in it.
+    """
+    for k, (a, b) in enumerate(walls):
+        for j, (c, d) in enumerate(walls):
+            if j == k or not _parallel(_sub(b, a), _sub(d, c)):
+                continue
+            for near_k, far_k in ((a, b), (b, a)):
+                for near_j, far_j in ((c, d), (d, c)):
+                    in_line = (
+                        abs(_cross(_unit(_sub(b, a)), _sub(near_j, a))) <= tolerance
+                    )
+                    if (
+                        in_line
+                        and _distance(near_k, p) <= reach
+                        and _distance(near_j, q) <= reach
+                    ):
+                        merged = (far_k, far_j) if near_k == b else (far_j, far_k)
+                        joined = list(walls)
+                        joined[k] = merged
+                        del joined[j]
+                        return joined
+    return walls
+
+
+def place_openings(
+    walls: list[Segment],
+    openings: list[tuple[str, Point, Point]],
+    *,
+    metres_per_pixel: float,
+) -> tuple[list[Segment], list[tuple[str, int, float, float]]]:
+    """Each door and window on the wall it was drawn on.
+
+    It comes back as where it starts and ends along that wall, from 0 at the
+    wall's start to 1 at its end, which is all the editor needs to carve it. A
+    door or window that lies on no wall is dropped rather than guessed at.
+    """
+    reach = OPENING_REACH_METRES / metres_per_pixel
+    tolerance = JOIN_METRES / metres_per_pixel
+    for _, p, q in openings:
+        if _holder(walls, p, q, reach) is None:
+            walls = _close_gap(walls, p, q, reach, tolerance)
+            if _holder(walls, p, q, reach) is None:
+                walls = _close_gap(walls, q, p, reach, tolerance)
+
+    placed = []
+    for kind, p, q in openings:
+        k = _holder(walls, p, q, reach)
+        if k is None:
+            continue
+        a, b = walls[k]
+        start, end = sorted(_closest(e, a, b)[0] for e in (p, q))
+        if end - start > EPS:
+            placed.append((kind, k, start, end))
+    return walls, placed
 
 
 def _crossing(a: Point, b: Point, c: Point, d: Point) -> Point | None:
