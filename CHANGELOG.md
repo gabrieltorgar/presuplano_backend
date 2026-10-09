@@ -3,6 +3,52 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [3.0.0] — 2026-10-09 · iteracion-5: importación de planos más fiel, edición más ágil y plano ↔ cotización
+
+### Changed
+- **planner — US-129 Puertas y ventanas:** la respuesta de
+  `POST /api/plans/photo-conversions/` trae `openings`: cada puerta (`door`) y
+  ventana (`window`) leída, con el muro en que está (`wall`, su lugar en
+  `walls`) y dónde empieza y acaba a lo largo de él (`from`, `to`, de 0 a 1). Una
+  puerta dibujada como hueco entre dos muros en línea une esos muros en uno; la
+  que no cae en ningún muro se descarta.
+- **planner — US-129 Las cotas se importan:** la respuesta trae `dimensions`:
+  cada cota escrita en el plano, con la línea en que está dibujada (relativa a
+  la foto) y lo que dice en metros (`value`). La escala que dan las cotas —la
+  del medio, para que una mal leída no arrastre a las demás— decide qué está
+  cerca al ordenar los muros; sin cotas, la provisional (1 px = 1 cm).
+
+- **quotes — US-95 La cotización recuerda su plano:** `Quote.plan` (se borra
+  el plano y la cotización se queda, sin el enlace) y `QuoteItem.from_plan`
+  (la partida la midió el plano). `POST /api/quotes/` acepta `plan` y
+  `items[].from_plan`; las lecturas traen `plan`, `plan_name` y
+  `items[].from_plan`. Editar la cotización a mano conserva qué partidas
+  vienen del plano.
+- **quotes — US-95 Recotizar actualiza el borrador:**
+  `POST /api/quotes/{id}/plan-sync/` con `plan` e `items`: las partidas del
+  plano toman las cantidades nuevas y conservan su precio, la que ya no está
+  sale, la nueva entra y las agregadas a mano no se tocan. Una cotización «En
+  proyecto» responde 400.
+
+### Fixed
+- **planner — US-129 Habitaciones cerradas aunque haya puertas o huecos:** lo
+  que traza la IA se ordena antes de volver (`photo_geometry`). Los extremos a
+  menos de 15 cm son una sola esquina, donde se cruzan sus muros; el tabique que
+  se queda corto o se pasa llega al muro. Cada espacio que cierran los muros
+  —contando como cerrado el hueco de hasta 1,20 m de una puerta o un paso— sale
+  como habitación con el nombre que la IA leyó dentro; el hueco sigue abierto en
+  los muros. Lo cerrado de menos de 0,5 m² o de menos de 40 cm de ancho no es
+  habitación.
+- **planner — US-129 Muros a escuadra:** el muro convertido a menos de 8° de la
+  horizontal, la vertical o la diagonal de 45° queda exactamente en ese ángulo,
+  girado sobre su centro, aunque la hoja estuviera pandeada; el que se aparta
+  más conserva el ángulo con que se dibujó. Un cuarto rectangular sale con sus
+  esquinas a 90°.
+
+### Notes
+- Migración `quotes.0006_plano_de_la_cotizacion` (dos campos nuevos, sin
+  pérdida de datos).
+
 ## [2.36.0] — 2026-10-06 · iteracion-4: de la foto de un plano en papel al plano editable
 
 ### Added

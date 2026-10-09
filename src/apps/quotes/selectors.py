@@ -9,6 +9,6 @@ def list_quotes_for_owner(*, owner) -> QuerySet[Quote]:
     """Return the owner's quotes with items + client prefetched (no N+1)."""
     return (
         Quote.objects.filter(owner=owner)
-        .select_related("client")
+        .select_related("client", "plan")
         .prefetch_related("items")
     )

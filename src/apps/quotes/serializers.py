@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from apps.catalog.models import Tariff
 from apps.clients.models import Client
+from apps.planner.models import Plan
 from apps.quotes.models import (
     MAX_VALIDITY_DAYS,
     NOTES_MAX_LENGTH,
@@ -38,6 +39,8 @@ class QuoteItemInputSerializer(serializers.Serializer):
         required=False,
         error_messages={"invalid": "El precio debe ser mayor a 0"},
     )
+    # La midió el plano (US-95). Sin decirlo, conserva lo que la partida era.
+    from_plan = serializers.BooleanField(required=False)
 
     def validate_quantity(self, value: Decimal) -> Decimal:
         if value <= 0:
@@ -59,6 +62,10 @@ class QuoteWriteSerializer(serializers.Serializer):
 
     client = serializers.PrimaryKeyRelatedField(queryset=Client.objects.all())
     items = QuoteItemInputSerializer(many=True)
+    # El plano del que sale (US-95); la propiedad se revisa en el servicio.
+    plan = serializers.PrimaryKeyRelatedField(
+        queryset=Plan.objects.all(), required=False, allow_null=True
+    )
     notes = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -88,6 +95,13 @@ class QuoteWriteSerializer(serializers.Serializer):
         return value
 
 
+class PlanSyncSerializer(serializers.Serializer):
+    """What the plan measures now, to bring its quote up to date (US-95)."""
+
+    plan = serializers.PrimaryKeyRelatedField(queryset=Plan.objects.all())
+    items = QuoteItemInputSerializer(many=True)
+
+
 class QuoteItemSerializer(serializers.ModelSerializer):
     """Read shape of a line item, including its computed subtotal."""
 
@@ -103,6 +117,7 @@ class QuoteItemSerializer(serializers.ModelSerializer):
             "unit_price",
             "quantity",
             "subtotal",
+            "from_plan",
         ]
 
 
@@ -111,6 +126,7 @@ class QuoteSerializer(serializers.ModelSerializer):
 
     items = QuoteItemSerializer(many=True, read_only=True)
     client_name = serializers.CharField(source="client.name", read_only=True)
+    plan_name = serializers.CharField(source="plan.name", read_only=True, default=None)
     total = serializers.SerializerMethodField()
 
     class Meta:
@@ -120,6 +136,8 @@ class QuoteSerializer(serializers.ModelSerializer):
             "client",
             "client_name",
             "status",
+            "plan",
+            "plan_name",
             "items",
             "total",
             "notes",
