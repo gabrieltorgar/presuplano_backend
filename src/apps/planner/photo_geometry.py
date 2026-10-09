@@ -28,6 +28,11 @@ DOORWAY_METRES = 1.20
 MIN_ROOM_AREA_M2 = 0.5
 MIN_ROOM_WIDTH_M = 0.4
 
+# Un muro a menos de esto de la horizontal, la vertical o la diagonal se dibujó
+# así: lo que se aparta es la hoja pandeada o el pulso, no la obra.
+SQUARE_DEGREES = 8
+SQUARE_ANGLES = (0, 45, 90, 135, 180)
+
 # Dos muros a menos de esto de paralelos siguen la misma línea.
 PARALLEL_DEGREES = 5
 # Por debajo de esto (seno² del ángulo entre muros) no hay esquina que buscar.
@@ -108,6 +113,28 @@ def _corner(ends: list[Point], walls: list[Segment]) -> Point:
     if not walls or det < CORNER_SIN2 * trace * trace / 4:
         return mean
     return ((syy * bx - sxy * by) / det, (sxx * by - sxy * bx) / det)
+
+
+def square_walls(walls: list[Segment]) -> list[Segment]:
+    """Walls almost level, upright or at 45° come out exactly so.
+
+    Each turns about its middle and keeps the stretch it covered along its new
+    direction, so it still reaches the corners it was drawn to. A wall further
+    from those angles was slanted on purpose and is left as drawn.
+    """
+    squared = []
+    for a, b in walls:
+        middle = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        drawn = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180
+        target = min(SQUARE_ANGLES, key=lambda angle: abs(angle - drawn))
+        if abs(target - drawn) > SQUARE_DEGREES:
+            squared.append((a, b))
+            continue
+        along = (math.cos(math.radians(target)), math.sin(math.radians(target)))
+        squared.append(
+            tuple(_add(middle, along, _dot(_sub(p, middle), along)) for p in (a, b))
+        )
+    return squared
 
 
 def join_walls(walls: list[Segment], tolerance: float) -> list[Segment]:

@@ -221,9 +221,10 @@ def to_plan(
 ) -> dict:
     """Claude's pixels → the walls and rooms the editor places over the photo.
 
-    On the way the drawing is tidied (``photo_geometry``): corners meet and
-    rooms close over their doors. What has no length or no area is dropped: the
-    architect would only have to find it and delete it.
+    On the way the drawing is tidied (``photo_geometry``): walls almost square
+    come out square, corners meet and rooms close over their doors. What has
+    no length or no area is dropped: the architect would only have to find it
+    and delete it.
     """
     if not reading.get("is_floor_plan"):
         return {"walls": [], "rooms": []}
@@ -238,7 +239,7 @@ def to_plan(
         for wall in reading.get("walls", [])
     ]
     walls = photo_geometry.join_walls(
-        [w for w in walls if w[0] != w[1]],
+        photo_geometry.square_walls([w for w in walls if w[0] != w[1]]),
         photo_geometry.JOIN_METRES / metres_per_pixel,
     )
     read_rooms = [

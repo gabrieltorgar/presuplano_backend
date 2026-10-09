@@ -14,6 +14,11 @@ Todas las notas de cambios relevantes de la API. El formato sigue
   como habitación con el nombre que la IA leyó dentro; el hueco sigue abierto en
   los muros. Lo cerrado de menos de 0,5 m² o de menos de 40 cm de ancho no es
   habitación.
+- **planner — US-129 Muros a escuadra:** el muro convertido a menos de 8° de la
+  horizontal, la vertical o la diagonal de 45° queda exactamente en ese ángulo,
+  girado sobre su centro, aunque la hoja estuviera pandeada; el que se aparta
+  más conserva el ángulo con que se dibujó. Un cuarto rectangular sale con sus
+  esquinas a 90°.
 
 ## [2.36.0] — 2026-10-06 · iteracion-4: de la foto de un plano en papel al plano editable
 

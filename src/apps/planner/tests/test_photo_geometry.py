@@ -9,6 +9,8 @@ La foto mide 1000 × 1000 px y la escala provisional es 1 px = 1 cm, así que
 15 cm son 15 px y 1,20 m son 120 px.
 """
 
+import math
+
 from apps.planner import photo_conversion
 
 SIDE = 1000
@@ -173,3 +175,61 @@ class TestCornersTouch:
         result = photo_conversion.to_plan(reading(walls), metres_per_pixel=0.05)
 
         assert result["walls"][0]["end"] != result["walls"][1]["start"]
+
+
+def angle(w: dict) -> float:
+    """El ángulo del muro en grados, de 0 a 180, en píxeles de la foto."""
+    (x1, y1), (x2, y2) = px(w["start"]), px(w["end"])
+    return round(math.degrees(math.atan2(y2 - y1, x2 - x1)) % 180, 3)
+
+
+class TestSquareWalls:
+    """Bug iteracion-5 - Muros a escuadra."""
+
+    def test_an_almost_level_wall_comes_out_level(self) -> None:
+        # 5° de la horizontal: la hoja estaba pandeada.
+        result = photo_conversion.to_plan(reading([wall(100, 100, 500, 135)]))
+
+        assert angle(result["walls"][0]) == 0.0
+
+    def test_an_almost_upright_wall_comes_out_upright(self) -> None:
+        result = photo_conversion.to_plan(reading([wall(300, 100, 330, 500)]))
+
+        assert angle(result["walls"][0]) == 90.0
+
+    def test_an_almost_diagonal_wall_comes_out_at_45(self) -> None:
+        result = photo_conversion.to_plan(reading([wall(100, 100, 400, 450)]))
+
+        assert angle(result["walls"][0]) == 45.0
+
+    def test_a_wall_slanted_on_purpose_keeps_its_angle(self) -> None:
+        # 20° no es un descuido del dibujo: se respeta.
+        result = photo_conversion.to_plan(reading([wall(100, 100, 476, 237)]))
+
+        assert 19 < angle(result["walls"][0]) < 21
+
+    def test_a_squared_wall_keeps_its_place(self) -> None:
+        result = photo_conversion.to_plan(reading([wall(100, 100, 500, 135)]))
+
+        start, end = (px(p) for p in result["walls"][0].values())
+        # Gira sobre su centro: a la altura media de lo dibujado, y a lo ancho
+        # cubre lo mismo que cubría, para seguir llegando a sus esquinas.
+        assert start[1] == end[1] == 117.5
+        assert (start[0], end[0]) == (100.0, 500.0)
+
+    def test_a_rectangular_room_comes_out_rectangular(self) -> None:
+        # Un cuarto de 4 × 3 m con la perspectiva leve de una foto de lado.
+        skewed = [
+            wall(100, 100, 503, 112),
+            wall(503, 112, 497, 405),
+            wall(497, 405, 104, 398),
+            wall(104, 398, 100, 100),
+        ]
+
+        result = photo_conversion.to_plan(reading(skewed))
+
+        assert [angle(w) for w in result["walls"]] == [0.0, 90.0, 0.0, 90.0]
+        ends = [(px(w["start"]), px(w["end"])) for w in result["walls"]]
+        # Las esquinas se siguen tocando: cada muro empieza donde acaba el anterior.
+        assert all(ends[i][1] == ends[(i + 1) % 4][0] for i in range(4))
+        assert len(result["rooms"]) == 1
