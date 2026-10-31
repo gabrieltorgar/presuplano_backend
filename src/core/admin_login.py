@@ -24,7 +24,7 @@ def _keys(request) -> list[str]:
     # Vercel); SimpleRateThrottle() fallaría sin alcance.
     ip = BaseThrottle().get_ident(request)
     username = request.POST.get("username", "").strip().lower()
-    user_key = salted_hmac("admin-login", username).hexdigest()
+    user_key = salted_hmac("admin-login", username, algorithm="sha256").hexdigest()
     return [f"admin-login:ip:{ip}", f"admin-login:user:{user_key}"]
 
 

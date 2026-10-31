@@ -435,7 +435,10 @@ concurrencia real corren sólo con PostgreSQL (CI).
   `otp_email` 10/h, `password_reset_email` 3/h; rotar la dirección no los
   reinicia. Enviar un documento, invitar o reenviar una invitación y convertir
   la foto de un plano comparten `costly` (`THROTTLE_COSTLY`, 20/h por cuenta).
-  Pasarse responde 429 con `Retry-After` (expuesto por CORS).
+  Pasarse responde 429 con `Retry-After` (expuesto por CORS). El correo y el
+  usuario no se guardan en claro en la llave de la caché: van como HMAC-SHA256
+  con la `SECRET_KEY` (`salted_hmac(..., algorithm="sha256")`), también en la
+  cuota de códigos y en el cierre del login del admin.
 - Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
   verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
   `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin
