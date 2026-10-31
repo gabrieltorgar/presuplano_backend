@@ -2,7 +2,7 @@
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -36,8 +36,8 @@ class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ("path",)
     ordering_fields = ("path", "created_at")
     ordering = ("path", "id")
-    # El binario llega como formulario; el cotejo de rutas, como JSON.
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    # El binario llega como multipart; el cotejo de rutas, como JSON.
+    parser_classes = [MultiPartParser, JSONParser]
 
     def get_queryset(self):
         return list_assets_for_owner(owner=account_of(self.request))
@@ -54,7 +54,7 @@ class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], parser_classes=[JSONParser])
     def missing(self, request: Request) -> Response:
         """De estas rutas, las que la cuenta todavía no tiene."""
         serializer = MissingPathsSerializer(data=request.data)

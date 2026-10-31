@@ -4,7 +4,7 @@ from django.conf import settings
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -72,7 +72,7 @@ class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
         detail=False,
         methods=["post"],
         url_path="photo-conversions",
-        parser_classes=[MultiPartParser, FormParser],
+        parser_classes=[MultiPartParser],
     )
     def photo_conversions(self, request: Request) -> Response:
         """US-129: the walls and rooms of a photo of a paper plan.

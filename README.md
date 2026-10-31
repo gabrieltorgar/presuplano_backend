@@ -242,6 +242,10 @@ Pendiente: la tabla sale de `uv run python src/manage.py api_routes --format md`
 
 <!-- /readme:auto:api -->
 
+La API lee sólo JSON: otro tipo de cuerpo responde 415. Las subidas
+(logotipo, evidencia de un avance, foto de un plano, texturas y modelos, y el
+PDF que se envía por correo) son `multipart/form-data`, declarado en su vista.
+
 Todas las listas paginan en el servidor: `?page=&page_size=` (20 por omisión,
 máximo 100) y responden `{count, next, previous, results}`. Cada una declara
 sus filtros (`filters.py` de su app; `?campo=a,b` para varios valores), su
@@ -254,8 +258,10 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
 ## Autenticación y sesión
 
 - Web: sesión con JWT en cookies `HttpOnly` que emite la API
-  (`POST /api/auth/login/`; `POST /api/auth/refresh/` rota el refresh y el
-  anterior queda en la lista negra; `POST /api/auth/logout/`). La SPA pide
+  (`POST /api/auth/login/`; `POST /api/auth/refresh/` rota el refresh de su
+  cookie —nunca uno del cuerpo— y el anterior queda en la lista negra;
+  `POST /api/auth/logout/`). Acceso, registro, código y recuperación no leen la
+  sesión: una cookie vieja no los bloquea. La SPA pide
   `GET /api/auth/csrf/` al arrancar: deja la cookie CSRF (`CSRF_COOKIE_NAME`,
   `csrftoken` por omisión) y cada escritura lleva la cabecera `X-CSRFToken`. El
   navegador nunca lee ni envía tokens: no hay `Authorization: Bearer` para la

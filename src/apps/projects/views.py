@@ -2,7 +2,7 @@
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -106,7 +106,6 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = ProgressSerializer
     permission_classes = [IsVerifiedUser]
-    parser_classes = [JSONParser, MultiPartParser, FormParser]
     # La lista (iteracion-17): por páginas, por proyecto, partida o persona, y en
     # el orden en que se trabajó.
     filterset_class = ProgressFilter
@@ -130,7 +129,8 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
         delete_progress(progress=self.get_object())
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["post"])
+    # La foto llega como multipart; corregir el avance, como JSON (por omisión).
+    @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def evidence(self, request: Request, pk: str | None = None) -> Response:
         progress = self.get_object()
         image = request.FILES.get("image")

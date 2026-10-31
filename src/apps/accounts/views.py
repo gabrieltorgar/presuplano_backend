@@ -11,7 +11,7 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -62,6 +62,7 @@ from common.auth_cookies import (
     set_session_cookies,
     set_token_cookies,
 )
+from common.authentication import CredentialExchangeMixin
 from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
 
@@ -82,10 +83,12 @@ class CsrfCookieView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RegisterView(APIView):
+class RegisterView(CredentialExchangeMixin, APIView):
     """POST /api/auth/register/ — crear una cuenta con correo y contraseña."""
 
     permission_classes = [AllowAny]
+    # Intercambio de credenciales: una cookie de acceso vieja no lo vuelve 401.
+    authentication_classes: list = []
     throttle_scope = "signup"
 
     def post(self, request: Request) -> Response:
@@ -118,10 +121,11 @@ class RegisterView(APIView):
         )
 
 
-class VerifyOtpView(APIView):
+class VerifyOtpView(CredentialExchangeMixin, APIView):
     """POST /api/auth/verify-otp/ — dar por bueno el correo con el código."""
 
     permission_classes = [AllowAny]
+    authentication_classes: list = []  # el código es la credencial
     throttle_scope = "otp"
 
     def post(self, request: Request) -> Response:
@@ -131,10 +135,11 @@ class VerifyOtpView(APIView):
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class ResendOtpView(APIView):
+class ResendOtpView(CredentialExchangeMixin, APIView):
     """POST /api/auth/resend-otp/ — volver a pedir el código de verificación."""
 
     permission_classes = [AllowAny]
+    authentication_classes: list = []  # basta el correo; no lee la sesión
     throttle_scope = "otp"
 
     def post(self, request: Request) -> Response:
@@ -153,7 +158,7 @@ class ResendOtpView(APIView):
         )
 
 
-class LoginView(APIView):
+class LoginView(CredentialExchangeMixin, APIView):
     """POST /api/auth/login/ — abrir la sesión en cookies HttpOnly.
 
     El cuerpo sólo trae la cuenta: los tokens van en cookies que JavaScript no
@@ -161,6 +166,10 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
+    # Intercambio de credenciales: no lee la sesión, así que ni una cookie de
+    # acceso muerta (401) ni una viva sin X-CSRFToken (403) impiden entrar. El
+    # CSRF de login lo cierran los parsers de solo JSON.
+    authentication_classes: list = []
     throttle_scope = "login"
 
     def post(self, request: Request) -> Response:
@@ -189,14 +198,16 @@ class SessionRefreshView(APIView):
 
     El refresh rota y el usado queda en la lista negra. Sin sesión o con una
     anulada responde 401 y borra las cookies. Público a propósito: lo que
-    autoriza es la cookie de refresh, no el access vencido.
+    autoriza es la cookie de refresh, no el access vencido. Sólo la cookie:
+    un refresh en el cuerpo no se lee (iteracion-26 #10), y el cuerpo de la
+    respuesta nunca trae tokens.
     """
 
     permission_classes = [AllowAny]
     authentication_classes: list = []
 
     def post(self, request: Request) -> Response:
-        raw = refresh_from(request) or request.data.get("refresh")
+        raw = refresh_from(request)
         serializer = TokenRefreshSerializer(data={"refresh": raw or ""})
         try:
             serializer.is_valid(raise_exception=True)
@@ -239,10 +250,11 @@ class LogoutView(APIView):
         return response
 
 
-class PasswordResetRequestView(APIView):
+class PasswordResetRequestView(CredentialExchangeMixin, APIView):
     """POST /api/auth/password-reset/ — pedir recuperar la contraseña."""
 
     permission_classes = [AllowAny]
+    authentication_classes: list = []  # quien la olvidó no tiene sesión
     throttle_scope = "password_reset"
 
     def post(self, request: Request) -> Response:
@@ -268,10 +280,11 @@ class PasswordResetRequestView(APIView):
         )
 
 
-class PasswordResetConfirmView(APIView):
+class PasswordResetConfirmView(CredentialExchangeMixin, APIView):
     """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva."""
 
     permission_classes = [AllowAny]
+    authentication_classes: list = []  # el código es la credencial
     throttle_scope = "otp"
 
     def post(self, request: Request) -> Response:
@@ -389,8 +402,8 @@ class MyOrganizationView(APIView):
     """GET/PATCH /api/auth/organization/ — the letterhead of the documents."""
 
     permission_classes = [IsVerifiedUser]
-    # El logotipo llega como formulario; el nombre y el color, como JSON.
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    # El logotipo llega como multipart; el nombre y el color, como JSON.
+    parser_classes = [MultiPartParser, JSONParser]
 
     def get(self, request: Request) -> Response:
         # La de la empresa en la que se trabaja (iteracion-14).

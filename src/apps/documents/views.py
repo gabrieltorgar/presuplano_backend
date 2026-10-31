@@ -1,6 +1,6 @@
 """Documents views: entregar un documento por correo."""
 
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,8 +16,8 @@ class SendDocumentView(APIView):
 
     permission_classes = [IsVerifiedUser]
     throttle_scope = "documents"
-    # El PDF viaja como formulario: es un archivo, no un texto.
-    parser_classes = [MultiPartParser, FormParser]
+    # El PDF viaja como multipart: es un archivo, no un texto.
+    parser_classes = [MultiPartParser]
 
     def post(self, request: Request) -> Response:
         serializer = SendDocumentSerializer(data=request.data)
