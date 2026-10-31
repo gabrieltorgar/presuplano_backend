@@ -120,11 +120,11 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 |---|---|
 | `DEBUG` | — |
 | `SECRET_KEY` | — |
-| `ALLOWED_HOSTS` | — |
-| `CORS_ALLOWED_ORIGINS` | Exact origins, comma separated, never wildcards (also trusted for CSRF). |
-| `CSRF_TRUSTED_ORIGINS` | Extra exact origins trusted for CSRF, besides the CORS ones. |
-| `CSRF_COOKIE_DOMAIN` | Empty: host-only cookie (the SPA calls /api on its own domain). |
-| `CSRF_COOKIE_NAME` | Per environment when two share a domain; the SPA repeats it (VITE_CSRF_COOKIE_NAME). |
+| `ALLOWED_HOSTS` | API hosts (Vercel's deployment hosts are added): production api.itzaka.com, develop api-dev.itzaka.com. |
+| `CORS_ALLOWED_ORIGINS` | SPA exact origins, comma separated, never wildcards (also trusted for CSRF): production https://itzaka.com, develop https://dev.itzaka.com. |
+| `CSRF_TRUSTED_ORIGINS` | Extra exact origins trusted for CSRF, besides the CORS ones (usually empty). |
+| `CSRF_COOKIE_DOMAIN` | Parent domain of the CSRF cookie the SPA reads: .itzaka.com in production and develop (the default without DEBUG); empty locally (host-only). JWT cookies never get a Domain. |
+| `CSRF_COOKIE_NAME` | Django's default name in production and locally; develop adds the _dev suffix (both share .itzaka.com). The SPA repeats it (VITE_CSRF_COOKIE_NAME). |
 | `DATABASE_URL` | — |
 | `CONN_MAX_AGE` | Neon: DATABASE_URL is the pooled host (-pooler, transaction mode); keep 0 there. |
 | `DATABASE_URL_UNPOOLED` | Direct (unpooled) host, for migrate and createcachetable (never the pooler). |
@@ -139,7 +139,7 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `RECAPTCHA_HOSTNAMES` | — |
 | `RESEND_API_KEY` | Without the key no email goes out. Production refuses to deploy without it. |
 | `RESEND_FROM` | A sender of a domain verified in Resend: its test sender (onboarding@resend.dev) only delivers to the Resend account owner, and production refuses it too. |
-| `APP_BASE_URL` | Where the links in the emails lead: the application, not the API. |
+| `APP_BASE_URL` | Where the links in the emails lead: the application, not the API (production https://itzaka.com, develop https://dev.itzaka.com). |
 | `REQUIRE_EMAIL_DELIVERY` | On by default where VERCEL_ENV=production: `migrate` stops the deploy when mail cannot go out, and a mail that cannot be sent is logged as an error. |
 | `THROTTLE_ANON` | Run `uv run python src/manage.py createcachetable` once after migrating. |
 | `THROTTLE_USER` | — |
@@ -259,7 +259,11 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   `GET /api/auth/csrf/` al arrancar: deja la cookie CSRF (`CSRF_COOKIE_NAME`,
   `csrftoken` por omisión) y cada escritura lleva la cabecera `X-CSRFToken`. El
   navegador nunca lee ni envía tokens: no hay `Authorization: Bearer` para la
-  web, y la aplicación llama a la API por su propio dominio (`/api/*`).
+  web. La aplicación (`https://itzaka.com`) llama a la API en su subdominio
+  (`https://api.itzaka.com`), el mismo sitio: las cookies JWT quedan sólo en la
+  API (sin `Domain`) y la CSRF en `.itzaka.com` (`CSRF_COOKIE_DOMAIN`), para que
+  la SPA la lea. Orígenes exactos en `CORS_ALLOWED_ORIGINS` (también de
+  confianza para CSRF), con credenciales.
 - Registro con correo y contraseña; la cuenta se confirma con un código de 6
   dígitos que llega por correo (`/api/auth/verify-otp/`, `/api/auth/resend-otp/`).
   La contraseña se recupera también con un código.
@@ -362,8 +366,11 @@ Vercel (`vercel.json`):
 
 <!-- /readme:auto:despliegue -->
 
-- Producción: https://api-itzaka.grupotorresmucino.com (admin en `/admin/`); la
-  aplicación la llama por su propio dominio, https://itzaka.grupotorresmucino.com/api/.
+- Producción: https://api.itzaka.com (admin en `/admin/`), que la aplicación,
+  https://itzaka.com, llama en su subdominio. develop: https://api-dev.itzaka.com
+  para https://dev.itzaka.com, con `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
+  `APP_BASE_URL` y `CSRF_COOKIE_NAME=csrftoken_dev` propios (los valores por
+  omisión, sin `DEBUG`, son los de producción; con `DEBUG`, los locales).
 - Las variables por entorno (sólo nombres) viven en `tecnico/infraestructura.md`
   de la memoria del proyecto, que es privada.
 - Cada entorno de Vercel (Production y Preview) necesita, además de

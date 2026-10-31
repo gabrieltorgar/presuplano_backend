@@ -52,12 +52,13 @@ SESSION_COOKIE_SAMESITE = "Lax"
 # HttpOnly no añade protección y deja sin poder escribir a la aplicación.
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
-# La SPA llama a /api por su propio dominio (vercel.json reenvía al backend), así
-# que la cookie queda en ese host: sin Domain. Solo si la SPA llamara a la API
-# en otro subdominio se pondría el dominio padre (".dominio.com"). El nombre
-# cambia por entorno cuando dos comparten dominio; la SPA lo repite en
-# VITE_CSRF_COOKIE_NAME.
-CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=None) or None
+# La SPA (itzaka.com) llama a la API en su subdominio (api.itzaka.com) y lee
+# esta cookie para repetirla: va en el dominio padre (iteracion-26 #9). Las
+# cookies JWT, nunca: quedan sólo en la API. En local, sin Domain (vacío también
+# la deja sólo en su host). El nombre cambia por entorno cuando dos comparten
+# dominio (develop: csrftoken_dev); la SPA lo repite en VITE_CSRF_COOKIE_NAME.
+_CSRF_DOMAIN = None if DEBUG else ".itzaka.com"
+CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=_CSRF_DOMAIN) or None
 CSRF_COOKIE_NAME = env("CSRF_COOKIE_NAME", default="csrftoken")
 
 # --- Cabeceras (siempre) ---

@@ -288,8 +288,15 @@ class TestEnlaceDeLaMarca:
     """Sin APP_BASE_URL configurada, el enlace va al dominio de Itzaka."""
 
     def test_the_default_base_url_is_the_brand_domain(self) -> None:
-        entorno = {k: v for k, v in os.environ.items() if k != "APP_BASE_URL"}
+        """SEC-04 · iteracion-26 #9 — En producción (Vercel, sin DEBUG), itzaka.com."""
+        entorno = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("APP_BASE_URL", "DEBUG") and not k.startswith("VERCEL")
+        }
         entorno["DJANGO_SETTINGS_MODULE"] = "core.settings"
+        entorno["VERCEL"] = "1"
+        entorno["SECRET_KEY"] = "x" * 50
         salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
             [
                 sys.executable,
@@ -303,7 +310,7 @@ class TestEnlaceDeLaMarca:
             check=True,
         )
 
-        assert salida.stdout.strip() == "https://itzaka.grupotorresmucino.com"
+        assert salida.stdout.strip() == "https://itzaka.com"
 
 
 @pytest.mark.django_db

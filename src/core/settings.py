@@ -23,7 +23,6 @@ with (BASE_DIR.parent / "pyproject.toml").open("rb") as pyproject:
 env = environ.Env(
     DEBUG=(bool, True),
     SECRET_KEY=(str, "dev-insecure-change-me"),
-    ALLOWED_HOSTS=(list, ["*"]),
     DATABASE_URL=(str, f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
     LOG_DIR=(str, str(BASE_DIR / "tmp" / "logs")),
     OTP_UNIVERSAL_CODE=(str, "123456"),
@@ -49,7 +48,16 @@ ON_VERCEL = env.bool("VERCEL", default=False)
 
 DEBUG = env.bool("DEBUG", default=not ON_VERCEL)
 SECRET_KEY = env("SECRET_KEY")
-ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+
+# --- Dominios (iteracion-26 #9) ---
+# La SPA vive en itzaka.com y la API en api.itzaka.com: el mismo sitio, así que
+# las cookies SameSite=Lax de la sesión viajan en cada llamada de la SPA. Por
+# omisión, los de producción; con DEBUG, los locales (Vite en el 5173). develop
+# pone los suyos por variables (dev.itzaka.com, api-dev.itzaka.com). La cookie
+# CSRF se comparte con el dominio padre: CSRF_COOKIE_DOMAIN, en core/env.py.
+_SPA_ORIGIN = "http://localhost:5173" if DEBUG else "https://itzaka.com"
+_API_HOSTS = ["localhost", "127.0.0.1", "[::1]"] if DEBUG else ["api.itzaka.com"]
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=_API_HOSTS)
 # Orígenes exactos (https://app.dominio.com), nunca comodines.
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
@@ -309,7 +317,7 @@ REQUIRE_EMAIL_DELIVERY = env.bool(
     default=env.str("VERCEL_ENV", default="") == "production",
 )
 # A dónde llevan los enlaces de los correos: la aplicación, no la API.
-APP_BASE_URL = env.str("APP_BASE_URL", default="https://itzaka.grupotorresmucino.com")
+APP_BASE_URL = env.str("APP_BASE_URL", default=_SPA_ORIGIN)
 
 # Tope del documento de un plano. Una textura suelta y el plano de fondo
 # escaneado viajan dentro del JSON, que es lo que puede engordarlo.
@@ -332,10 +340,9 @@ PHOTO_PLAN_MAX_BYTES = env.int("PHOTO_PLAN_MAX_BYTES", default=4 * 1024 * 1024)
 OTP_TTL_MINUTES = env("OTP_TTL_MINUTES")
 
 # --- CORS ---
+# La SPA llama a la API desde su origen, con las cookies (orígenes exactos).
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = env.list(
-    "CORS_ALLOWED_ORIGINS", default=["http://localhost:5173"]
-)
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[_SPA_ORIGIN])
 CORS_ALLOW_CREDENTIALS = True
 # La empresa en la que se trabaja viaja en su propia cabecera (iteracion-14).
 CORS_ALLOW_HEADERS = (*default_headers, "x-empresa")

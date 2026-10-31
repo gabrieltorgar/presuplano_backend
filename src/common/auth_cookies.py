@@ -3,8 +3,9 @@
 El servidor pone el access y el refresh en cookies que JavaScript no puede leer:
 un XSS o una extensión ya no se llevan la sesión. El access viaja a toda la API;
 el refresh, sólo a las rutas de la sesión. SameSite=Lax, y Secure fuera de
-desarrollo. La SPA llega a la API por su mismo dominio (un rewrite de Vercel),
-así que son cookies propias, no de terceros.
+desarrollo. La SPA (itzaka.com) llama a la API en su subdominio
+(api.itzaka.com): el mismo sitio, así que son cookies propias, no de terceros.
+Nunca llevan Domain: sólo la API las recibe (la CSRF sí va al dominio padre).
 
 Las cookies se llamaban como el nombre anterior (Cuotreka). Las de antes se
 siguen leyendo para que nadie pierda su sesión con el cambio de marca

@@ -48,7 +48,7 @@ SANDBOX_SENDER = "onboarding@resend.dev"
 #: que pone la biblioteca por omisión, la respuesta era un 403 con «error code:
 #: 1010» —una página de Cloudflare, no de Resend— y el envío no llegaba ni a
 #: aparecer en el registro de la cuenta.
-USER_AGENT = f"{BRAND_NAME}/1.0 (+https://itzaka.grupotorresmucino.com)"
+USER_AGENT = f"{BRAND_NAME}/1.0 (+https://itzaka.com)"
 
 
 def mask_email(address: str) -> str:
