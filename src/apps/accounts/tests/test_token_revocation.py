@@ -19,6 +19,8 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.accounts.models import OtpCode
+from apps.accounts.services import issue_otp
 from common.auth_cookies import ACCESS_COOKIE, REFRESH_COOKIE
 
 LOGIN = "/api/auth/login/"
@@ -78,7 +80,7 @@ class TestLaContrasenaNuevaCierraLasSesiones:
             "/api/auth/password-reset/confirm/",
             {
                 "email": cuenta.email,
-                "code": settings.OTP_UNIVERSAL_CODE,
+                "code": issue_otp(user=cuenta, purpose=OtpCode.Purpose.PASSWORD_RESET),
                 "password": NEW_PASSWORD,
             },
             format="json",

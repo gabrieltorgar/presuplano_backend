@@ -19,6 +19,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
+from apps.accounts.tests.otp_helpers import code_of
 from apps.accounts.views import RegisterView
 from apps.legal.tests.consent import accepted
 from common.auth_cookies import ACCESS_COOKIE, REFRESH_COOKIE
@@ -49,12 +50,8 @@ def registrarse(client: APIClient):
     )
 
 
-def verificar(client: APIClient, code: str | None = None):
-    return client.post(
-        VERIFY,
-        {"email": EMAIL, "code": code or settings.OTP_UNIVERSAL_CODE},
-        format="json",
-    )
+def verificar(client: APIClient, code: str):
+    return client.post(VERIFY, {"email": EMAIL, "code": code}, format="json")
 
 
 @pytest.mark.django_db
@@ -94,14 +91,14 @@ class TestElRegistroAbreLaSesion:
         assert yo.data["email"] == EMAIL
         assert yo.data["is_email_verified"] is False
 
-    def test_verifying_leaves_a_valid_session(self) -> None:
+    def test_verifying_leaves_a_valid_session(self, otp_sent) -> None:
         """CRD-01.1 · iteracion-26 #12 — Verificar es entrar: la sesión nueva
         alcanza los datos, sin volver a escribir la contraseña."""
         client = APIClient()
         registrarse(client)
         antes = client.cookies[ACCESS_COOKIE].value
 
-        verificada = verificar(client)
+        verificada = verificar(client, code_of(otp_sent))
 
         assert verificada.status_code == status.HTTP_200_OK
         assert verificada.data["is_email_verified"] is True
@@ -111,7 +108,7 @@ class TestElRegistroAbreLaSesion:
         assert client.get(CLIENTS).status_code == status.HTTP_200_OK
         assert client.post("/api/auth/refresh/").status_code == status.HTTP_200_OK
 
-    def test_verifying_from_the_login_opens_the_session_too(self) -> None:
+    def test_verifying_from_the_login_opens_the_session_too(self, otp_sent) -> None:
         """CRD-01.1 · iteracion-26 #12 — Quien entra sin verificar recibe el
         código (403 de siempre); al escribirlo, entra en ese navegador."""
         registrarse(APIClient())
@@ -123,7 +120,8 @@ class TestElRegistroAbreLaSesion:
         assert acceso.status_code == status.HTTP_403_FORBIDDEN
         assert ACCESS_COOKIE not in acceso.cookies
 
-        assert verificar(navegador).status_code == status.HTTP_200_OK
+        # El código que mandó el acceso (el del registro quedó anulado).
+        assert verificar(navegador, code_of(otp_sent)).status_code == 200
         assert navegador.get(CLIENTS).status_code == status.HTTP_200_OK
 
     def test_a_wrong_code_opens_no_session(self) -> None:

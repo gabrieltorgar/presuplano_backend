@@ -130,8 +130,9 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `DATABASE_URL_UNPOOLED` | Direct (unpooled) host, for migrate and createcachetable (never the pooler). |
 | `DATABASE_URL_MIGRATIONS` | Direct host with the owner role (multi-company); preferred for migrations. |
 | `LOG_DIR` | — |
-| `OTP_UNIVERSAL_CODE` | — |
-| `OTP_UNIVERSAL_CODE_ENABLED` | Only opens accounts while mail is not configured, and only where enabled: on by default with DEBUG, off in production unless set on purpose. |
+| `APP_ENV` | Which environment this is: develop, production or a developer machine; missing means production (fail closed), and a Vercel Production deployment is always production. |
+| `OTP_UNIVERSAL_CODE` | E2E-only universal code: only with APP_ENV local or develop (settings refuse to load with it anywhere else, never in Vercel Production), only for OTP_UNIVERSAL_EMAILS and only to verify an account. |
+| `OTP_UNIVERSAL_EMAILS` | Comma-separated accounts the universal code verifies (the E2E users). |
 | `OTP_TTL_MINUTES` | — |
 | `OTP_MAX_ATTEMPTS` | Failed tries a code survives before it is voided. |
 | `OTP_RESEND_COOLDOWN_SECONDS` | Seconds between two codes for the same email and purpose (also for unknown emails). |
@@ -299,6 +300,17 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   recuperación responden siempre el mismo 200, y verificar o recuperar con un
   correo sin cuenta (o ya verificado) responde el mismo 400 que un código
   equivocado.
+- Código universal (sólo para la suite E2E): `OTP_UNIVERSAL_CODE` no tiene
+  valor por omisión y sólo puede existir con `APP_ENV` `local` o `develop`.
+  Sin `APP_ENV` es `production`, y un despliegue Production de Vercel
+  (`VERCEL_ENV=production`) lo es siempre: con el código en otro entorno los
+  settings no cargan y el build falla. Sirve sólo para las cuentas de
+  `OTP_UNIVERSAL_EMAILS` (correos exactos, separados por comas) y sólo para
+  verificar la cuenta (`verify-otp/`); nunca para recuperar la contraseña ni
+  para cambiar el correo. Cada uso queda en el log, sin el código. Sin correo
+  configurado (en local) el código propio se emite igual, pero no llega: para
+  probar el registro en local, `APP_ENV=local` con el código y tu correo en la
+  lista.
 - Cambio de correo (`me/email/`): el código va sólo al correo nuevo, la cuenta
   sigue con el de siempre hasta confirmarlo y el anterior recibe un aviso sin
   código. Cambiar la contraseña (`me/password/`) o recuperarla pasa por los
@@ -412,6 +424,12 @@ Vercel (`vercel.json`):
   omisión, sin `DEBUG`, son los de producción; con `DEBUG`, los locales).
 - Las variables por entorno (sólo nombres) viven en `tecnico/infraestructura.md`
   de la memoria del proyecto, que es privada.
+- Entorno y código de pruebas E2E: Production (`main`) no lleva `APP_ENV` (o
+  lleva `production`) y nunca `OTP_UNIVERSAL_CODE` ni `OTP_UNIVERSAL_EMAILS`:
+  si llegaran, el build falla. develop (Preview) lleva `APP_ENV=develop` y, para
+  la suite E2E, `OTP_UNIVERSAL_CODE` (seis dígitos) y `OTP_UNIVERSAL_EMAILS` con
+  los correos exactos de las cuentas E2E (el código sólo verifica esas cuentas).
+  Desde iteracion-26 `OTP_UNIVERSAL_CODE_ENABLED` ya no se lee.
 - Cada entorno de Vercel (Production y Preview) necesita, además de
   `DATABASE_URL` (pooler), `DATABASE_URL_UNPOOLED` o `DATABASE_URL_MIGRATIONS`:
   el build migra por ahí. Vercel instala desde `uv.lock` (no hay

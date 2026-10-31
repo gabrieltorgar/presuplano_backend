@@ -193,9 +193,10 @@ class Organization(models.Model):
 class OtpCode(models.Model):
     """Un código de un solo uso, con su plazo y para qué sirve.
 
-    Hasta ahora el código era uno solo para todos (``OTP_UNIVERSAL_CODE``):
-    servía para el MVP porque no había por dónde mandarlo. Con el correo sí lo
-    hay, así que cada cuenta con correo recibe el suyo, se guarda su HMAC con
+    Al principio el código era uno solo para todos (``OTP_UNIVERSAL_CODE``):
+    servía para el MVP porque no había por dónde mandarlo; hoy sólo queda para la
+    suite E2E, en local y develop (iteracion-26 #15). Con el correo sí lo hay,
+    así que cada cuenta con correo recibe el suyo, se guarda su HMAC con
     la ``SECRET_KEY`` —lo que llega a la base no sirve para entrar, ni una copia
     de ella sola— y muere al usarse, al vencer o al agotar sus intentos
     (iteracion-26 #13).

@@ -8,8 +8,16 @@ verifica el correo, que es la identidad de la cuenta.
 import pytest
 from rest_framework import status
 
+from apps.accounts.models import OtpCode
+from apps.accounts.services import issue_otp
+
 REQUEST_URL = "/api/auth/password-reset/"
 CONFIRM_URL = "/api/auth/password-reset/confirm/"
+
+
+def recovery_code(user) -> str:
+    """El código que le llegó (iteracion-26 #15: ya no hay uno universal)."""
+    return issue_otp(user=user, purpose=OtpCode.Purpose.PASSWORD_RESET)
 
 
 @pytest.mark.django_db
@@ -40,14 +48,14 @@ class TestPasswordReset:
         assert conocido.data == desconocido.data
 
     def test_confirming_with_the_code_changes_the_password(
-        self, api_client, user, settings
+        self, api_client, user
     ) -> None:
         """Flujo principal - Con el código, la contraseña queda cambiada."""
         response = api_client.post(
             CONFIRM_URL,
             {
                 "email": user.email,
-                "code": str(settings.OTP_UNIVERSAL_CODE),
+                "code": recovery_code(user),
                 "password": "nuevaclave123",
             },
             format="json",
@@ -57,15 +65,13 @@ class TestPasswordReset:
         user.refresh_from_db()
         assert user.check_password("nuevaclave123")
 
-    def test_the_new_password_lets_the_user_in(
-        self, api_client, user, settings
-    ) -> None:
+    def test_the_new_password_lets_the_user_in(self, api_client, user) -> None:
         """Flujo principal - Y con ella se entra."""
         api_client.post(
             CONFIRM_URL,
             {
                 "email": user.email,
-                "code": str(settings.OTP_UNIVERSAL_CODE),
+                "code": recovery_code(user),
                 "password": "nuevaclave123",
             },
             format="json",
@@ -92,7 +98,7 @@ class TestPasswordReset:
         user.refresh_from_db()
         assert not user.check_password("nuevaclave123")
 
-    def test_an_unknown_email_cannot_be_confirmed(self, api_client, settings) -> None:
+    def test_an_unknown_email_cannot_be_confirmed(self, api_client) -> None:
         """Caso alternativo - Sin cuenta no hay nada que recuperar.
 
         Con el mismo 400 que un código equivocado (iteracion-26 #14 · CRD-04.2):
@@ -102,7 +108,7 @@ class TestPasswordReset:
             CONFIRM_URL,
             {
                 "email": "nadie@itzaka.test",
-                "code": str(settings.OTP_UNIVERSAL_CODE),
+                "code": "123456",
                 "password": "nuevaclave123",
             },
             format="json",
@@ -111,13 +117,13 @@ class TestPasswordReset:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data == {"code": ["Código de verificación inválido"]}
 
-    def test_a_short_password_is_rejected(self, api_client, user, settings) -> None:
+    def test_a_short_password_is_rejected(self, api_client, user) -> None:
         """Caso alternativo - La contraseña nueva cumple lo mismo que al alta."""
         response = api_client.post(
             CONFIRM_URL,
             {
                 "email": user.email,
-                "code": str(settings.OTP_UNIVERSAL_CODE),
+                "code": recovery_code(user),
                 "password": "corta",
             },
             format="json",
@@ -126,9 +132,7 @@ class TestPasswordReset:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "password" in response.data
 
-    def test_recovering_verifies_the_email(
-        self, api_client, user_factory, settings
-    ) -> None:
+    def test_recovering_verifies_the_email(self, api_client, user_factory) -> None:
         """Caso de borde - Quien recupera, demuestra que el correo es suyo.
 
         Una cuenta que se quedó sin verificar podía registrarse y no entrar
@@ -140,7 +144,7 @@ class TestPasswordReset:
             CONFIRM_URL,
             {
                 "email": pendiente.email,
-                "code": str(settings.OTP_UNIVERSAL_CODE),
+                "code": recovery_code(pendiente),
                 "password": "nuevaclave123",
             },
             format="json",

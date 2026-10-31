@@ -183,18 +183,23 @@ class TestCambiarElCorreo:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Ese correo ya está registrado" in str(response.data)
 
-    def test_without_mail_the_universal_code_confirms(
-        self, authenticated_client, settings
+    def test_the_universal_code_never_confirms_a_new_email(
+        self, authenticated_client, user, settings
     ) -> None:
-        """Caso de borde - Sin correo configurado sirve el código universal."""
+        """Caso de borde - Ni sin correo configurado ni en develop con la cuenta
+        en la lista: el correo nuevo se prueba con su código (iteracion-26 #15).
+        """
         settings.RESEND_API_KEY = ""
+        settings.APP_ENV = "develop"
+        settings.OTP_UNIVERSAL_CODE = "123456"
+        settings.OTP_UNIVERSAL_EMAILS = [user.email]
         authenticated_client.post(EMAIL, {"email": "nuevo@estudio.mx"})
 
-        response = authenticated_client.post(
-            VERIFY, {"code": settings.OTP_UNIVERSAL_CODE}
-        )
+        response = authenticated_client.post(VERIFY, {"code": "123456"})
 
-        assert response.data["email"] == "nuevo@estudio.mx"
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        user.refresh_from_db()
+        assert user.email != "nuevo@estudio.mx"
 
 
 @pytest.mark.django_db

@@ -30,7 +30,6 @@ from apps.accounts.emails import send_email_changed_notice, send_otp_email
 from apps.accounts.models import Organization, OtpCode, Subscription, User
 from apps.accounts.otp_quota import OTPCooldown, check_request_quota
 from apps.legal.services import record_acceptance
-from common import mail
 
 logger = logging.getLogger("apps")
 
@@ -80,18 +79,36 @@ def find_user(*, email: str) -> User | None:
     return User.objects.filter(email__iexact=email).first()
 
 
-def uses_universal_code(user: User) -> bool:
-    """Si a esa cuenta le sirve el código universal del MVP.
+#: Para qué sirve el código universal de la suite E2E: verificar la cuenta.
+#: Nunca para recuperar la contraseña ni para cambiar el correo (iteracion-26 #15).
+UNIVERSAL_PURPOSES = frozenset({OtpCode.Purpose.SIGNUP})
 
-    Sólo mientras el correo no esté configurado: sin él no hay por dónde
-    mandar el código de nadie. En cuanto lo está, cada quien necesita el suyo
-    y el universal deja de abrir la puerta.
+#: Los entornos donde puede existir (los settings no cargan con él en otro).
+UNIVERSAL_ENVIRONMENTS = frozenset({"local", "develop"})
 
-    Y sólo donde se pidió (``OTP_UNIVERSAL_CODE_ENABLED``, encendido en local):
-    en producción, una llave de correo que falte no abre todas las cuentas;
-    se intenta mandar el código propio y, si no sale, no entra nadie.
+
+def universal_code_accepted(*, user: User, purpose: str, code: str) -> bool:
+    """Si el código universal de la suite E2E abre esa puerta.
+
+    Sólo con ``APP_ENV`` local o develop, para las cuentas de
+    ``OTP_UNIVERSAL_EMAILS`` y para verificar la cuenta; cada uso queda anotado
+    (sin el código). Con o sin correo configurado: develop sí manda correos.
     """
-    return settings.OTP_UNIVERSAL_CODE_ENABLED and not mail.is_configured()
+    if (
+        settings.APP_ENV not in UNIVERSAL_ENVIRONMENTS
+        or not settings.OTP_UNIVERSAL_CODE
+    ):
+        return False
+    if purpose not in UNIVERSAL_PURPOSES:
+        return False
+    if user.email.lower() not in settings.OTP_UNIVERSAL_EMAILS:
+        return False
+    if not constant_time_compare(str(code), settings.OTP_UNIVERSAL_CODE):
+        return False
+    logger.warning(
+        "Universal OTP used", extra={"user_id": str(user.pk), "purpose": purpose}
+    )
+    return True
 
 
 def otp_digest(*, user_pk, purpose: str, raw: str) -> str:
@@ -153,8 +170,8 @@ def check_otp(*, user: User, purpose: str, code: str) -> bool:
     dígitos no se adivinan en cinco intentos, sí en un millón. Nunca lanza: quien
     llama responde el 400, y el intento sobrevive a ``ATOMIC_REQUESTS``.
     """
-    if uses_universal_code(user):
-        return constant_time_compare(str(code), str(settings.OTP_UNIVERSAL_CODE))
+    if universal_code_accepted(user=user, purpose=purpose, code=code):
+        return True
 
     live = _live_code(user=user, purpose=purpose)
     if live is None or live.attempts >= settings.OTP_MAX_ATTEMPTS:
@@ -182,17 +199,10 @@ def send_verification_code(
 ) -> None:
     """Hacer llegar a su dueño, por correo, el código que abre su cuenta.
 
-    Con el correo sin configurar no hay nada que mandar —sigue valiendo el
-    código universal—; queda anotado que tocaba enviarlo. ``to`` manda el
-    código a otra dirección: la del correo nuevo que se quiere confirmar.
+    ``to`` manda el código a otra dirección: la del correo nuevo que se quiere
+    confirmar. Sin correo configurado el código igual se emite y el envío anota
+    que no salió: ya no hay un código universal que lo reemplace (#15).
     """
-    if uses_universal_code(user):
-        logger.info(
-            "Verification code requested",
-            extra={"user_id": str(user.pk), "channel": "pending"},
-        )
-        return
-
     code = issue_otp(user=user, purpose=purpose)
     send_otp_email(
         user=user,

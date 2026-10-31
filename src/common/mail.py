@@ -159,8 +159,8 @@ def is_configured() -> bool:
     """Si hay por dónde mandar correo.
 
     Sin llave no hay envío, y eso cambia lo que la aplicación puede prometer:
-    el código de verificación vuelve a ser el universal porque no habría manera
-    de hacerle llegar uno propio a nadie.
+    un documento no sale, y el código de verificación se emite pero no llega
+    (iteracion-26 #15: ya no hay un código universal de reemplazo).
     """
     return bool(settings.RESEND_API_KEY)
 

@@ -169,27 +169,23 @@ class TestCodigoConIntentosContados:
 
 @pytest.mark.django_db
 class TestCodigoUniversalCerrado:
-    """El código universal del MVP sólo vive donde se pidió."""
+    """El código universal sólo vive donde se pidió (local/develop, #15)."""
 
     def test_without_mail_in_production_the_universal_code_opens_nothing(
         self, user, settings
     ) -> None:
         """Flujo principal - Si el correo se cae, nadie entra con el de todos."""
         settings.RESEND_API_KEY = ""
-        settings.OTP_UNIVERSAL_CODE_ENABLED = False
+        settings.OTP_UNIVERSAL_CODE = "123456"
+        settings.OTP_UNIVERSAL_EMAILS = [user.email]
 
-        assert not check_otp(
-            user=user,
-            purpose=OtpCode.Purpose.PASSWORD_RESET,
-            code=settings.OTP_UNIVERSAL_CODE,
-        )
+        assert not check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code="123456")
 
     def test_without_mail_in_production_a_real_code_is_issued(
         self, user, settings, mocker
     ) -> None:
         """Caso alternativo - Se intenta mandar el código propio, no se regala."""
         settings.RESEND_API_KEY = ""
-        settings.OTP_UNIVERSAL_CODE_ENABLED = False
         enviar = mocker.patch("apps.accounts.services.send_otp_email")
 
         send_verification_code(user=user)
@@ -200,25 +196,27 @@ class TestCodigoUniversalCerrado:
     def test_in_development_the_universal_code_still_works(
         self, user, settings
     ) -> None:
-        """Caso alternativo - En local, sin correo, se sigue probando con él."""
+        """Caso alternativo - En local, sin correo, la cuenta de la lista se
+        verifica con él."""
         settings.RESEND_API_KEY = ""
-        settings.OTP_UNIVERSAL_CODE_ENABLED = True
+        settings.APP_ENV = "local"
+        settings.OTP_UNIVERSAL_CODE = "123456"
+        settings.OTP_UNIVERSAL_EMAILS = [user.email]
 
-        assert check_otp(
-            user=user, purpose=OtpCode.Purpose.SIGNUP, code=settings.OTP_UNIVERSAL_CODE
-        )
+        assert check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code="123456")
 
     def test_it_is_off_by_default_outside_debug(self) -> None:
-        """Caso de borde - En Vercel (DEBUG apagado) hay que pedirlo a propósito."""
+        """Caso de borde - En Vercel (DEBUG apagado) no hay código universal:
+        sin APP_ENV es producción y el código no tiene valor por omisión."""
         entorno = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("DEBUG", "OTP_UNIVERSAL_CODE_ENABLED")
+            if k not in ("DEBUG", "APP_ENV", "OTP_UNIVERSAL_CODE")
         }
         entorno.update(VERCEL="1", DJANGO_SETTINGS_MODULE="core.settings")
         leer = (
             "from django.conf import settings as s;"
-            "print(s.DEBUG, s.OTP_UNIVERSAL_CODE_ENABLED)"
+            "print(s.DEBUG, s.APP_ENV, repr(s.OTP_UNIVERSAL_CODE))"
         )
 
         salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
@@ -230,4 +228,4 @@ class TestCodigoUniversalCerrado:
             check=True,
         )
 
-        assert salida.stdout.split() == ["False", "False"]
+        assert salida.stdout.split() == ["False", "production", "''"]

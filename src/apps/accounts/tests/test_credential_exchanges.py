@@ -20,6 +20,7 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from apps.accounts.tests.factories import UserFactory
+from apps.accounts.tests.otp_helpers import code_of
 from apps.accounts.tests.test_organization import PNG
 from apps.legal.tests.consent import accepted
 from apps.team.tests.factories import InvitationFactory
@@ -330,7 +331,7 @@ def test_allauth_html_urls_not_mounted() -> None:
 
 
 @pytest.mark.django_db
-def test_user_data_does_not_expose_sensitive_fields(user_factory) -> None:
+def test_user_data_does_not_expose_sensitive_fields(user_factory, otp_sent) -> None:
     """API-03 · MAN-06 · iteracion-26 #10 — Ni contraseñas, códigos, tokens ni
     banderas internas en lo que la API dice de las cuentas y del equipo."""
     admin = user_factory(email="admin@estudioreyes.mx", password=PASSWORD)
@@ -356,7 +357,8 @@ def test_user_data_does_not_expose_sensitive_fields(user_factory) -> None:
         ),
         "verify": APIClient().post(
             "/api/auth/verify-otp/",
-            {"email": "nueva@estudio.mx", "code": settings.OTP_UNIVERSAL_CODE},
+            # El código que le llegó al registrarse (iteracion-26 #15).
+            {"email": "nueva@estudio.mx", "code": code_of(otp_sent)},
             format="json",
         ),
         "invitation": APIClient().get("/api/invitations/enlace-bea/"),

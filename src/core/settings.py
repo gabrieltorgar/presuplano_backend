@@ -11,6 +11,7 @@ from pathlib import Path
 
 import environ
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
 
 # BASE_DIR = repo root (parents: settings.py -> core -> src -> repo)
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,6 @@ env = environ.Env(
     SECRET_KEY=(str, "dev-insecure-change-me"),
     DATABASE_URL=(str, f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
     LOG_DIR=(str, str(BASE_DIR / "tmp" / "logs")),
-    OTP_UNIVERSAL_CODE=(str, "123456"),
     OTP_TTL_MINUTES=(int, 10),
     # Intentos fallidos que aguanta un código antes de morir (iteracion-12).
     OTP_MAX_ATTEMPTS=(int, 5),
@@ -303,14 +303,28 @@ SIMPLE_JWT = {
 # borra las sesiones vencidas (flushexpiredtokens).
 CRON_SECRET = env.str("CRON_SECRET", default="").strip()
 
-# --- OTP (universal code for the MVP; real SMS/WhatsApp integration later) ---
-# Con correo configurado, una cuenta con correo recibe un código propio y este
-# deja de servirle; sigue siendo el de las cuentas que sólo tienen teléfono,
-# porque todavía no hay SMS por donde mandarles el suyo.
-OTP_UNIVERSAL_CODE = env("OTP_UNIVERSAL_CODE")
-# Y sólo donde se pidió: en local (DEBUG) sí; en producción hay que pedirlo a
-# propósito, para que una llave de correo que falte no abra todas las cuentas.
-OTP_UNIVERSAL_CODE_ENABLED = env.bool("OTP_UNIVERSAL_CODE_ENABLED", default=DEBUG)
+# --- Entorno (iteracion-26 #15) ---
+# local | develop | production. Sin la variable es producción (falla cerrado), y
+# un despliegue Production de Vercel lo es diga lo que diga APP_ENV.
+APP_ENV = env.str("APP_ENV", default="production").strip().lower()
+if env.str("VERCEL_ENV", default="") == "production":
+    APP_ENV = "production"
+
+# --- OTP: códigos de un solo uso por correo ---
+# El código universal de la suite E2E: sin valor por omisión, sólo con APP_ENV
+# local o develop (en otro entorno los settings no cargan: el build y cada
+# proceso fallan), sólo para las cuentas de OTP_UNIVERSAL_EMAILS y sólo para
+# verificar la cuenta (accounts.services.universal_code_accepted).
+OTP_UNIVERSAL_CODE = env.str("OTP_UNIVERSAL_CODE", default="").strip()
+OTP_UNIVERSAL_EMAILS = [
+    email.strip().lower()
+    for email in env.list("OTP_UNIVERSAL_EMAILS", default=[])
+    if email.strip()
+]
+if OTP_UNIVERSAL_CODE and APP_ENV not in {"local", "develop"}:
+    raise ImproperlyConfigured(
+        "OTP_UNIVERSAL_CODE sólo puede existir con APP_ENV local o develop."
+    )
 OTP_MAX_ATTEMPTS = env("OTP_MAX_ATTEMPTS")
 OTP_RESEND_COOLDOWN_SECONDS = env("OTP_RESEND_COOLDOWN_SECONDS")
 OTP_MAX_CODES_PER_HOUR = env("OTP_MAX_CODES_PER_HOUR")
