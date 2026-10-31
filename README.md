@@ -379,7 +379,10 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
 Los códigos de verificación, las invitaciones y los documentos salen por la API
 HTTP de Resend (`common/mail.py`); las invitaciones de una tanda, en una sola
 petición. En producción el despliegue se detiene si falta la llave o el
-remitente es el de prueba (`common/checks.py`, corre con `migrate`).
+remitente es el de prueba (`common/checks.py`, corre con `migrate`). Los
+registros nunca llevan contraseñas, códigos, tokens ni la llave, y los correos
+van enmascarados (`j***@dominio.com`), también en lo que Resend contesta al
+rechazar un envío (`common.mail.mask_addresses`).
 
 | Variable | Uso |
 |---|---|

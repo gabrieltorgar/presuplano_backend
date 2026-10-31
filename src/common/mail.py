@@ -12,6 +12,7 @@ that was just created. The caller gets ``False`` and the log gets the reason.
 
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from base64 import b64encode
@@ -120,6 +121,20 @@ def _flag_sandbox_sender() -> None:
         )
 
 
+#: Una dirección de correo dentro de un texto.
+_ADDRESS = re.compile(r"[^\s@\"'<>(),;:`]+@[^\s@\"'<>(),;:`]+")
+
+
+def mask_addresses(text: str) -> str:
+    """El texto con cada correo que trae enmascarado (``j***@dominio.com``)."""
+    return _ADDRESS.sub(lambda match: mask_email(match.group()), text)
+
+
+def _refusal_detail(error: urllib.error.HTTPError) -> str:
+    """Por qué rechazó Resend, en hasta 500 bytes y sin las direcciones."""
+    return mask_addresses(error.read()[:500].decode("utf-8", "replace"))
+
+
 def _post(endpoint: str, payload: dict | list, *, recipients: str) -> bool:
     """Una petición a Resend. Devuelve si la aceptaron; nunca lanza."""
     request = urllib.request.Request(  # noqa: S310 -- URL fija y https
@@ -141,13 +156,14 @@ def _post(endpoint: str, payload: dict | list, *, recipients: str) -> bool:
         # El motivo va en el propio mensaje y no en los campos extra: el visor
         # de registros de la plataforma sólo muestra el texto, así que «Email
         # refused by Resend» a secas no decía nada de lo que hay que corregir.
-        detail = error.read()[:500].decode("utf-8", "replace")
+        # Lo que contesta Resend puede repetir las direcciones: se enmascaran
+        # (iteracion-26 #21). El remitente es el de la marca, no de una persona.
         logger.warning(
             "Email refused by Resend (HTTP %s) from=%r to=%s: %s",
-            error.code,
+            error.status,
             settings.RESEND_FROM,
             recipients,
-            detail,
+            _refusal_detail(error),
         )
         return False
     except (urllib.error.URLError, TimeoutError, OSError) as error:
