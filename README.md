@@ -127,8 +127,6 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `CSRF_COOKIE_NAME` | Per environment when two share a domain; the SPA repeats it (VITE_CSRF_COOKIE_NAME). |
 | `DATABASE_URL` | — |
 | `CONN_MAX_AGE` | Neon: DATABASE_URL is the pooled host (-pooler, transaction mode); keep 0 there. |
-| `DATABASE_URL_UNPOOLED` | Direct (unpooled) host, for migrate and createcachetable (never the pooler). |
-| `DATABASE_URL_MIGRATIONS` | Direct host with the owner role (multi-company); preferred for migrations. |
 | `LOG_DIR` | — |
 | `OTP_UNIVERSAL_CODE` | — |
 | `OTP_UNIVERSAL_CODE_ENABLED` | Only opens accounts while mail is not configured, and only where enabled: on by default with DEBUG, off in production unless set on purpose. |
@@ -326,12 +324,12 @@ Verificación de los formularios públicos en el servidor (`common/recaptcha.py`
 
 ### Base de datos — Neon
 
-PostgreSQL de Neon por entorno. La API usa `DATABASE_URL`, el host con pooler
-(PgBouncer en modo transacción): conexiones de una petición
-(`CONN_MAX_AGE`, 0 por omisión), revisadas antes de reusarse y sin cursores del
-servidor (`core/settings.py`). Las migraciones y la tabla de caché van por el
-host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
-`DATABASE_URL_UNPOOLED`; sin ninguna de las dos, el build se detiene.
+PostgreSQL de Neon por entorno, con una sola conexión: `DATABASE_URL`. La API
+la usa con conexiones de una petición (`CONN_MAX_AGE`, 0 por omisión),
+revisadas antes de reusarse y sin cursores del servidor (`core/settings.py`),
+lo que también admite el host con pooler de Neon (PgBouncer en modo
+transacción). El build de Vercel migra y crea la tabla de caché con esa misma
+`DATABASE_URL`.
 
 ## Administración
 
@@ -351,8 +349,8 @@ Vercel (`vercel.json`):
 - Despliegan: `develop`, `main` (el resto de las ramas no despliega) — `git.deploymentEnabled`.
 - Build, en orden:
   1. `uv sync --frozen --no-dev`
-  2. `DATABASE_URL="${DATABASE_URL_MIGRATIONS:-${DATABASE_URL_UNPOOLED:?falta DATABASE_URL_MIGRATIONS o DATABASE_URL_UNPOOLED}}" uv run --no-sync python src/manage.py migrate --noinput`
-  3. `DATABASE_URL="${DATABASE_URL_MIGRATIONS:-$DATABASE_URL_UNPOOLED}" uv run --no-sync python src/manage.py createcachetable`
+  2. `uv run --no-sync python src/manage.py migrate --noinput`
+  3. `uv run --no-sync python src/manage.py createcachetable`
 - Función: `wsgi.py` con `excludeFiles`.
 
 <!-- /readme:auto:despliegue -->
@@ -361,10 +359,10 @@ Vercel (`vercel.json`):
   aplicación la llama por su propio dominio, https://itzaka.grupotorresmucino.com/api/.
 - Las variables por entorno (sólo nombres) viven en `tecnico/infraestructura.md`
   de la memoria del proyecto, que es privada.
-- Cada entorno de Vercel (Production y Preview) necesita, además de
-  `DATABASE_URL` (pooler), `DATABASE_URL_UNPOOLED` o `DATABASE_URL_MIGRATIONS`:
-  el build migra por ahí. Vercel instala desde `uv.lock` (no hay
-  `requirements.txt`).
+- Cada entorno de Vercel (Production y Preview) lleva una sola `DATABASE_URL`:
+  la función la usa y el build migra con ella. El `buildCommand` no pasa de 256
+  caracteres, el máximo que admite el esquema de `vercel.json`. Vercel instala
+  desde `uv.lock` (no hay `requirements.txt`).
 - Verificación después de desplegar: `/api/health/` responde 200 y
   `/admin/login/` carga con sus estilos.
 

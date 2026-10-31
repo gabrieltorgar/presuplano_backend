@@ -3,6 +3,11 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [Unreleased] — En curso
+
+### Fixed
+- **vercel.json · core/.env.example · tests/platform · README — TEC El build de Vercel migra con la DATABASE_URL de la app**: Vercel rechazaba todo el vercel.json de la 4.0.0 («buildCommand should NOT be longer than 256 characters»: medía 331) y los despliegues del backend quedaron detenidos. El build vuelve al de antes de la iteracion-25: uv sync --frozen --no-dev, migrate --noinput y createcachetable con la misma DATABASE_URL de la API (142 caracteres). Se retiran DATABASE_URL_UNPOOLED y DATABASE_URL_MIGRATIONS de src/core/.env.example y del README; los ajustes del pooler (CONN_HEALTH_CHECKS, DISABLE_SERVER_SIDE_CURSORS, CONN_MAX_AGE en 0) se quedan. La prueba base test_vercel_json_follows_the_deploy_standard exige un buildCommand de 256 caracteres o menos que no reasigne DATABASE_URL, y test_env_example_names_only_the_app_database_url que .env.example nombre solo DATABASE_URL. (GIT-02, DJ-01 · iteracion-26 #1)
+
 ## [4.0.0] — 2026-10-30 · iteracion-25: PDF de cotización con desglose por habitación, folios de documentos configurables por organización, la API responde 409 o 400 con su motivo en vez de un 500, base de datos lista para el pooler de Neon y quality gate, security y pruebas base al día con git-deploy-ops
 
 ### Added
