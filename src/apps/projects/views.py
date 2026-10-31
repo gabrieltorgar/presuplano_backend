@@ -3,7 +3,6 @@
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -33,6 +32,7 @@ from apps.projects.services import (
     update_progress,
 )
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
 
 
 class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
@@ -45,7 +45,7 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = ProjectFilter
     search_fields = ("quote__client__name",)
     ordering_fields = (
@@ -105,7 +105,7 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
     """Retrieve, correct or delete a progress entry; attach its photos."""
 
     serializer_class = ProgressSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     # La lista (iteracion-17): por páginas, por proyecto, partida o persona, y en
     # el orden en que se trabajó.
@@ -150,7 +150,7 @@ class EvidenceViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     """Quitar una foto de un avance."""
 
     serializer_class = EvidenceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def get_queryset(self):
         return evidences_for_owner(owner=account_of(self.request))

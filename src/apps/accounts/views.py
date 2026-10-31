@@ -62,6 +62,7 @@ from common.auth_cookies import (
     set_session_cookies,
     set_token_cookies,
 )
+from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
 
 
@@ -283,7 +284,14 @@ class PasswordResetConfirmView(APIView):
 class MyAccountView(APIView):
     """GET/PATCH /api/auth/me/ — la cuenta de quien pregunta y su correo."""
 
+    # GET sin verificar (VERIFICATION_EXEMPT): con ``is_email_verified`` en
+    # falso, la SPA lleva a la pantalla del código. Lo demás pide verificar.
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return super().get_permissions()
+        return [IsVerifiedUser()]
 
     def get(self, request: Request) -> Response:
         # La SPA lo pide al arrancar: asegura la cookie CSRF aunque haya vencido.
@@ -305,7 +313,7 @@ class MyEmailView(APIView):
     entrando con el de siempre hasta que se confirma.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def post(self, request: Request) -> Response:
         serializer = EmailChangeSerializer(data=request.data)
@@ -321,7 +329,7 @@ class MyEmailView(APIView):
 class MyEmailVerifyView(APIView):
     """POST /api/auth/me/email/verify/ — confirmar el correo nuevo con su código."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     throttle_scope = "otp"
 
     def post(self, request: Request) -> Response:
@@ -334,7 +342,7 @@ class MyEmailVerifyView(APIView):
 class MyEmailResendView(APIView):
     """POST /api/auth/me/email/resend/ — volver a mandar el código al correo nuevo."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     throttle_scope = "otp"
 
     def post(self, request: Request) -> Response:
@@ -345,7 +353,7 @@ class MyEmailResendView(APIView):
 class MyPasswordView(APIView):
     """POST /api/auth/me/password/ — cambiar la contraseña sabiendo la actual."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def post(self, request: Request) -> Response:
         serializer = PasswordChangeSerializer(data=request.data)
@@ -366,7 +374,7 @@ class MyAccountDeleteView(APIView):
     confirma— y no todos los intermediarios respetan el cuerpo de un DELETE.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def post(self, request: Request) -> Response:
         serializer = DeleteAccountSerializer(data=request.data)
@@ -380,7 +388,7 @@ class MyAccountDeleteView(APIView):
 class MyOrganizationView(APIView):
     """GET/PATCH /api/auth/organization/ — the letterhead of the documents."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     # El logotipo llega como formulario; el nombre y el color, como JSON.
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
@@ -410,7 +418,7 @@ class MyOrganizationLogoView(APIView):
     de otro dominio que no lo autoriza. Sin esto, el documento salía sin marca.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def get(self, request: Request) -> Response:
         return Response(

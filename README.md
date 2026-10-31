@@ -263,6 +263,11 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
 - Registro con correo y contraseña; la cuenta se confirma con un código de 6
   dígitos que llega por correo (`/api/auth/verify-otp/`, `/api/auth/resend-otp/`).
   La contraseña se recupera también con un código.
+- Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
+  verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
+  `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin
+  verificar sólo responden `GET /api/auth/me/` y las rutas públicas de la sesión
+  (código, reenvío, renovar, salir y CSRF).
 - Colaboradores: entran por el enlace de su invitación
   (`/api/invitations/<token>/accept/`), que crea la cuenta ya confirmada o pide la
   contraseña de quien ya tiene una.

@@ -3,6 +3,11 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [Unreleased]
+
+### Security
+- **seguridad — TEC Permiso por defecto IsVerifiedUser**: `REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"]` pasa de `IsAuthenticated` a `common.permissions.IsVerifiedUser` (nuevo `src/common/permissions.py`: hereda de `IsAuthenticated` y exige `is_email_verified`; sin sesión sigue siendo 401 y sin verificar es 403 `{"detail": "Verifica tu correo para continuar.", "code": "email_not_verified"}`). Las vistas que declaraban `IsAuthenticated` a secas (31 de 32: catálogo, clientes, cotizaciones, proyectos, avances, evidencias, pagos, personal, planos, modelos, documentos, folios —también el `get_permissions` de `folio-settings/<tipo>/`—, equipo, organización, aceptación legal y `me/email`, `me/password`, `me/delete`) usan `IsVerifiedUser`, antes que `IsCompanyAdmin` donde lo llevan; sólo `GET /api/auth/me/` sigue con `IsAuthenticated` (la SPA lee `is_email_verified` para llevar a la pantalla del código; `PATCH me/` pide verificar). Las rutas públicas (código, reenvío, renovar, salir, CSRF) no cambian. Las cuentas que nacen de una invitación ya nacen verificadas: los colaboradores no quedan fuera. (SEC-02 · iteracion-26 #8)
+
 ## [4.0.0] — 2026-10-30 · iteracion-25: PDF de cotización con desglose por habitación, folios de documentos configurables por organización, la API responde 409 o 400 con su motivo en vez de un 500, base de datos lista para el pooler de Neon y quality gate, security y pruebas base al día con git-deploy-ops
 
 ### Added

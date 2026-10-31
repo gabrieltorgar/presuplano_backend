@@ -6,7 +6,6 @@ quote whenever it is asked for, so it is always the current one.
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -24,6 +23,7 @@ from apps.quotes.services import (
     update_quote,
 )
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
 
 
 class QuoteViewSet(viewsets.ModelViewSet):
@@ -36,7 +36,7 @@ class QuoteViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = QuoteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = QuoteFilter
     search_fields = ("client__name", "folio")
     ordering_fields = ("created_at", "total", "client_name")

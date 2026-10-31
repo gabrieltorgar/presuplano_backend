@@ -5,7 +5,6 @@ from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -20,6 +19,7 @@ from apps.planner.serializers import (
 from apps.planner.services import delete_plans
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
+from common.permissions import IsVerifiedUser
 
 
 class DailyPhotoLimitReached(APIException):
@@ -44,7 +44,7 @@ class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
     and orders by last change or name, the one touched last first by default.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = PlanFilter
     search_fields = ("name",)
     ordering_fields = ("updated_at", "name")

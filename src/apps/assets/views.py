@@ -3,7 +3,6 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -23,13 +22,14 @@ from apps.assets.serializers import (
 from apps.assets.services import remove_models, store_asset, store_models
 from apps.team.tenancy import account_of
 from common.pagination import DefaultPagination
+from common.permissions import IsVerifiedUser
 
 
 class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
     """Los binarios del editor de la cuenta: listarlos, subirlos y cotejarlos."""
 
     serializer_class = PlanAssetSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas —el dispositivo las recorre—, por
     # clase y por ruta.
     filterset_class = PlanAssetFilter
@@ -75,7 +75,7 @@ class CatalogModelViewSet(viewsets.ViewSet):
     biblioteca trae decenas de piezas y se importa de una sola vez.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def list(self, request: Request) -> Response:
         """Las fichas que tiene la cuenta, por páginas (iteracion-17).

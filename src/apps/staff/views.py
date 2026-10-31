@@ -3,7 +3,6 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -30,6 +29,7 @@ from apps.staff.services import (
     set_worker_services,
 )
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
 
 
 class WorkerViewSet(viewsets.ModelViewSet):
@@ -42,7 +42,7 @@ class WorkerViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = WorkerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = WorkerFilter
     search_fields = ("name", "phone", "email", "services__tariff__name")
     ordering_fields = ("balance", "name")
@@ -79,7 +79,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     """El reparto de las partidas de un proyecto entre el personal."""
 
     serializer_class = AssignmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas, ``?project=`` y ``?worker=``.
     filterset_class = AssignmentFilter
     search_fields = ("worker__name", "quote_item__name")
@@ -121,7 +121,7 @@ class WorkerPaymentViewSet(viewsets.ReadOnlyModelViewSet):
     """Pagos al personal, y lo que queda debiéndose."""
 
     serializer_class = WorkerPaymentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas, ``?worker=`` y ``?project=``, en
     # orden de fecha.
     filterset_class = WorkerPaymentFilter

@@ -3,7 +3,7 @@
 from django.middleware.csrf import get_token
 from rest_framework import serializers, status
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -44,6 +44,7 @@ from apps.team.tenancy import account_of
 from common.auth_cookies import set_session_cookies
 from common.bulk import BulkSelectionSerializer, bulk_max_items
 from common.pagination import DefaultPagination
+from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
 
 
@@ -54,7 +55,7 @@ class InvitationsView(APIView):
     estaban, 200 con el porqué de cada uno.
     """
 
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsVerifiedUser, IsCompanyAdmin]
     throttle_scope = "invitations"
 
     def post(self, request: Request) -> Response:
@@ -167,7 +168,7 @@ class TeamView(APIView):
     results}`` con ``?page=`` y ``?page_size=`` (20 por omisión, hasta 100).
     """
 
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsVerifiedUser, IsCompanyAdmin]
 
     def get(self, request: Request) -> Response:
         paginator = DefaultPagination()
@@ -183,7 +184,7 @@ class TeamBulkView(APIView):
     lista; la respuesta es ``{requested, processed, failed}``.
     """
 
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsVerifiedUser, IsCompanyAdmin]
     throttle_scope = "bulk"
 
     def post(self, request: Request, action: str) -> Response:
@@ -220,7 +221,7 @@ class TeamBulkView(APIView):
 class MemberView(APIView):
     """PATCH/DELETE /api/collaborators/members/<id>/ — activar, desactivar, quitar."""
 
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsVerifiedUser, IsCompanyAdmin]
 
     def patch(self, request: Request, member_id) -> Response:
         serializer = MemberUpdateSerializer(data=request.data)
@@ -244,7 +245,7 @@ class InvitationResendView(APIView):
     ``code: email_not_sent`` y el enlace anterior sigue sirviendo.
     """
 
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsVerifiedUser, IsCompanyAdmin]
     throttle_scope = "invitations"
 
     def post(self, request: Request, invitation_id) -> Response:
@@ -258,7 +259,7 @@ class InvitationResendView(APIView):
 class InvitationCancelView(APIView):
     """POST /api/collaborators/invitations/<id>/cancel/ — su enlace deja de servir."""
 
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsVerifiedUser, IsCompanyAdmin]
 
     def post(self, request: Request, invitation_id) -> Response:
         cancel_invitation(account=account_of(request), invitation_id=invitation_id)

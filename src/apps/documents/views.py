@@ -1,7 +1,6 @@
 """Documents views: entregar un documento por correo."""
 
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,12 +8,13 @@ from rest_framework.views import APIView
 from apps.documents.serializers import SendDocumentSerializer
 from apps.documents.services import send_document
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
 
 
 class SendDocumentView(APIView):
     """POST /api/documents/send/ — manda el PDF al correo de quien lo recibe."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     throttle_scope = "documents"
     # El PDF viaja como formulario: es un archivo, no un texto.
     parser_classes = [MultiPartParser, FormParser]

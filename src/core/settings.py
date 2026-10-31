@@ -192,7 +192,9 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "common.authentication.CookieJWTAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    # Sesión y correo verificado (common/permissions.py, iteracion-26 #8): una
+    # cuenta sin verificar sólo llega a las vistas de auth que lo declaran.
+    "DEFAULT_PERMISSION_CLASSES": ("common.permissions.IsVerifiedUser",),
     # El servidor filtra, busca (sin acentos) y ordena cada lista; la pantalla
     # pide solo la página que muestra (api-lists-errors.md §1, iteracion-17).
     "DEFAULT_FILTER_BACKENDS": (

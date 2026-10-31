@@ -2,7 +2,6 @@
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 
 from apps.catalog.filters import TariffFilter
 from apps.catalog.selectors import list_tariffs_for_owner
@@ -10,6 +9,7 @@ from apps.catalog.serializers import TariffSerializer
 from apps.catalog.services import delete_tariff, delete_tariffs
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
+from common.permissions import IsVerifiedUser
 
 
 class TariffViewSet(BulkActionMixin, viewsets.ModelViewSet):
@@ -19,7 +19,7 @@ class TariffViewSet(BulkActionMixin, viewsets.ModelViewSet):
     """
 
     serializer_class = TariffSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = TariffFilter
     search_fields = ("name", "description")
     ordering_fields = ("name", "unit_price", "created_at")

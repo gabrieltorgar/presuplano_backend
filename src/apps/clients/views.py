@@ -2,7 +2,6 @@
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 
 from apps.clients.filters import ClientFilter
 from apps.clients.selectors import list_clients_for_owner
@@ -10,6 +9,7 @@ from apps.clients.serializers import ClientSerializer
 from apps.clients.services import delete_client, delete_clients
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
+from common.permissions import IsVerifiedUser
 
 
 class ClientViewSet(BulkActionMixin, viewsets.ModelViewSet):
@@ -19,7 +19,7 @@ class ClientViewSet(BulkActionMixin, viewsets.ModelViewSet):
     """
 
     serializer_class = ClientSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = ClientFilter
     search_fields = ("name", "phone", "email")
     ordering_fields = ("name", "created_at")

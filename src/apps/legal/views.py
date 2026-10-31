@@ -2,7 +2,7 @@
 
 from django.http import Http404
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from apps.legal import documents
 from apps.legal.serializers import AcceptanceSerializer
 from apps.legal.services import client_ip, record_acceptance, status_for
+from common.permissions import IsVerifiedUser
 
 
 class LegalDocumentsView(APIView):
@@ -51,7 +52,7 @@ class LegalDocumentView(APIView):
 class LegalAcceptView(APIView):
     """POST /api/legal/accept/ — aceptar las versiones vigentes."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def post(self, request: Request) -> Response:
         serializer = AcceptanceSerializer(data=request.data)
