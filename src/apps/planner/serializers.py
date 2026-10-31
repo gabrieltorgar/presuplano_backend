@@ -6,6 +6,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from apps.planner.models import Plan
+from common.validators import IMAGES, validate_upload
 
 
 class PlanSummarySerializer(serializers.ModelSerializer):
@@ -85,6 +86,13 @@ class PlanSerializer(serializers.ModelSerializer):
 MEASURE_MUST_BE_POSITIVE = "La medida debe ser mayor que 0"
 
 
+#: Lo que se convierte: PNG, JPG y WEBP (photo_conversion.SUPPORTED_FORMATS).
+PHOTO_TYPES = {k: v for k, v in IMAGES.items() if v != "image/gif"}
+#: Una foto de teléfono de 48 megapíxeles cabe; una bomba de descompresión, no.
+PHOTO_MAX_PIXELS = 50_000_000
+UNSUPPORTED_PHOTO = "Formato de imagen no admitido"
+
+
 class PhotoInputSerializer(serializers.Serializer):
     """The photo of a paper plan, already shrunk by the browser (US-129)."""
 
@@ -128,7 +136,18 @@ class PhotoInputSerializer(serializers.Serializer):
         return given or None
 
     def validate_photo(self, value):
-        if value.size > settings.PHOTO_PLAN_MAX_BYTES:
-            limit = settings.PHOTO_PLAN_MAX_BYTES // (1024 * 1024)
-            raise serializers.ValidationError(f"La foto pesa más de {limit} MB")
+        """Una imagen de verdad, entera y que cabe (API-02, iteracion-26 #19).
+
+        Antes sólo se medía: una foto con la firma bien y los datos rotos llegaba
+        a Claude, o a un 500 al prepararla.
+        """
+        limit = settings.PHOTO_PLAN_MAX_BYTES
+        validate_upload(
+            value,
+            allowed=PHOTO_TYPES,
+            max_bytes=limit,
+            max_pixels=PHOTO_MAX_PIXELS,
+            too_big=f"La foto pesa más de {limit // (1024 * 1024)} MB",
+            not_allowed=UNSUPPORTED_PHOTO,
+        )
         return value

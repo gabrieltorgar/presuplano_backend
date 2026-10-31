@@ -373,9 +373,20 @@ RECAPTCHA_HOSTNAMES = env.list(
     "RECAPTCHA_HOSTNAMES", default=["localhost"] if DEBUG else ["itzaka.com"]
 )
 
+# --- Subidas (API-02, iteracion-26 #19) ---
+# Lo más que pesa un archivo que viaja por la API. Una función de Vercel no
+# recibe cuerpos de más de 4.5 MB (responde 413 antes de Django, y la SPA lo lee
+# como «Sin conexión»): 4 MiB deja lugar al resto del formulario. Los topes de
+# cada subida no pasan de él, y en Vercel uno mayor detiene el despliegue
+# (core/checks.py, core.E002). Lo más grande tendría que ir directo al bucket
+# por una subida firmada, que todavía no existe.
+UPLOAD_MAX_BYTES = env.int("UPLOAD_MAX_BYTES", default=4 * 1024 * 1024)
+
 # Tope de lo que puede viajar adjunto en un correo. Un PDF de cotización pesa
-# kilobytes; uno con fotos de avance, no tanto como para pagarlo en base64.
-DOCUMENT_EMAIL_MAX_BYTES = env.int("DOCUMENT_EMAIL_MAX_BYTES", default=8 * 1024 * 1024)
+# kilobytes; uno con fotos de avance, no tanto como para pagarlo en base64. El
+# PDF llega por la API: no pasa de UPLOAD_MAX_BYTES (antes 8 MB, que en Vercel
+# nunca llegaban).
+DOCUMENT_EMAIL_MAX_BYTES = env.int("DOCUMENT_EMAIL_MAX_BYTES", default=UPLOAD_MAX_BYTES)
 
 # --- Resend (correo saliente por su API HTTP, no por el mailer de Django) ---
 # Se recortan: un salto de línea o un espacio pegado al pegar el valor
@@ -397,8 +408,10 @@ APP_BASE_URL = env.str("APP_BASE_URL", default=_SPA_ORIGIN)
 PLAN_MAX_BYTES = env.int("PLAN_MAX_BYTES", default=4 * 1024 * 1024)
 
 # Tope por archivo del editor (una textura, una malla). Lo que no cabe en el
-# documento del plano vive en el bucket, pero tampoco sin límite.
-PLAN_ASSET_MAX_BYTES = env.int("PLAN_ASSET_MAX_BYTES", default=10 * 1024 * 1024)
+# documento del plano vive en el bucket, pero tampoco sin límite; llega por la
+# API, así que no pasa de UPLOAD_MAX_BYTES (antes 10 MB, que en Vercel nunca
+# llegaban).
+PLAN_ASSET_MAX_BYTES = env.int("PLAN_ASSET_MAX_BYTES", default=UPLOAD_MAX_BYTES)
 
 # --- Foto de un plano en papel → plano editable (US-129) ---
 # La lee Claude con visión. Sin llave la conversión responde «no disponible»
@@ -409,7 +422,7 @@ PHOTO_PLAN_MODEL = env.str("PHOTO_PLAN_MODEL", default="claude-opus-5-5")
 PHOTO_PLAN_DAILY_LIMIT = env.int("PHOTO_PLAN_DAILY_LIMIT", default=5)
 # El navegador la comprime antes de enviarla; Vercel no acepta cuerpos de más
 # de ~4.5 MB en una función, así que lo que pase de 4 MB ni se intenta.
-PHOTO_PLAN_MAX_BYTES = env.int("PHOTO_PLAN_MAX_BYTES", default=4 * 1024 * 1024)
+PHOTO_PLAN_MAX_BYTES = env.int("PHOTO_PLAN_MAX_BYTES", default=UPLOAD_MAX_BYTES)
 OTP_TTL_MINUTES = env("OTP_TTL_MINUTES")
 
 # --- CORS ---

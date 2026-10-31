@@ -27,6 +27,8 @@ PDF = {"pdf": "application/pdf"}
 
 TOO_BIG = "El archivo excede el tamaño máximo."
 NOT_ALLOWED = "Tipo de archivo no permitido."
+CORRUPT = "Imagen corrupta o demasiado grande."
+TOO_MANY_PIXELS = "La imagen excede las dimensiones máximas."
 
 _HEAD = 2048
 
@@ -58,21 +60,30 @@ def validate_upload(
     kind = filetype.guess(_head(file))
     if kind is None or kind.mime not in allowed.values():
         raise ValidationError(not_allowed)
-    if kind.mime.startswith("image/") and max_pixels:
-        _check_pixels(file, max_pixels)
+    if kind.mime.startswith("image/"):
+        _check_image(file, max_pixels or Image.MAX_IMAGE_PIXELS)
     return kind.extension
 
 
-def _check_pixels(file, max_pixels: int) -> None:
+def _check_image(file, max_pixels: int) -> None:
+    """Pillow la abre entera (``verify``) y cuenta sus píxeles (iteracion-26 #19).
+
+    Toda imagen, también las que no traen tope propio (las texturas): una con
+    la firma bien y los datos rotos era un 500 al guardarla o al leerla.
+    """
     try:
         with Image.open(file) as image:
+            image.verify()
+        file.seek(0)
+        with Image.open(file) as image:
             width, height = image.size
-    except (Image.DecompressionBombError, OSError) as exc:
-        raise ValidationError("Imagen corrupta o demasiado grande.") from exc
+    except Exception as exc:  # SyntaxError, OSError, ValueError, DecompressionBomb…
+        raise ValidationError(CORRUPT) from exc
     finally:
         file.seek(0)
+    # Fuera del try: su propio mensaje nunca se vuelve «corrupta».
     if width * height > max_pixels:
-        raise ValidationError("La imagen excede las dimensiones máximas.")
+        raise ValidationError(TOO_MANY_PIXELS)
 
 
 #: Las mallas y materiales de texto que el editor sabe leer.

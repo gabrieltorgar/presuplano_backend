@@ -3,6 +3,7 @@
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
@@ -14,7 +15,6 @@ from common.validators import IMAGES, validate_upload
 
 logger = logging.getLogger("apps")
 
-MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 # Una foto de 48 megapíxeles cabe; una bomba de descompresión, no.
 MAX_IMAGE_PIXELS = 50_000_000
 
@@ -213,7 +213,8 @@ def add_evidence(*, progress: Progress, image) -> Evidence:
     ext = validate_upload(
         image,
         allowed=IMAGES,
-        max_bytes=MAX_IMAGE_BYTES,
+        # El tope de la API: cabe en el cuerpo de Vercel (antes 5 MB, iteracion-26 #19).
+        max_bytes=settings.UPLOAD_MAX_BYTES,
         max_pixels=MAX_IMAGE_PIXELS,
         too_big="La imagen supera el tamaño máximo permitido",
         not_allowed="Solo se permiten archivos de imagen",

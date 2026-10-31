@@ -150,6 +150,7 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `THROTTLE_COSTLY` | Per account per hour for actions that send email or call a paid API (documents, invitations, photo plans). |
 | `ADMIN_LOGIN_MAX_FAILURES` | Failed admin logins from one IP or for one username before a 15-minute lock (429). |
 | `NUM_PROXIES` | Proxies in front of Django (Vercel = 1), so limits key on the client IP. |
+| `UPLOAD_MAX_BYTES` | Max bytes per file through the API (default 4 MiB): a Vercel function rejects bodies over 4.5 MB before Django. On Vercel any upload cap over 4 MiB stops the deploy (core.E002). |
 | `R2_ACCOUNT_ID` | — |
 | `R2_ACCESS_KEY_ID` | — |
 | `R2_SECRET_ACCESS_KEY` | — |
@@ -251,6 +252,16 @@ Pendiente: la tabla sale de `uv run python src/manage.py api_routes --format md`
 La API lee sólo JSON: otro tipo de cuerpo responde 415. Las subidas
 (logotipo, evidencia de un avance, foto de un plano, texturas y modelos, y el
 PDF que se envía por correo) son `multipart/form-data`, declarado en su vista.
+Cada archivo cabe en `UPLOAD_MAX_BYTES` (4 MiB por omisión): una función de
+Vercel corta en 4.5 MB el cuerpo entero antes de Django, y en Vercel un tope
+mayor detiene el despliegue (`core/checks.py`, `core.E002`, que revisa también
+`PLAN_ASSET_MAX_BYTES`, `DOCUMENT_EMAIL_MAX_BYTES` y `PHOTO_PLAN_MAX_BYTES`;
+el logotipo tiene el suyo, 2 MB). Cada subida se juzga por su contenido
+(`common/validators.py`): la firma real (filetype), y toda imagen pasa por
+Pillow `verify()` y un tope de píxeles (rota o descomunal es un 400, nunca un
+500). El nombre guardado lo pone el servidor: un uuid y la extensión del tipo
+detectado. Archivos de más de 4 MiB no tienen todavía una subida firmada al
+bucket: hoy no entran.
 
 Cabeceras de seguridad en cada respuesta (`core/settings_csp.py`,
 `core/middleware.py`): la API lleva la Content-Security-Policy aplicada
@@ -376,7 +387,7 @@ remitente es el de prueba (`common/checks.py`, corre con `migrate`).
 | `RESEND_FROM` | Remitente de un dominio verificado en Resend; el de prueba (`onboarding@resend.dev`) sólo entrega al dueño de la cuenta |
 | `APP_BASE_URL` | Dominio de la aplicación en los enlaces de los correos |
 | `REQUIRE_EMAIL_DELIVERY` | Correo obligatorio; encendido por omisión con `VERCEL_ENV=production` |
-| `DOCUMENT_EMAIL_MAX_BYTES` | Tope del PDF que viaja adjunto |
+| `DOCUMENT_EMAIL_MAX_BYTES` | Tope del PDF que viaja adjunto (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### Archivos — Cloudflare R2
 
@@ -389,6 +400,7 @@ Logotipos, evidencia de los avances y las texturas y modelos del editor, por
 | `R2_ENDPOINT_URL`, `R2_PUBLIC_URL` | Endpoint S3 y host público de los objetos |
 | `R2_SIGNED_URLS`, `R2_SIGNED_URL_SECONDS` | URLs firmadas que vencen, para un bucket privado |
 | `USE_R2` | Fuerza R2 encendido o apagado |
+| `PLAN_ASSET_MAX_BYTES` | Tope por textura o modelo del editor (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### IA — Anthropic
 
@@ -400,7 +412,7 @@ La foto de un plano en papel se convierte en un plano editable
 | `ANTHROPIC_API_KEY` | Llave de la API |
 | `PHOTO_PLAN_MODEL` | Modelo que lee la foto |
 | `PHOTO_PLAN_DAILY_LIMIT` | Conversiones por cuenta al día |
-| `PHOTO_PLAN_MAX_BYTES` | Tope de la foto |
+| `PHOTO_PLAN_MAX_BYTES` | Tope de la foto (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### reCAPTCHA v3 — Google
 
