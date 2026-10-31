@@ -66,10 +66,13 @@ CSRF_COOKIE_NAME = env("CSRF_COOKIE_NAME", default="csrftoken")
 # de espera (429 con Retry-After).
 ADMIN_LOGIN_MAX_FAILURES = env.int("ADMIN_LOGIN_MAX_FAILURES", default=5)
 
-# --- Cabeceras (siempre) ---
-# Explícito aunque sea el valor de Django: ninguna dirección de la API sale
-# completa hacia otro sitio.
+# --- Cabeceras (siempre, también con DEBUG: iteracion-26 #18) ---
+# Explícitas aunque sean los valores de Django. «same-origin», más estricta que
+# «strict-origin-when-cross-origin»: la API y el admin no mandan ni su origen a
+# otro sitio (la SPA tiene su propia política en su vercel.json).
 SECURE_REFERRER_POLICY = "same-origin"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
 
 # --- Endurecimiento de seguridad para producción ---
 if not DEBUG:
@@ -79,6 +82,4 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    X_FRAME_OPTIONS = "DENY"

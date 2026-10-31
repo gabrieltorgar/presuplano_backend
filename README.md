@@ -252,6 +252,13 @@ La API lee sólo JSON: otro tipo de cuerpo responde 415. Las subidas
 (logotipo, evidencia de un avance, foto de un plano, texturas y modelos, y el
 PDF que se envía por correo) son `multipart/form-data`, declarado en su vista.
 
+Cabeceras de seguridad en cada respuesta (`core/settings_csp.py`,
+`core/middleware.py`): la API lleva la Content-Security-Policy aplicada
+`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`
+(sirve JSON: nada que cargar ni quién la enmarque), además de
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` y
+`Referrer-Policy: same-origin`, también con `DEBUG`.
+
 Todas las listas paginan en el servidor: `?page=&page_size=` (20 por omisión,
 máximo 100) y responden `{count, next, previous, results}`. Cada una declara
 sus filtros (`filters.py` de su app; `?campo=a,b` para varios valores), su
@@ -427,6 +434,13 @@ host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
   de simplejwt) se consultan ahí, de solo lectura las emitidas. Los códigos de
   verificación también son de solo lectura (para qué, intentos y vigencia),
   sin su huella.
+- CSP propia del admin (`ADMIN_CSP`, puesta por `core.middleware.AdminCSPMiddleware`
+  justo después de `csp.middleware.CSPMiddleware`): sólo bajo `/admin/` (y, con
+  `DEBUG`, en el HTML de la API navegable) Unfold recibe `'unsafe-eval'` en
+  `script-src` (Alpine) y `'unsafe-inline'` en `style-src`; scripts en línea,
+  nunca. Las imágenes, del propio admin y del bucket (`R2_PUBLIC_URL`, o el
+  endpoint S3 con el bucket delante si las direcciones van firmadas): la vista
+  previa de logotipos y fotos.
 - El login del admin (`core/admin_login.py`) se cierra 15 minutos tras
   `ADMIN_LOGIN_MAX_FAILURES` intentos fallidos (5 por omisión) desde una
   dirección o para un usuario: 429 con `Retry-After`.

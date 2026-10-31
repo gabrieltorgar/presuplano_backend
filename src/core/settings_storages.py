@@ -12,6 +12,8 @@ cloud credentials. Static files keep Django's storage — WhiteNoise serves them
 finders (see ``core/env.py``); **only media goes to R2**.
 """
 
+from urllib.parse import urlsplit
+
 import environ
 
 env = environ.Env()
@@ -86,3 +88,16 @@ if USE_R2:
             querystring_expire=R2_SIGNED_URL_SECONDS,
             custom_domain=None,
         )
+
+# De dónde salen los archivos que el admin muestra (la vista previa de un
+# logotipo o una foto): la CSP del admin los deja en img-src (settings_csp.py,
+# iteracion-26 #18). El dominio público, o el endpoint S3 con el bucket delante
+# (estilo virtual) cuando no lo hay o las direcciones van firmadas.
+MEDIA_ORIGINS: list[str] = []
+if USE_R2:
+    _media = STORAGES["default"]["OPTIONS"]
+    if _media["custom_domain"]:
+        MEDIA_ORIGINS = [f"https://{_media['custom_domain']}"]
+    else:
+        _endpoint = urlsplit(R2_ENDPOINT_URL)
+        MEDIA_ORIGINS = [f"{_endpoint.scheme}://{R2_BUCKET_NAME}.{_endpoint.netloc}"]

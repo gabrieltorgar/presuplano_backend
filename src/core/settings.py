@@ -127,9 +127,10 @@ MIDDLEWARE = [
     # WhiteNoise serves static files (admin/DRF) from the serverless function;
     # must sit right after SecurityMiddleware.
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    # Content-Security-Policy (settings_csp.py), con lo que Unfold necesita
-    # sólo bajo /admin/ (common/csp.py).
-    "common.csp.ScopedCSPMiddleware",
+    # Content-Security-Policy (settings_csp.py): la de la API, y enseguida la
+    # del admin, que la reemplaza bajo /admin/ (su respuesta corre primero).
+    "csp.middleware.CSPMiddleware",
+    "core.middleware.AdminCSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
