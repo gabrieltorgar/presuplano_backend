@@ -10,6 +10,7 @@ from django.conf import settings
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.management import call_command
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -288,6 +289,16 @@ def end_all_sessions(*, user: User) -> None:
     BlacklistedToken.objects.bulk_create(
         [BlacklistedToken(token=token) for token in pendientes], ignore_conflicts=True
     )
+
+
+def flush_expired_sessions() -> None:
+    """Borra de la lista de sesiones las que ya vencieron (``flushexpiredtokens``).
+
+    Cada refresh emitido queda registrado y nada más lo borraba: la tabla
+    crecía sin límite. Lo corre el cron diario de Vercel (iteracion-26 #11).
+    """
+    call_command("flushexpiredtokens")
+    logger.info("Expired sessions flushed")
 
 
 def login_user(*, email: str, password: str) -> tuple[User, RefreshToken]:

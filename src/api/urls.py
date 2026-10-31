@@ -3,10 +3,17 @@
 from django.urls import include, path
 
 from api.views import HealthView
+from apps.accounts.views import FlushExpiredTokensView
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
     path("auth/", include("apps.accounts.urls")),
+    # Cron diario de Vercel (vercel.json → crons), con CRON_SECRET.
+    path(
+        "cron/flush-expired-tokens/",
+        FlushExpiredTokensView.as_view(),
+        name="cron-flush-expired-tokens",
+    ),
     path("", include("apps.catalog.urls")),
     path("", include("apps.clients.urls")),
     path("", include("apps.quotes.urls")),

@@ -16,8 +16,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.serializers import (
@@ -32,6 +31,7 @@ from apps.accounts.serializers import (
     PasswordResetRequestSerializer,
     RegisterSerializer,
     ResendOtpSerializer,
+    SessionRefreshSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
@@ -40,6 +40,7 @@ from apps.accounts.services import (
     change_password,
     confirm_email_change,
     delete_account,
+    flush_expired_sessions,
     get_my_organization,
     login_user,
     normalize_email,
@@ -63,6 +64,7 @@ from common.auth_cookies import (
     set_token_cookies,
 )
 from common.authentication import CredentialExchangeMixin
+from common.cron import CronSecretAuthentication, IsCronJob
 from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
 
@@ -208,10 +210,10 @@ class SessionRefreshView(APIView):
 
     def post(self, request: Request) -> Response:
         raw = refresh_from(request)
-        serializer = TokenRefreshSerializer(data={"refresh": raw or ""})
+        serializer = SessionRefreshSerializer(data={"refresh": raw or ""})
         try:
             serializer.is_valid(raise_exception=True)
-        except (InvalidToken, TokenError, ValidationError):
+        except (AuthenticationFailed, TokenError, ValidationError):
             response = Response(
                 {"detail": "La sesión terminó. Vuelve a iniciar sesión."},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -248,6 +250,23 @@ class LogoutView(APIView):
         response = Response(status=status.HTTP_204_NO_CONTENT)
         clear_session_cookies(response)
         return response
+
+
+class FlushExpiredTokensView(APIView):
+    """GET /api/cron/flush-expired-tokens/ — borrar las sesiones vencidas.
+
+    La llama el cron diario de Vercel (vercel.json → crons) con
+    ``Authorization: Bearer <CRON_SECRET>``. Ninguna sesión la abre: sin el
+    secreto configurado, sin la cabecera o con otro secreto responde 401 y
+    no corre (common/cron.py).
+    """
+
+    authentication_classes = [CronSecretAuthentication]
+    permission_classes = [IsCronJob]
+
+    def get(self, request: Request) -> Response:
+        flush_expired_sessions()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PasswordResetRequestView(CredentialExchangeMixin, APIView):

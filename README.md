@@ -141,6 +141,7 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `RESEND_FROM` | A sender of a domain verified in Resend: its test sender (onboarding@resend.dev) only delivers to the Resend account owner, and production refuses it too. |
 | `APP_BASE_URL` | Where the links in the emails lead: the application, not the API (production https://itzaka.com, develop https://dev.itzaka.com). |
 | `REQUIRE_EMAIL_DELIVERY` | On by default where VERCEL_ENV=production: `migrate` stops the deploy when mail cannot go out, and a mail that cannot be sent is logged as an error. |
+| `CRON_SECRET` | Vercel sends it as «Authorization: Bearer …» to the cron routes; without it they answer 401 and never run. |
 | `THROTTLE_ANON` | Run `uv run python src/manage.py createcachetable` once after migrating. |
 | `THROTTLE_USER` | — |
 | `NUM_PROXIES` | Proxies in front of Django (Vercel = 1), so limits key on the client IP. |
@@ -261,7 +262,10 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   (`POST /api/auth/login/`; `POST /api/auth/refresh/` rota el refresh de su
   cookie —nunca uno del cuerpo— y el anterior queda en la lista negra;
   `POST /api/auth/logout/`). Acceso, registro, código y recuperación no leen la
-  sesión: una cookie vieja no los bloquea. La SPA pide
+  sesión: una cookie vieja no los bloquea. Cada token lleva la huella de la
+  contraseña (`CHECK_REVOKE_TOKEN`): cambiarla, recuperarla o ponerla en el admin
+  deja fuera al instante a toda sesión anterior; quien la cambió sigue dentro con
+  una nueva. La SPA pide
   `GET /api/auth/csrf/` al arrancar: deja la cookie CSRF (`CSRF_COOKIE_NAME`,
   `csrftoken` por omisión) y cada escritura lleva la cabecera `X-CSRFToken`. El
   navegador nunca lee ni envía tokens: no hay `Authorization: Bearer` para la
@@ -383,6 +387,10 @@ Vercel (`vercel.json`):
   `DATABASE_URL` (pooler), `DATABASE_URL_UNPOOLED` o `DATABASE_URL_MIGRATIONS`:
   el build migra por ahí. Vercel instala desde `uv.lock` (no hay
   `requirements.txt`).
+- Cron diario de Vercel (`crons` de `vercel.json`, sólo en Production):
+  `GET /api/cron/flush-expired-tokens/` borra las sesiones vencidas. Vercel lo
+  llama con `Authorization: Bearer <CRON_SECRET>`; sin `CRON_SECRET` en el
+  entorno responde 401 y no corre.
 - Verificación después de desplegar: `/api/health/` responde 200 y
   `/admin/login/` carga con sus estilos.
 

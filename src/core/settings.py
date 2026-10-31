@@ -283,7 +283,19 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": False,
+    # Cada token lleva la huella de la contraseña con la que nació: cambiarla
+    # (en la API, al recuperarla o en el admin) deja fuera a toda sesión de
+    # antes, también su access, y la renovación revisa lo mismo
+    # (SessionRefreshSerializer). Los tokens emitidos antes de encenderlo no
+    # la traen: se rechazan una vez y se vuelve a entrar (iteracion-26 #11).
+    "CHECK_REVOKE_TOKEN": True,
 }
+
+# --- Tareas programadas (cron de Vercel, vercel.json → crons) ---
+# Vercel manda «Authorization: Bearer <CRON_SECRET>»; sin el secreto las
+# rutas del cron responden 401 y no corren (common/cron.py). La de cada día
+# borra las sesiones vencidas (flushexpiredtokens).
+CRON_SECRET = env.str("CRON_SECRET", default="").strip()
 
 # --- OTP (universal code for the MVP; real SMS/WhatsApp integration later) ---
 # Con correo configurado, una cuenta con correo recibe un código propio y este

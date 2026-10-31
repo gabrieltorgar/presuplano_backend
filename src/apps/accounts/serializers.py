@@ -1,6 +1,10 @@
 """Accounts serializers (input validation only; no business logic)."""
 
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.utils import get_md5_hash_password
 
 from apps.accounts.models import HEX_COLOR_VALIDATOR, Organization, Subscription, User
 from apps.legal.serializers import AcceptanceSerializer
@@ -176,6 +180,29 @@ class DeleteAccountSerializer(serializers.Serializer):
             "blank": "Escribe tu contraseña para confirmar",
         },
     )
+
+
+class SessionRefreshSerializer(TokenRefreshSerializer):
+    """El refresh de la cookie: de una cuenta que existe y de su contraseña de hoy.
+
+    simplejwt revisa la huella de la contraseña (``CHECK_REVOKE_TOKEN``) al
+    autenticar, no al renovar: sin esto, un refresh de antes de un cambio hecho
+    fuera de la API —o de antes de encender la revisión— daría access que
+    ninguna ruta acepta, y el de una cuenta borrada terminaba en un 500.
+    """
+
+    def validate(self, attrs: dict) -> dict:
+        refresh = self.token_class(attrs["refresh"])
+        user = User.objects.filter(
+            **{api_settings.USER_ID_FIELD: refresh.get(api_settings.USER_ID_CLAIM)}
+        ).first()
+        if user is None:
+            raise InvalidToken("La cuenta de la sesión ya no existe.")
+        if api_settings.CHECK_REVOKE_TOKEN and refresh.get(
+            api_settings.REVOKE_TOKEN_CLAIM
+        ) != get_md5_hash_password(user.password):
+            raise InvalidToken("La contraseña cambió después de la sesión.")
+        return super().validate(attrs)
 
 
 class UserAccountSerializer(serializers.ModelSerializer):

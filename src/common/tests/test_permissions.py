@@ -31,6 +31,11 @@ CLIENTS = "/api/clients/"
 #: escribir su código.
 UNVERIFIED_REACHES = {("me", "get")}
 
+#: Rutas que no son de ninguna cuenta: las abre un secreto, no una sesión.
+MACHINE_ROUTES = {
+    "cron-flush-expired-tokens": "el cron de Vercel, con CRON_SECRET (#11)",
+}
+
 
 def sesion_de(user) -> APIClient:
     """Un navegador con la sesión de esa cuenta en sus cookies."""
@@ -116,7 +121,7 @@ def test_every_private_route_refuses_an_unverified_account(sin_verificar) -> Non
     for route in api_routes():
         if is_format_twin(route) or not route.permissions:
             continue
-        if AllowAny in route.permissions:
+        if AllowAny in route.permissions or route.name in MACHINE_ROUTES:
             continue
         url = sample_url(route)
         for method in route.methods:

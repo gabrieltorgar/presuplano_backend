@@ -182,6 +182,7 @@ def test_lifetimes_rotation_and_blacklist() -> None:
     assert jwt["REFRESH_TOKEN_LIFETIME"] <= timedelta(days=7)
     assert jwt["ROTATE_REFRESH_TOKENS"] is True
     assert jwt["BLACKLIST_AFTER_ROTATION"] is True
+    assert jwt["CHECK_REVOKE_TOKEN"] is True
     assert "rest_framework_simplejwt.token_blacklist" in settings.INSTALLED_APPS
     assert settings.CSRF_COOKIE_HTTPONLY is False
 
