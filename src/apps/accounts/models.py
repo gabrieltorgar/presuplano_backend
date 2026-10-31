@@ -195,8 +195,10 @@ class OtpCode(models.Model):
 
     Hasta ahora el código era uno solo para todos (``OTP_UNIVERSAL_CODE``):
     servía para el MVP porque no había por dónde mandarlo. Con el correo sí lo
-    hay, así que cada cuenta con correo recibe el suyo, se guarda cifrado —lo
-    que llega a la base no sirve para entrar— y muere al usarse o al vencer.
+    hay, así que cada cuenta con correo recibe el suyo, se guarda su HMAC con
+    la ``SECRET_KEY`` —lo que llega a la base no sirve para entrar, ni una copia
+    de ella sola— y muere al usarse, al vencer o al agotar sus intentos
+    (iteracion-26 #13).
     """
 
     class Purpose(models.TextChoices):

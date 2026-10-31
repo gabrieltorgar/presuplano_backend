@@ -280,6 +280,14 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   nueva, verificada: no se vuelve a pedir la contraseña. Límite del registro:
   5 por hora y dirección (`register`). La contraseña se recupera también con un
   código.
+- Códigos de un solo uso (`OtpCode`, en `apps/accounts`): 6 dígitos de
+  `secrets.randbelow`, guardados como HMAC con la `SECRET_KEY` (nunca en claro
+  ni en el admin) y comparados en tiempo constante; vencen a los
+  `OTP_TTL_MINUTES` y mueren a los `OTP_MAX_ATTEMPTS` intentos fallidos, que se
+  cuentan en la fila bajo `select_for_update`. Pedir otro anula el anterior. El
+  campo `code` acepta sólo `^[0-9]{6}\Z`, y un código equivocado responde 400
+  `{"code": ["Código de verificación inválido"]}` sin lanzar excepción: el
+  intento cuenta también con `ATOMIC_REQUESTS`.
 - Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
   verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
   `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin
@@ -359,7 +367,9 @@ host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
 
 - Panel en `/admin/` del dominio de la API (Django Unfold); cada modelo de
   `apps/` tiene su registro, y las sesiones emitidas y anuladas (lista negra
-  de simplejwt) se consultan ahí, de solo lectura las emitidas.
+  de simplejwt) se consultan ahí, de solo lectura las emitidas. Los códigos de
+  verificación también son de solo lectura (para qué, intentos y vigencia),
+  sin su huella.
 - Acceso: sólo el equipo de Itzaka, con un superusuario creado con
   `createsuperuser`; las cuentas de los clientes y sus colaboradores no entran
   al admin. Las credenciales nunca viven en el repositorio ni en este README.

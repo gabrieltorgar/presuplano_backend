@@ -36,6 +36,7 @@ from apps.accounts.serializers import (
     VerifyOtpSerializer,
 )
 from apps.accounts.services import (
+    AccountNotVerified,
     cancel_email_change,
     change_password,
     confirm_email_change,
@@ -67,6 +68,11 @@ from common.authentication import CredentialExchangeMixin
 from common.cron import CronSecretAuthentication, IsCronJob
 from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
+
+#: Lo que responde un código equivocado, vencido, usado o agotado. Se responde,
+#: no se lanza (iteracion-26 #13): con ``ATOMIC_REQUESTS`` (#22) una excepción
+#: revertiría el intento que se acaba de contar.
+INVALID_CODE = {"code": ["Código de verificación inválido"]}
 
 
 @method_decorator(ensure_csrf_cookie, name="get")
@@ -148,6 +154,8 @@ class VerifyOtpView(CredentialExchangeMixin, APIView):
         serializer = VerifyOtpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = verify_account(**serializer.validated_data)
+        if user is None:
+            return Response(INVALID_CODE, status=status.HTTP_400_BAD_REQUEST)
         response = Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
         set_session_cookies(response, start_session(user=user))
         get_token(request)
@@ -204,6 +212,11 @@ class LoginView(CredentialExchangeMixin, APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user, session = login_user(**serializer.validated_data)
+        if session is None:
+            # Sin verificar: el código ya salió. Se responde el 403 (no se lanza)
+            # para que ese código quede en la base con ATOMIC_REQUESTS.
+            unverified = AccountNotVerified(user.verification_identity)
+            return Response(unverified.detail, status=unverified.status_code)
         response = Response(
             {"user": UserAccountSerializer(user).data}, status=status.HTTP_200_OK
         )
@@ -327,6 +340,8 @@ class PasswordResetConfirmView(CredentialExchangeMixin, APIView):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = reset_password(**serializer.validated_data)
+        if user is None:
+            return Response(INVALID_CODE, status=status.HTTP_400_BAD_REQUEST)
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
@@ -385,6 +400,8 @@ class MyEmailVerifyView(APIView):
         serializer = EmailChangeConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = confirm_email_change(user=request.user, **serializer.validated_data)
+        if user is None:
+            return Response(INVALID_CODE, status=status.HTTP_400_BAD_REQUEST)
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 

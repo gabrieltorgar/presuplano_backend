@@ -8,12 +8,12 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import password_validation
-from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.management import call_command
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare, salted_hmac
 from rest_framework.exceptions import (
     AuthenticationFailed,
     NotFound,
@@ -46,7 +46,9 @@ class AccountNotVerified(PermissionDenied):
     would break the day the wording changes.
 
     Lleva además a dónde salió el código —el correo de la cuenta—, para que la
-    pantalla siguiente lo diga sin volver a preguntarlo.
+    pantalla siguiente lo diga sin volver a preguntarlo. El acceso lo responde,
+    no lo lanza (iteracion-26 #13): el código que acaba de salir tiene que
+    quedar en la base también con ``ATOMIC_REQUESTS``.
     """
 
     def __init__(self, identity: str = "") -> None:
@@ -92,8 +94,24 @@ def uses_universal_code(user: User) -> bool:
     return settings.OTP_UNIVERSAL_CODE_ENABLED and not mail.is_configured()
 
 
+def otp_digest(*, user_pk, purpose: str, raw: str) -> str:
+    """La huella del código: HMAC-SHA256 con la ``SECRET_KEY`` (iteracion-26 #13).
+
+    Una copia de la base sola (un respaldo, una rama de Neon) no revela ningún
+    código vivo, y no cuesta lo que un hash de contraseña en cada intento.
+    """
+    return salted_hmac(
+        "apps.accounts.otp", f"{user_pk}:{purpose}:{raw}", algorithm="sha256"
+    ).hexdigest()
+
+
 def issue_otp(*, user: User, purpose: str) -> str:
-    """Un código nuevo para esa cuenta y ese motivo; el anterior deja de valer."""
+    """Un código nuevo para esa cuenta y ese motivo; el anterior deja de valer.
+
+    Los anteriores se anulan con ``update`` (nunca se borran: sus intentos
+    quedan para el admin). El código sólo sale hacia el correo: aquí se guarda
+    su huella.
+    """
     OtpCode.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(
         used_at=timezone.now()
     )
@@ -101,34 +119,56 @@ def issue_otp(*, user: User, purpose: str) -> str:
     OtpCode.objects.create(
         user=user,
         purpose=purpose,
-        code_hash=make_password(code),
+        code_hash=otp_digest(user_pk=user.pk, purpose=purpose, raw=code),
         expires_at=timezone.now() + timedelta(minutes=settings.OTP_TTL_MINUTES),
     )
     return code
 
 
+def _live_code(*, user: User, purpose: str) -> OtpCode | None:
+    """El último código vigente, bloqueado hasta que termine la transacción.
+
+    Dos verificaciones a la vez se forman en la fila: la segunda lee lo que
+    dejó la primera (usado, o con un intento más).
+    """
+    return (
+        OtpCode.objects.select_for_update()
+        .filter(
+            user=user,
+            purpose=purpose,
+            used_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+@transaction.atomic
 def check_otp(*, user: User, purpose: str, code: str) -> bool:
     """Si ese código abre esa puerta. Al usarse, se gasta.
 
-    Cada intento fallido cuenta; al llegar a ``OTP_MAX_ATTEMPTS`` el código
-    muere aunque después llegue el correcto: seis dígitos no se adivinan en
-    cinco intentos, sí en un millón.
+    Cada intento fallido cuenta en la fila (``F``, bajo el bloqueo); al llegar a
+    ``OTP_MAX_ATTEMPTS`` el código muere aunque después llegue el correcto: seis
+    dígitos no se adivinan en cinco intentos, sí en un millón. Nunca lanza: quien
+    llama responde el 400, y el intento sobrevive a ``ATOMIC_REQUESTS``.
     """
     if uses_universal_code(user):
-        return secrets.compare_digest(str(code), str(settings.OTP_UNIVERSAL_CODE))
+        return constant_time_compare(str(code), str(settings.OTP_UNIVERSAL_CODE))
 
-    now = timezone.now()
-    live = OtpCode.objects.filter(
-        user=user, purpose=purpose, used_at__isnull=True, expires_at__gt=now
-    )
-    for issued in live:
-        if check_password(str(code), issued.code_hash):
-            issued.used_at = now
-            issued.save(update_fields=["used_at"])
-            return True
+    live = _live_code(user=user, purpose=purpose)
+    if live is None or live.attempts >= settings.OTP_MAX_ATTEMPTS:
+        return False
+    expected = otp_digest(user_pk=user.pk, purpose=purpose, raw=str(code))
+    if constant_time_compare(live.code_hash, expected):
+        live.used_at = timezone.now()
+        live.save(update_fields=["used_at"])
+        return True
 
-    live.update(attempts=F("attempts") + 1)
-    spent = live.filter(attempts__gte=settings.OTP_MAX_ATTEMPTS).update(used_at=now)
+    OtpCode.objects.filter(pk=live.pk).update(attempts=F("attempts") + 1)
+    spent = OtpCode.objects.filter(
+        pk=live.pk, attempts__gte=settings.OTP_MAX_ATTEMPTS
+    ).update(used_at=timezone.now())
     if spent:
         logger.warning(
             "Verification code voided after repeated failures",
@@ -229,12 +269,15 @@ def register_user(
     return user
 
 
-def verify_account(*, email: str, code: str) -> User:
+def verify_account(*, email: str, code: str) -> User | None:
     """Dar por bueno el correo de quien demuestra tener el código.
+
+    Devuelve ``None`` si el código no sirve: la vista responde el 400 y el
+    intento queda contado (iteracion-26 #13).
 
     Raises:
         NotFound: no hay cuenta con ese correo.
-        ValidationError: ya estaba verificada, o el código no es válido.
+        ValidationError: ya estaba verificada.
     """
     user = find_user(email=email)
     if user is None:
@@ -243,7 +286,7 @@ def verify_account(*, email: str, code: str) -> User:
         raise ValidationError("El correo ya está verificado")
 
     if not check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code=code):
-        raise ValidationError("Código de verificación inválido")
+        return None
 
     user.is_email_verified = True
     user.save(update_fields=["is_email_verified", "updated_at"])
@@ -301,16 +344,17 @@ def flush_expired_sessions() -> None:
     logger.info("Expired sessions flushed")
 
 
-def login_user(*, email: str, password: str) -> tuple[User, RefreshToken]:
+def login_user(*, email: str, password: str) -> tuple[User, RefreshToken | None]:
     """Authenticate by email + password and open a session.
 
     Credentials are checked before verification status so that a correct
-    password on an unverified account yields 403 (not 401).
+    password on an unverified account yields 403 (not 401). An unverified
+    account gets its code again and no session (``None``): the view answers the
+    403 (``AccountNotVerified``) instead of raising it, so the code just sent
+    stays in the database under ``ATOMIC_REQUESTS`` (iteracion-26 #13).
 
     Raises:
         AuthenticationFailed: unknown account or wrong password (401).
-        AccountNotVerified: correct credentials but unverified (403); the
-            verification code is sent again on the way out.
     """
     user = find_user(email=email)
     if user is None or not user.check_password(password):
@@ -319,7 +363,7 @@ def login_user(*, email: str, password: str) -> tuple[User, RefreshToken]:
         # Quien entra sin verificar no se quedó fuera: recibe el código otra vez
         # y la pantalla lo lleva a escribirlo, como al registrarse.
         send_verification_code(user=user)
-        raise AccountNotVerified(user.verification_identity)
+        return user, None
 
     session = start_session(user=user)
     logger.info("Login succeeded", extra={"user_id": str(user.pk)})
@@ -338,12 +382,15 @@ def start_password_reset(*, email: str) -> None:
         send_verification_code(user=user, purpose=OtpCode.Purpose.PASSWORD_RESET)
 
 
-def reset_password(*, email: str, code: str, password: str) -> User:
+def reset_password(*, email: str, code: str, password: str) -> User | None:
     """Cambiar la contraseña de quien demuestra tener el correo.
+
+    Devuelve ``None`` si el código no sirve: la vista responde el 400 y el
+    intento queda contado (iteracion-26 #13).
 
     Raises:
         NotFound: no existe una cuenta con ese correo.
-        ValidationError: la contraseña es débil o el código no es el correcto.
+        ValidationError: la contraseña es débil.
     """
     user = find_user(email=email)
     if user is None:
@@ -352,7 +399,7 @@ def reset_password(*, email: str, code: str, password: str) -> User:
     # Antes de gastar el código: una contraseña débil no obliga a pedir otro.
     check_password_strength(password=password, user=user)
     if not check_otp(user=user, purpose=OtpCode.Purpose.PASSWORD_RESET, code=code):
-        raise ValidationError("Código de verificación inválido")
+        return None
 
     user.set_password(password)
     # Quien recupera demuestra lo mismo que quien verifica: que el correo es
@@ -412,20 +459,23 @@ def resend_email_change(*, user: User) -> User:
 
 
 @transaction.atomic
-def confirm_email_change(*, user: User, code: str) -> User:
+def confirm_email_change(*, user: User, code: str) -> User | None:
     """Con el código del correo nuevo, la cuenta pasa a usarlo.
 
     El correo nuevo queda verificado —el código lo prueba— y al de antes le
-    llega un aviso: si el cambio no lo hizo su dueño, así se entera.
+    llega un aviso: si el cambio no lo hizo su dueño, así se entera. Devuelve
+    ``None`` si el código no sirve: la vista responde el 400 y el intento queda
+    contado (iteracion-26 #13).
 
     Raises:
-        ValidationError: no hay cambio pendiente, el código no es válido o el
-            correo lo tomó otra cuenta mientras tanto.
+        ValidationError: no hay cambio pendiente, o el correo lo tomó otra
+            cuenta mientras tanto (el código ya coincidió: revertirlo no borra
+            ningún intento fallido).
     """
     if not user.pending_email:
         raise ValidationError("No tienes un cambio de correo pendiente")
     if not check_otp(user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, code=code):
-        raise ValidationError({"code": "Código de verificación inválido"})
+        return None
     if _email_taken(user.pending_email, by_other_than=user):
         raise ValidationError({"email": "Ese correo ya está registrado"})
 

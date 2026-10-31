@@ -15,6 +15,19 @@ from common.validators import IMAGES, validate_upload
 
 MIN_PASSWORD_LENGTH = 8
 
+#: Seis dígitos ASCII y nada más (iteracion-26 #13): nunca ``\d``, que acepta
+#: dígitos de otras escrituras (``int()`` también los lee).
+OTP_CODE_PATTERN = r"^[0-9]{6}\Z"
+
+
+def otp_code_field(**error_messages) -> serializers.RegexField:
+    """El campo del código de un solo uso, igual en cada serializer que lo recibe."""
+    return serializers.RegexField(
+        OTP_CODE_PATTERN,
+        max_length=6,
+        error_messages={"invalid": "El código son 6 dígitos", **error_messages},
+    )
+
 
 class RegisterSerializer(AcceptanceSerializer):
     """Validates registration input: email, uniqueness, password length and the
@@ -78,7 +91,7 @@ class EmailIdentitySerializer(serializers.Serializer):
 class VerifyOtpSerializer(EmailIdentitySerializer):
     """Validates OTP verification input."""
 
-    code = serializers.CharField(max_length=6)
+    code = otp_code_field()
 
     def validate(self, attrs: dict) -> dict:
         code = attrs.get("code", "")
@@ -135,12 +148,9 @@ class EmailChangeSerializer(serializers.Serializer):
 class EmailChangeConfirmSerializer(serializers.Serializer):
     """El código que llegó al correo nuevo."""
 
-    code = serializers.CharField(
-        max_length=6,
-        error_messages={
-            "required": "Escribe el código que te llegó",
-            "blank": "Escribe el código que te llegó",
-        },
+    code = otp_code_field(
+        required="Escribe el código que te llegó",
+        blank="Escribe el código que te llegó",
     )
 
 

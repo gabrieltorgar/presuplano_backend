@@ -80,6 +80,12 @@ class OrganizationAdmin(ModelAdmin):
 
 @admin.register(OtpCode)
 class OtpCodeAdmin(ModelAdmin):
+    """Auditoría de los códigos: para qué, intentos y vigencia (iteracion-26 #13).
+
+    Nunca muestra su huella (``code_hash``), y los códigos sólo los crea el
+    servicio: aquí no se agregan ni se editan.
+    """
+
     list_display = (
         "user",
         "purpose",
@@ -89,16 +95,17 @@ class OtpCodeAdmin(ModelAdmin):
         "created_at",
     )
     list_filter = ("purpose",)
+    search_fields = ("user__email",)
     list_select_related = ("user",)
-    # Sólo el hash del código vive aquí; no se edita a mano.
-    readonly_fields = (
-        "user",
-        "purpose",
-        "code_hash",
-        "expires_at",
-        "used_at",
-        "attempts",
-    )
+    # Explícitos (nunca exclude): un campo nuevo no aparece solo.
+    fields = ("user", "purpose", "expires_at", "used_at", "attempts", "created_at")
+    readonly_fields = fields
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False
 
 
 @admin.register(OutstandingToken)
