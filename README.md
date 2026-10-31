@@ -359,7 +359,9 @@ revisan la tabla sobre la fila releída con `select_for_update` en su
 transacción: un doble clic, un reintento o dos peticiones a la vez no hacen dos
 proyectos de una cotización ni escriben en un proyecto ya finalizado, y dos
 avances o repartos simultáneos no superan la partida. Las pruebas de
-concurrencia real corren sólo con PostgreSQL (CI).
+concurrencia real (también las de dos verificaciones de un código a la vez)
+corren sólo con PostgreSQL (CI): en SQLite se saltan con su motivo
+(`POSTGRES_ONLY`, `common/tests/concurrency.py`).
 
 ## Autenticación y sesión
 

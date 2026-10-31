@@ -34,6 +34,7 @@ from apps.accounts.serializers import (
 )
 from apps.accounts.services import check_otp, issue_otp
 from apps.accounts.tests.otp_helpers import code_of, wrong
+from common.tests.concurrency import POSTGRES_ONLY
 
 SIGNUP = OtpCode.Purpose.SIGNUP
 RESET = OtpCode.Purpose.PASSWORD_RESET
@@ -371,54 +372,50 @@ class TestAdminDelCodigo:
 
 
 # Bloqueo de fila de verdad: SQLite ignora FOR UPDATE (bloquea la base entera),
-# así que estas dos sólo se registran contra PostgreSQL, que es la base de CI y
-# de producción. No se saltan: en SQLite no existen (test_gate.py bloquea un skip).
-if connection.vendor == "postgresql":
+# así que estas dos sólo corren contra PostgreSQL, la base de CI y de producción.
+# En SQLite se saltan con el motivo de las demás pruebas de concurrencia
+# (POSTGRES_ONLY): antes ni se registraban, y no se notaba que no corrían.
+@POSTGRES_ONLY
+@pytest.mark.django_db(transaction=True)
+class TestDosVerificacionesAlMismoTiempoEnPostgreSQL:
+    """CRD-04.1 · iteracion-26 #13 — ``select_for_update`` sobre el código
+    vivo: dos verificaciones simultáneas se forman en la fila."""
 
-    @pytest.mark.django_db(transaction=True)
-    class TestDosVerificacionesAlMismoTiempoEnPostgreSQL:
-        """CRD-04.1 · iteracion-26 #13 — ``select_for_update`` sobre el código
-        vivo: dos verificaciones simultáneas se forman en la fila."""
+    def _at_once(self, attempt, times: int = 2) -> list:
+        barrier = threading.Barrier(times)
+        results, errors = [], []
 
-        def _at_once(self, attempt, times: int = 2) -> list:
-            barrier = threading.Barrier(times)
-            results, errors = [], []
+        def run() -> None:
+            try:
+                barrier.wait(timeout=10)
+                results.append(attempt())
+            except Exception as error:  # noqa: BLE001 -- se reporta abajo
+                errors.append(error)
+            finally:
+                connections.close_all()
 
-            def run() -> None:
-                try:
-                    barrier.wait(timeout=10)
-                    results.append(attempt())
-                except Exception as error:  # noqa: BLE001 -- se reporta abajo
-                    errors.append(error)
-                finally:
-                    connections.close_all()
+        threads = [threading.Thread(target=run) for _ in range(times)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        assert not errors, errors
+        return results
 
-            threads = [threading.Thread(target=run) for _ in range(times)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join(timeout=30)
-            assert not errors, errors
-            return results
+    def test_two_wrong_codes_at_once_count_two(self, user_factory) -> None:
+        account = user_factory()
+        code = issue_otp(user=account, purpose=SIGNUP)
 
-        def test_two_wrong_codes_at_once_count_two(self, user_factory) -> None:
-            account = user_factory()
-            code = issue_otp(user=account, purpose=SIGNUP)
+        self._at_once(lambda: check_otp(user=account, purpose=SIGNUP, code=wrong(code)))
 
-            self._at_once(
-                lambda: check_otp(user=account, purpose=SIGNUP, code=wrong(code))
-            )
+        assert OtpCode.objects.get(user=account).attempts == 2
 
-            assert OtpCode.objects.get(user=account).attempts == 2
+    def test_the_right_code_twice_at_once_opens_only_once(self, user_factory) -> None:
+        account = user_factory()
+        code = issue_otp(user=account, purpose=SIGNUP)
 
-        def test_the_right_code_twice_at_once_opens_only_once(
-            self, user_factory
-        ) -> None:
-            account = user_factory()
-            code = issue_otp(user=account, purpose=SIGNUP)
+        results = self._at_once(
+            lambda: check_otp(user=account, purpose=SIGNUP, code=code)
+        )
 
-            results = self._at_once(
-                lambda: check_otp(user=account, purpose=SIGNUP, code=code)
-            )
-
-            assert sorted(results) == [False, True]
+        assert sorted(results) == [False, True]
