@@ -148,7 +148,8 @@ class VerifyOtpView(CredentialExchangeMixin, APIView):
 
     permission_classes = [AllowAny]
     authentication_classes: list = []  # el código es la credencial
-    throttle_scope = "otp"
+    throttle_scope = "otp_verify"
+    identifier_throttle_scope = "otp_email"
 
     def post(self, request: Request) -> Response:
         serializer = VerifyOtpSerializer(data=request.data)
@@ -167,7 +168,8 @@ class ResendOtpView(CredentialExchangeMixin, APIView):
 
     permission_classes = [AllowAny]
     authentication_classes: list = []  # basta el correo; no lee la sesión
-    throttle_scope = "otp"
+    # La espera y el tope por hora exactos están en otp_quota.py (#14).
+    throttle_scope = "otp_request"
 
     def post(self, request: Request) -> Response:
         serializer = ResendOtpSerializer(data=request.data)
@@ -198,6 +200,7 @@ class LoginView(CredentialExchangeMixin, APIView):
     # CSRF de login lo cierran los parsers de solo JSON.
     authentication_classes: list = []
     throttle_scope = "login"
+    identifier_throttle_scope = "login_email"
 
     def post(self, request: Request) -> Response:
         verdict = guard_public_form(
@@ -305,6 +308,7 @@ class PasswordResetRequestView(CredentialExchangeMixin, APIView):
     permission_classes = [AllowAny]
     authentication_classes: list = []  # quien la olvidó no tiene sesión
     throttle_scope = "password_reset"
+    identifier_throttle_scope = "password_reset_email"
 
     def post(self, request: Request) -> Response:
         verdict = guard_public_form(
@@ -330,11 +334,15 @@ class PasswordResetRequestView(CredentialExchangeMixin, APIView):
 
 
 class PasswordResetConfirmView(CredentialExchangeMixin, APIView):
-    """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva."""
+    """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva.
+
+    Es verificar un código de seis dígitos: los límites de verificar.
+    """
 
     permission_classes = [AllowAny]
     authentication_classes: list = []  # el código es la credencial
-    throttle_scope = "otp"
+    throttle_scope = "otp_verify"
+    identifier_throttle_scope = "otp_email"
 
     def post(self, request: Request) -> Response:
         serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -357,6 +365,14 @@ class MyAccountView(APIView):
             return super().get_permissions()
         return [IsVerifiedUser()]
 
+    def check_throttles(self, request: Request) -> None:
+        # PATCH manda el código al correo nuevo, como POST me/email/: su mismo
+        # límite. GET (la SPA lo pide al arrancar) sólo lleva el de la cuenta.
+        self.throttle_scope = (
+            MyEmailView.throttle_scope if request.method == "PATCH" else None
+        )
+        super().check_throttles(request)
+
     def get(self, request: Request) -> Response:
         # La SPA lo pide al arrancar: asegura la cookie CSRF aunque haya vencido.
         get_token(request)
@@ -378,6 +394,8 @@ class MyEmailView(APIView):
     """
 
     permission_classes = [IsVerifiedUser]
+    # Manda un código (y cancelar comparte el alcance de la ruta).
+    throttle_scope = "otp_request"
 
     def post(self, request: Request) -> Response:
         serializer = EmailChangeSerializer(data=request.data)
@@ -394,7 +412,9 @@ class MyEmailVerifyView(APIView):
     """POST /api/auth/me/email/verify/ — confirmar el correo nuevo con su código."""
 
     permission_classes = [IsVerifiedUser]
-    throttle_scope = "otp"
+    throttle_scope = "otp_verify"
+    # Sin correo en el cuerpo: cuenta el de la sesión.
+    identifier_throttle_scope = "otp_email"
 
     def post(self, request: Request) -> Response:
         serializer = EmailChangeConfirmSerializer(data=request.data)
@@ -409,7 +429,7 @@ class MyEmailResendView(APIView):
     """POST /api/auth/me/email/resend/ — volver a mandar el código al correo nuevo."""
 
     permission_classes = [IsVerifiedUser]
-    throttle_scope = "otp"
+    throttle_scope = "otp_request"
 
     def post(self, request: Request) -> Response:
         user = resend_email_change(user=request.user)
@@ -420,6 +440,7 @@ class MyPasswordView(APIView):
     """POST /api/auth/me/password/ — cambiar la contraseña sabiendo la actual."""
 
     permission_classes = [IsVerifiedUser]
+    throttle_scope = "password_change"
 
     def post(self, request: Request) -> Response:
         serializer = PasswordChangeSerializer(data=request.data)
@@ -441,6 +462,8 @@ class MyAccountDeleteView(APIView):
     """
 
     permission_classes = [IsVerifiedUser]
+    # Pide la contraseña: con su límite, no es una forma de probarla.
+    throttle_scope = "password_change"
 
     def post(self, request: Request) -> Response:
         serializer = DeleteAccountSerializer(data=request.data)

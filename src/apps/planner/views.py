@@ -73,6 +73,8 @@ class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
         methods=["post"],
         url_path="photo-conversions",
         parser_classes=[MultiPartParser],
+        # Cada foto la lee un servicio de pago (iteracion-26 #16).
+        throttle_scope="costly",
     )
     def photo_conversions(self, request: Request) -> Response:
         """US-129: the walls and rooms of a photo of a paper plan.

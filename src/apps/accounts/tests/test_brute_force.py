@@ -54,13 +54,14 @@ class TestLimitesPorPuerta:
     @pytest.mark.parametrize(
         ("url", "payload", "veces"),
         [
-            ("/api/auth/verify-otp/", {"email": "a@b.mx", "code": "000000"}, 5),
+            # Verificar: 10 por minuto y dirección (otp_verify, iteracion-26 #16).
+            ("/api/auth/verify-otp/", {"email": "a@b.mx", "code": "000000"}, 10),
             ("/api/auth/resend-otp/", {"email": "a@b.mx"}, 5),
             ("/api/auth/password-reset/", {"email": "a@b.mx"}, 5),
             (
                 "/api/auth/password-reset/confirm/",
                 {"email": "a@b.mx", "code": "000000", "password": "nueva12345"},
-                5,
+                10,
             ),
             (
                 "/api/contact/",
@@ -79,7 +80,10 @@ class TestLimitesPorPuerta:
     def test_sending_documents_has_its_limit(
         self, authenticated_client, settings, mocker
     ) -> None:
-        """Caso de borde - La aplicación no es un relevo de correo masivo."""
+        """Caso de borde - La aplicación no es un relevo de correo masivo.
+
+        Con el alcance de las acciones costosas: 20 por hora (iteracion-26 #16).
+        """
         settings.RESEND_API_KEY = "re_test"
         mocker.patch("common.mail.send_email", return_value=True)
 
@@ -94,10 +98,10 @@ class TestLimitesPorPuerta:
                 format="multipart",
             )
 
-        respuestas = [enviar().status_code for _ in range(31)]
+        respuestas = [enviar().status_code for _ in range(21)]
 
-        assert respuestas[:30] == [status.HTTP_200_OK] * 30
-        assert respuestas[30] == status.HTTP_429_TOO_MANY_REQUESTS
+        assert respuestas[:20] == [status.HTTP_200_OK] * 20
+        assert respuestas[20] == status.HTTP_429_TOO_MANY_REQUESTS
 
     def test_other_doors_are_not_counted_together(self, api_client, user) -> None:
         """Caso de borde - Agotar el acceso no cierra la recuperación."""
@@ -118,10 +122,18 @@ class TestConfiguracionDeLimites:
             "rest_framework.throttling.AnonRateThrottle",
             "rest_framework.throttling.UserRateThrottle",
             "rest_framework.throttling.ScopedRateThrottle",
+            # Por cuenta (iteracion-26 #16): rotar la IP no reinicia un correo.
+            "common.throttling.IdentifierRateThrottle",
         }
-        assert {"anon", "user", "login", "otp", "password_reset", "contact"} <= set(
-            rest["DEFAULT_THROTTLE_RATES"]
-        )
+        assert {
+            "anon",
+            "user",
+            "login",
+            "otp_request",
+            "otp_verify",
+            "password_reset",
+            "contact",
+        } <= set(rest["DEFAULT_THROTTLE_RATES"])
 
     def test_the_counters_live_in_the_database_cache(self) -> None:
         """Flujo principal - En Vercel cada invocación puede ser otra instancia."""

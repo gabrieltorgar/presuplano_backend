@@ -35,6 +35,8 @@ env = environ.Env(
     OTP_MAX_CODES_PER_HOUR=(int, 5),
     THROTTLE_ANON=(str, "60/min"),
     THROTTLE_USER=(str, "300/min"),
+    # Las acciones que mandan correo o llaman un servicio de pago (iteracion-26 #16).
+    THROTTLE_COSTLY=(str, "20/hour"),
     # Long enough to keep an active session working; a refresh token silently
     # renews access so the user is not logged out mid-use (see /auth/refresh/).
     ACCESS_TOKEN_LIFETIME_MINUTES=(int, 30),
@@ -223,28 +225,48 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "common.pagination.DefaultPagination",
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
     # Límites por dirección o por cuenta en todo, y uno propio en cada puerta
-    # pública: sin tope, un código de seis dígitos se adivina probando.
+    # pública: sin tope, un código de seis dígitos se adivina probando. Y uno
+    # por cuenta (common/throttling.py, iteracion-26 #16) donde se escribe un
+    # correo: rotar la dirección no reinicia el de esa cuenta.
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
         "rest_framework.throttling.ScopedRateThrottle",
+        "common.throttling.IdentifierRateThrottle",
     ),
+    # Cada alcance que declara una vista necesita su tasa aquí, o la vista
+    # responde 500 (las de django-backend-conventions, iteracion-26 #16).
     "DEFAULT_THROTTLE_RATES": {
         "anon": env("THROTTLE_ANON"),
         "user": env("THROTTLE_USER"),
+        # Por dirección (throttle_scope).
         "login": "10/min",
         # Cinco cuentas por hora y dirección: cada registro abre una sesión y
-        # manda un correo (iteracion-26 #12).
+        # manda un correo (#12). Los colaboradores no pasan por aquí, entran
+        # por su invitación (alcance login): una oficina detrás de una misma
+        # dirección no registra varias empresas en una hora.
         "register": "5/hour",
-        "otp": "5/min",
+        "otp_request": "3/min",
+        "otp_verify": "10/min",
         "password_reset": "5/hour",
+        "password_change": "5/hour",
         "contact": "5/hour",
-        "documents": "30/hour",
-        "invitations": "30/hour",
-        "invitation": "30/min",
+        # Mandan correo o llaman un servicio de pago: enviar un documento,
+        # invitar o reenviar una invitación, convertir la foto de un plano.
+        "costly": env("THROTTLE_COSTLY"),
         # Acciones en lote (common/bulk.py): cada una puede tocar hasta
         # BULK_MAX_ITEMS registros, así que tienen su propio límite.
         "bulk": "30/min",
+        "upload": "30/hour",
+        # El de las vistas de dj-rest-auth (aquí no se instala): red de
+        # seguridad para que una vista con ese alcance no responda 500.
+        "dj_rest_auth": "10/min",
+        # El enlace público de una invitación (lo que autoriza es el token).
+        "invitation": "30/min",
+        # Por cuenta (identifier_throttle_scope, sobre el correo normalizado).
+        "login_email": "20/hour",
+        "otp_email": "10/hour",
+        "password_reset_email": "3/hour",
     },
     # Detrás del proxy de Vercel, la dirección real es la del X-Forwarded-For.
     "NUM_PROXIES": env.int("NUM_PROXIES", default=1),
@@ -272,6 +294,10 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "itzaka_cache",
+        # Con las 300 entradas de Django, al llenarse borraba contadores de
+        # throttle vivos (iteracion-26 #16). Cada escritura cuenta la tabla:
+        # pasadas ~20 000 llaves activas, toca Redis.
+        "OPTIONS": {"MAX_ENTRIES": 20_000, "CULL_FREQUENCY": 10},
     }
 }
 

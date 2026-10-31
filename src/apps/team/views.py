@@ -56,7 +56,8 @@ class InvitationsView(APIView):
     """
 
     permission_classes = [IsVerifiedUser, IsCompanyAdmin]
-    throttle_scope = "invitations"
+    # Manda un correo por invitado (iteracion-26 #16).
+    throttle_scope = "costly"
 
     def post(self, request: Request) -> Response:
         serializer = InviteSerializer(data=request.data)
@@ -246,7 +247,7 @@ class InvitationResendView(APIView):
     """
 
     permission_classes = [IsVerifiedUser, IsCompanyAdmin]
-    throttle_scope = "invitations"
+    throttle_scope = "costly"  # manda el correo otra vez
 
     def post(self, request: Request, invitation_id) -> Response:
         sent = resend_invitation(

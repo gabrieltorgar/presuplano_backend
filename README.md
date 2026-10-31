@@ -147,6 +147,8 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `CRON_SECRET` | Vercel sends it as «Authorization: Bearer …» to the cron routes; without it they answer 401 and never run. |
 | `THROTTLE_ANON` | Run `uv run python src/manage.py createcachetable` once after migrating. |
 | `THROTTLE_USER` | — |
+| `THROTTLE_COSTLY` | Per account per hour for actions that send email or call a paid API (documents, invitations, photo plans). |
+| `ADMIN_LOGIN_MAX_FAILURES` | Failed admin logins from one IP or for one username before a 15-minute lock (429). |
 | `NUM_PROXIES` | Proxies in front of Django (Vercel = 1), so limits key on the client IP. |
 | `R2_ACCOUNT_ID` | — |
 | `R2_ACCESS_KEY_ID` | — |
@@ -316,6 +318,17 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   código. Cambiar la contraseña (`me/password/`) o recuperarla pasa por los
   validadores de Django y deja fuera a toda sesión anterior; quien la cambió
   sigue dentro con una nueva, y quien la recuperó entra con la nueva.
+- Límites de intentos (DRF, en la caché compartida de la base): por dirección,
+  el alcance de cada vista —acceso `login` 10/min, registro `register` 5/h,
+  pedir código `otp_request` 3/min, verificar un código (también recuperar con
+  él y confirmar el correo nuevo) `otp_verify` 10/min, pedir recuperar
+  `password_reset` 5/h, `me/password/` y `me/delete/` `password_change` 5/h,
+  contacto `contact` 5/h—, y por cuenta, sobre el correo enviado
+  (`common.throttling.IdentifierRateThrottle`): `login_email` 20/h,
+  `otp_email` 10/h, `password_reset_email` 3/h; rotar la dirección no los
+  reinicia. Enviar un documento, invitar o reenviar una invitación y convertir
+  la foto de un plano comparten `costly` (`THROTTLE_COSTLY`, 20/h por cuenta).
+  Pasarse responde 429 con `Retry-After` (expuesto por CORS).
 - Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
   verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
   `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin
@@ -398,6 +411,9 @@ host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
   de simplejwt) se consultan ahí, de solo lectura las emitidas. Los códigos de
   verificación también son de solo lectura (para qué, intentos y vigencia),
   sin su huella.
+- El login del admin (`core/admin_login.py`) se cierra 15 minutos tras
+  `ADMIN_LOGIN_MAX_FAILURES` intentos fallidos (5 por omisión) desde una
+  dirección o para un usuario: 429 con `Retry-After`.
 - Acceso: sólo el equipo de Itzaka, con un superusuario creado con
   `createsuperuser`; las cuentas de los clientes y sus colaboradores no entran
   al admin. Las credenciales nunca viven en el repositorio ni en este README.

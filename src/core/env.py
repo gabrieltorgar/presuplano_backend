@@ -61,6 +61,11 @@ _CSRF_DOMAIN = None if DEBUG else ".itzaka.com"
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=_CSRF_DOMAIN) or None
 CSRF_COOKIE_NAME = env("CSRF_COOKIE_NAME", default="csrftoken")
 
+# --- Login del admin (core/admin_login.py, iteracion-26 #16) ---
+# Intentos fallidos desde una dirección o para un usuario antes de 15 minutos
+# de espera (429 con Retry-After).
+ADMIN_LOGIN_MAX_FAILURES = env.int("ADMIN_LOGIN_MAX_FAILURES", default=5)
+
 # --- Cabeceras (siempre) ---
 # Explícito aunque sea el valor de Django: ninguna dirección de la API sale
 # completa hacia otro sitio.
