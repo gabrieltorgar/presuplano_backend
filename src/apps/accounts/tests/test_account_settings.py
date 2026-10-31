@@ -261,3 +261,22 @@ class TestCambiarLaContrasena:
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestDesistirSobreLaCuentaReleida:
+    """SEC-03.2 · iteracion-26 #20 - Desistir se aplica a la cuenta bloqueada."""
+
+    def test_a_change_requested_meanwhile_is_forgotten_too(self, user) -> None:
+        """Lo que cuenta es la fila releída, no la que la petición leyó antes."""
+        from apps.accounts.models import User
+        from apps.accounts.services import cancel_email_change
+
+        leida_antes = User.objects.get(pk=user.pk)
+        User.objects.filter(pk=user.pk).update(pending_email="nuevo@estudio.mx")
+
+        result = cancel_email_change(user=leida_antes)
+
+        user.refresh_from_db()
+        assert user.pending_email == ""
+        assert result.pending_email == ""

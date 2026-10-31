@@ -248,7 +248,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = ["plan", "status", "created_at"]
-        read_only_fields = fields
+        # Nombrados uno por uno: así los ve también la auditoría (SEC-03).
+        read_only_fields = ["plan", "status", "created_at"]
 
 
 #: Lo que puede pesar un logotipo. Es una marca, no una fotografía.

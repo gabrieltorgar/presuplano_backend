@@ -14,6 +14,7 @@ from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from apps.accounts.models import Organization, OtpCode, Subscription, User
+from common.admin import ProtectedFieldsAdminMixin
 
 # Llegan con el ModelAdmin de Django: se vuelven a registrar con Unfold.
 for _model in (Group, OutstandingToken, BlacklistedToken):
@@ -66,13 +67,17 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
 
 
 @admin.register(Subscription)
-class SubscriptionAdmin(ModelAdmin):
+class SubscriptionAdmin(ProtectedFieldsAdminMixin, ModelAdmin):
     list_display = ("user", "plan", "status", "created_at")
+    # Nace activa al registrarse y ningún flujo la cambia todavía (iteracion-26 #20).
+    protected_fields = ("status",)
+    set_on_create_fields = ("user",)
     list_select_related = ("user",)
 
 
 @admin.register(Organization)
-class OrganizationAdmin(ModelAdmin):
+class OrganizationAdmin(ProtectedFieldsAdminMixin, ModelAdmin):
+    set_on_create_fields = ("user",)
     list_display = ("user", "name", "email", "phone", "color", "updated_at")
     search_fields = ("name", "email", "user__email")
     list_select_related = ("user",)

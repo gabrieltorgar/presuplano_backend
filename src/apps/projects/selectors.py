@@ -31,6 +31,15 @@ def _money(subquery) -> Coalesce:
     )
 
 
+def projects_of(*, owner) -> QuerySet[Project]:
+    """Los proyectos de la cuenta, sin sumas: los que se bloquean para cambiarlos.
+
+    Los servicios releen aquí, con ``select_for_update``, la fila que van a
+    cambiar (SEC-03, iteracion-26 #20).
+    """
+    return Project.objects.filter(owner=owner)
+
+
 def project_rows_for_owner(*, owner) -> QuerySet[Project]:
     """The owner's projects as the list shows them: no progress or photos.
 

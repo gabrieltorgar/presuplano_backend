@@ -104,14 +104,16 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 
     def update(self, request: Request, *args, **kwargs) -> Response:
         # Repartir de nuevo lo mismo es corregirlo: una sola puerta de entrada.
+        # El proyecto, la partida y la persona son los del reparto, aunque el
+        # cuerpo mande otros (SEC-03.3, iteracion-26 #20).
         instance = self.get_object()
         assignment = self._hand_out(
             request,
             {
+                **request.data,
                 "project": str(instance.project_id),
                 "quote_item": str(instance.quote_item_id),
                 "worker": str(instance.worker_id),
-                **request.data,
             },
         )
         return Response(AssignmentSerializer(assignment).data)

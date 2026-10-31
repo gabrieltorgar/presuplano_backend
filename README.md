@@ -279,6 +279,22 @@ con lista blanca y desempate por id). Las acciones sobre varios registros son
 `{"select_all": true, "exclude_ids": [...]}` más la query string de la lista, y
 responden `{requested, processed, failed}` (`common/bulk.py`).
 
+Estados, importes y dueño nunca los escribe el cliente: van de solo lectura en
+cada serializer (y lo que el cuerpo mande de más se ignora), los importes los
+calcula el servidor (el total y los subtotales de una cotización, lo ganado y
+el precio de mano de obra de un avance) y el estado cambia sólo por su acción:
+la cotización se vuelve proyecto con `POST /api/projects/`, el proyecto se cierra
+con `POST /api/projects/{id}/finalize/` y la invitación se acepta o se cancela
+con las suyas. Cada modelo con estado registra su tabla de transiciones en su
+servicio (`common/state_machine.py`: cotización `draft → in_project`, proyecto
+`in_progress → finished`, invitación `pending → accepted | cancelled`); un
+estado final no tiene salida y una fila en él ya no se edita. Los servicios
+revisan la tabla sobre la fila releída con `select_for_update` en su
+transacción: un doble clic, un reintento o dos peticiones a la vez no hacen dos
+proyectos de una cotización ni escriben en un proyecto ya finalizado, y dos
+avances o repartos simultáneos no superan la partida. Las pruebas de
+concurrencia real corren sólo con PostgreSQL (CI).
+
 ## Autenticación y sesión
 
 - Web: sesión con JWT en cookies `HttpOnly` que emite la API
@@ -456,6 +472,12 @@ host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
   nunca. Las imágenes, del propio admin y del bucket (`R2_PUBLIC_URL`, o el
   endpoint S3 con el bucket delante si las direcciones van firmadas): la vista
   previa de logotipos y fotos.
+- Lo protegido no se edita en el admin (`common.admin.ProtectedFieldsAdminMixin`):
+  el estado de cotizaciones, proyectos, invitaciones y suscripciones y el precio
+  de mano de obra de un avance se ven y cambian sólo por su servicio, como los
+  folios; la cuenta dueña y los vínculos de un registro (su proyecto,
+  cotización, partida, persona o correo invitado) se eligen al crearlo y
+  después son de solo lectura.
 - El login del admin (`core/admin_login.py`) se cierra 15 minutos tras
   `ADMIN_LOGIN_MAX_FAILURES` intentos fallidos (5 por omisión) desde una
   dirección o para un usuario: 429 con `Retry-After`.

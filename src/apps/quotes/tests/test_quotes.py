@@ -417,6 +417,47 @@ class TestAgreedTotalSurvives:
 
 
 @pytest.mark.django_db
+class TestAmountsComeFromTheServer:
+    """VAL-05: el total y los subtotales los calcula el servidor (iteracion-26 #20)."""
+
+    FORGED = {"total": "0.01", "subtotal": "0.01"}
+
+    def test_a_total_sent_by_the_client_is_ignored(
+        self, authenticated_client, user
+    ) -> None:
+        """VAL-05 · SEC-03 - Un total o un subtotal inventados no se guardan."""
+        client, muro, zocalo = build_catalog(user)
+        items = [
+            {"tariff": str(muro.id), "quantity": "10", "subtotal": "0.01"},
+            {"tariff": str(zocalo.id), "quantity": "20", "subtotal": "0.01"},
+        ]
+        payload = {"client": str(client.id), "items": items, **self.FORGED}
+
+        created = authenticated_client.post(QUOTES_URL, payload, format="json")
+
+        assert created.status_code == status.HTTP_201_CREATED
+        assert Decimal(created.data["total"]) == Decimal("5100.00")
+        assert {Decimal(i["subtotal"]) for i in created.data["items"]} == {
+            Decimal("3500.00"),
+            Decimal("1600.00"),
+        }
+
+        edited = authenticated_client.patch(
+            detail_url(created.data["id"]),
+            {**payload, "notes": "Incluye material"},
+            format="json",
+        )
+
+        # Control positivo: la edición se procesó y sólo los importes se ignoraron.
+        assert edited.status_code == status.HTTP_200_OK
+        assert edited.data["notes"] == "Incluye material"
+        assert Decimal(edited.data["total"]) == Decimal("5100.00")
+        listed = authenticated_client.get(QUOTES_URL)
+        [row] = listed.data["results"]
+        assert Decimal(row["total"]) == Decimal("5100.00")
+
+
+@pytest.mark.django_db
 class TestDeleteQuote:
     """US-111: borrar una cotización que todavía no es proyecto."""
 

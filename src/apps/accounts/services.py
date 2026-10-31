@@ -532,8 +532,15 @@ def confirm_email_change(*, user: User, code: str) -> User | None:
     return user
 
 
+@transaction.atomic
 def cancel_email_change(*, user: User) -> User:
-    """Olvidar el correo nuevo pendiente; su código deja de servir."""
+    """Olvidar el correo nuevo pendiente; su código deja de servir.
+
+    Sobre la cuenta releída con su fila bloqueada: un cambio pedido mientras
+    tanto también se olvida, en vez de quedar pendiente con su código ya
+    anulado (SEC-03.2, iteracion-26 #20).
+    """
+    user = User.objects.select_for_update(of=("self",)).get(pk=user.pk)
     OtpCode.objects.filter(
         user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, used_at__isnull=True
     ).update(used_at=timezone.now())
