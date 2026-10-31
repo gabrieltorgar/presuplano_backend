@@ -366,8 +366,9 @@ concurrencia real corren sólo con PostgreSQL (CI).
 - Web: sesión con JWT en cookies `HttpOnly` que emite la API
   (`POST /api/auth/login/`; `POST /api/auth/refresh/` rota el refresh de su
   cookie —nunca uno del cuerpo— y el anterior queda en la lista negra;
-  `POST /api/auth/logout/`). Acceso, registro, código y recuperación no leen la
-  sesión: una cookie vieja no los bloquea. Cada token lleva la huella de la
+  `POST /api/auth/logout/`). Acceso, registro, código, recuperación y el
+  formulario de contacto no leen la sesión: una cookie vieja, o viva sin
+  `X-CSRFToken`, no los bloquea. Cada token lleva la huella de la
   contraseña (`CHECK_REVOKE_TOKEN`): cambiarla, recuperarla o ponerla en el admin
   deja fuera al instante a toda sesión anterior; quien la cambió sigue dentro con
   una nueva. La SPA pide
@@ -378,7 +379,13 @@ concurrencia real corren sólo con PostgreSQL (CI).
   (`https://api.itzaka.com`), el mismo sitio: las cookies JWT quedan sólo en la
   API (sin `Domain`) y la CSRF en `.itzaka.com` (`CSRF_COOKIE_DOMAIN`), para que
   la SPA la lea. Orígenes exactos en `CORS_ALLOWED_ORIGINS` (también de
-  confianza para CSRF), con credenciales.
+  confianza para CSRF), con credenciales. Los hosts que Vercel da al despliegue
+  (`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, en
+  `*.vercel.app`) entran siempre en `ALLOWED_HOSTS`, pero como orígenes de
+  confianza para CSRF sólo en Preview (`VERCEL_ENV=preview`), mientras develop
+  viva en `*.vercel.app`: producción confía sólo en los orígenes exactos
+  configurados, y un POST del mismo origen (el admin en su propio host) pasa la
+  comprobación de `Origin` de Django sin ellos.
 - Registro con correo y contraseña; la cuenta se confirma con un código de 6
   dígitos que llega por correo (`/api/auth/verify-otp/`, `/api/auth/resend-otp/`).
   Registrarse ya abre la sesión (sin verificar) y verificar el código abre una
@@ -450,7 +457,8 @@ concurrencia real corren sólo con PostgreSQL (CI).
   enlace que no sirve, como la vía real); el acceso, el mismo 401 de unas
   credenciales malas (un 2xx sin la sesión dejaría a la SPA creyendo que entró).
   Un cuerpo que no es un objeto JSON es un 400; el cuerpo tiene tope
-  (`DATA_UPLOAD_MAX_MEMORY_SIZE`, 5 MB) y cada campo de texto el suyo
+  (`DATA_UPLOAD_MAX_MEMORY_SIZE` = `UPLOAD_MAX_BYTES`, 4 MiB, bajo los 4.5 MB
+  de Vercel) y cada campo de texto el suyo
   (contraseñas 128, correos 254, el token 8192).
 - Sin app móvil: no hay rutas `/api/auth/mobile/`.
 
@@ -530,9 +538,13 @@ la empresa del contexto (`app.company_id`); sin contexto, ninguna. Cada petició
 corre en su transacción (`ATOMIC_REQUESTS`) y fija ahí el contexto
 (`common/tenancy.py`): la API en `common.views.TenantContextMixin`, que toda
 vista de `apps/` hereda, y el admin en `core.middleware.AdminTenantContextMiddleware`.
-El rol de `DATABASE_URL` es el dueño de las tablas y se crea
-`NOSUPERUSER NOBYPASSRLS`: con superusuario o `BYPASSRLS` las políticas no lo
-detienen. Las tablas aisladas, sus políticas y las que quedan fuera (con su
+Las políticas sólo protegen con un rol de ejecución sin superusuario ni
+`BYPASSRLS` (`NOSUPERUSER NOBYPASSRLS`), y hoy en Neon no lo hay: el rol de
+`DATABASE_URL` es `neondb_owner`, el dueño que crea Neon, y tiene `BYPASSRLS`,
+así que en ejecución la RLS no se aplica. Crear ese rol es un pendiente de
+infraestructura que decide la persona; mientras tanto el aislamiento por empresa
+lo da la capa de la aplicación (`TenantContextMixin`, que acota cada consulta a
+la empresa activa, y el 404 entre empresas). Las tablas aisladas, sus políticas y las que quedan fuera (con su
 motivo) están en `common/rls.py`. La caché de los límites va por el alias
 `cache`: la misma base, en otra conexión fuera de la transacción de la petición,
 para que un intento fallido cuente. Una migración de datos sobre tablas de
@@ -562,7 +574,9 @@ PostgreSQL; en SQLite se saltan.
   cotización, partida, persona o correo invitado) se eligen al crearlo y
   después son de solo lectura.
 - Con la RLS (iteracion-26) el admin trabaja como una empresa más: quien entra
-  ve y edita lo de su empresa propia. Leer las de todas pide el permiso
+  ve y edita lo de su empresa propia. Eso lo hace cumplir la base, así que
+  depende del rol sin `BYPASSRLS` que todavía no existe en Neon (ver «Base de
+  datos — Neon»): hoy el admin no separa las empresas. Leer las de todas pide el permiso
   `accounts.view_all_companies` (operador de plataforma; el superusuario lo
   tiene, ser staff no), y aun así sólo lee: guardar o borrar una fila de otra
   empresa lo rechaza la base (página de error). Borrar una cuenta la purga con

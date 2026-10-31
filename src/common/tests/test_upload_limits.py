@@ -81,6 +81,29 @@ class TestElTope:
 
         assert salida.stdout.strip() == "1048576"
 
+    def test_the_request_body_cap_follows_it(self) -> None:
+        """API-02 · iteracion-27 #7 — DATA_UPLOAD_MAX_MEMORY_SIZE sale de
+        UPLOAD_MAX_BYTES: bajar el tope del entorno baja también el del cuerpo."""
+        salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
+            [
+                sys.executable,
+                "-c",
+                "from django.conf import settings as s; "
+                "print(s.DATA_UPLOAD_MAX_MEMORY_SIZE)",
+            ],
+            cwd=SRC,
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": "core.settings",
+                "UPLOAD_MAX_BYTES": "1048576",
+            },
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        assert salida.stdout.strip() == "1048576"
+
 
 class TestDespliegueEnVercel:
     """API-02 · core.E002: en Vercel ningún tope de subida pasa de 4 MiB."""

@@ -70,8 +70,12 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=_API_HOSTS)
 # Orígenes exactos (https://app.dominio.com), nunca comodines.
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
-# On Vercel, trust the deployment's own hostnames so ALLOWED_HOSTS, CSRF and the
-# admin login keep working on preview/production URLs without per-deploy config.
+# On Vercel, the deployment's own hostnames (*.vercel.app) are allowed hosts so
+# the API and the admin answer on preview/production URLs without per-deploy
+# config. As CSRF origins they are trusted only on Preview (iteracion-27 #7):
+# develop still lives on *.vercel.app; production trusts only the exact origins
+# configured (CSRF_TRUSTED_ORIGINS and CORS_ALLOWED_ORIGINS). A same-origin
+# POST (the admin on its own host) passes Django's Origin check without them.
 _VERCEL_HOSTS = [
     host
     for host in (
@@ -83,9 +87,12 @@ _VERCEL_HOSTS = [
 ]
 if _VERCEL_HOSTS:
     ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS + _VERCEL_HOSTS))
-    CSRF_TRUSTED_ORIGINS = list(
-        dict.fromkeys(CSRF_TRUSTED_ORIGINS + [f"https://{h}" for h in _VERCEL_HOSTS])
-    )
+    if env.str("VERCEL_ENV", default="") == "preview":
+        CSRF_TRUSTED_ORIGINS = list(
+            dict.fromkeys(
+                CSRF_TRUSTED_ORIGINS + [f"https://{h}" for h in _VERCEL_HOSTS]
+            )
+        )
 
 INSTALLED_APPS = [
     # Unfold antes del admin de Django, o sus plantillas nunca cargan.
@@ -454,9 +461,10 @@ CORS_EXPOSE_HEADERS = ["Retry-After"]
 # aplicación tiene que ser de confianza para la comprobación CSRF de Django.
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(CSRF_TRUSTED_ORIGINS + CORS_ALLOWED_ORIGINS))
 
-# Tope explícito del cuerpo de una petición que no es archivo. Vercel corta en
-# ~4.5 MB; el documento de un plano (PLAN_MAX_BYTES) es lo más grande que viaja.
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+# Tope explícito del cuerpo que Django lee sin los archivos (formularios, campos
+# de un multipart, request.body): el mismo de cada archivo, UPLOAD_MAX_BYTES
+# (4 MiB), por debajo de los ~4.5 MB que Vercel deja llegar (iteracion-27 #7).
+DATA_UPLOAD_MAX_MEMORY_SIZE = UPLOAD_MAX_BYTES
 
 # --- Teléfonos (django-phonenumber-field, iteracion-13) ---
 # Se escriben como sea y se guardan en E.164; sin lada del país, son de México.

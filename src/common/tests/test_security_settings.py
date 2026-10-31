@@ -176,7 +176,12 @@ class TestTopesDeLoQueSePide:
         assert len(response.data["results"]) == 3
 
     def test_the_request_body_has_an_explicit_cap(self) -> None:
-        assert core_settings.DATA_UPLOAD_MAX_MEMORY_SIZE == 5 * 1024 * 1024
+        """API-02 · iteracion-27 #7 — El tope del cuerpo es el de cada archivo
+        (UPLOAD_MAX_BYTES, 4 MiB): cabe en los 4.5 MB de Vercel."""
+        assert (
+            core_settings.DATA_UPLOAD_MAX_MEMORY_SIZE == core_settings.UPLOAD_MAX_BYTES
+        )
+        assert core_settings.DATA_UPLOAD_MAX_MEMORY_SIZE < 4_500_000
         assert core_settings.REST_FRAMEWORK["DEFAULT_PAGINATION_CLASS"] == (
             "common.pagination.DefaultPagination"
         )

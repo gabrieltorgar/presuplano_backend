@@ -3,6 +3,11 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [Unreleased] — En curso
+
+### Fixed
+- **leads/views.py · core/settings.py · README — TEC Detalles de seguridad que quedaron de la iteración 26**: (1) `ContactView` (`POST /api/contact/`) declara `authentication_classes = []`, como acceso y registro: con la cookie de una sesión viva y sin `X-CSRFToken` ya no responde 403 de CSRF, y con una vencida tampoco falla. (2) `DATA_UPLOAD_MAX_MEMORY_SIZE` pasa de 5 MB, más de lo que Vercel deja llegar (~4.5 MB), a `UPLOAD_MAX_BYTES` (4 MiB, y lo sigue si el entorno lo baja). (3) `CSRF_TRUSTED_ORIGINS`: los hosts `*.vercel.app` del despliegue (`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`) siguen en `ALLOWED_HOSTS`, pero como orígenes de confianza solo en Preview (`VERCEL_ENV=preview`), mientras develop viva en `*.vercel.app`; producción (y un despliegue sin `VERCEL_ENV`) confía solo en los orígenes exactos configurados. (4) El README decía que el rol de `DATABASE_URL` se crea `NOSUPERUSER NOBYPASSRLS`; en Neon es `neondb_owner`, con `BYPASSRLS`, así que en ejecución la RLS no se aplica: ahora lo dice, con el rol de ejecución sin `BYPASSRLS` como pendiente de infraestructura de la persona y el aislamiento que da hoy la aplicación (`TenantContextMixin` y el 404 entre empresas), también en el admin. Sin cambios de código por esto. (SEC-04 · SEC-04.5 · API-02 · iteracion-27 #7)
+
 ## [5.0.0] — 2026-10-31 · iteracion-26: el backend vuelve a desplegarse en Vercel con una sola DATABASE_URL, secretos en Infisical, lint en el quality gate y seguridad con itzaka.com y api.itzaka.com: permiso IsVerifiedUser, sesión en cookies del mismo sitio, OTP con HMAC y cuota, throttling por cuenta, reCAPTCHA obligatorio, CSP, subidas validadas y aislamiento por empresa con RLS
 
 ### Changed
