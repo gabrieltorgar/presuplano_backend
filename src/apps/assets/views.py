@@ -1,6 +1,6 @@
 """Assets views: los binarios del editor y el catálogo de mobiliario."""
 
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.request import Request
@@ -23,9 +23,10 @@ from apps.assets.services import remove_models, store_asset, store_models
 from apps.team.tenancy import account_of
 from common.pagination import DefaultPagination
 from common.permissions import IsVerifiedUser
+from common.views import TenantReadOnlyModelViewSet, TenantViewSet
 
 
-class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
+class PlanAssetViewSet(TenantReadOnlyModelViewSet):
     """Los binarios del editor de la cuenta: listarlos, subirlos y cotejarlos."""
 
     serializer_class = PlanAssetSerializer
@@ -68,7 +69,7 @@ class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class CatalogModelViewSet(viewsets.ViewSet):
+class CatalogModelViewSet(TenantViewSet):
     """El catálogo de mobiliario de la cuenta: leerlo, guardarlo y quitar fichas.
 
     Las fichas van y vienen tal como las escribe el editor, en lote: una

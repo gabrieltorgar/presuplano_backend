@@ -6,7 +6,6 @@ from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from apps.accounts.serializers import UserAccountSerializer
 from apps.accounts.services import find_user, start_session
@@ -46,9 +45,10 @@ from common.bulk import BulkSelectionSerializer, bulk_max_items
 from common.pagination import DefaultPagination
 from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
+from common.views import TenantAPIView
 
 
-class InvitationsView(APIView):
+class InvitationsView(TenantAPIView):
     """POST /api/collaborators/invitations/ — invitar a uno o varios correos.
 
     Responde 201 si salió al menos una invitación; si todos los correos ya
@@ -71,7 +71,7 @@ class InvitationsView(APIView):
         )
 
 
-class InvitationDetailView(APIView):
+class InvitationDetailView(TenantAPIView):
     """GET /api/invitations/<token>/ — de quién es la invitación y si sirve.
 
     Público: lo que autoriza es el enlace, que sólo tiene quien recibió el
@@ -94,7 +94,7 @@ class InvitationDetailView(APIView):
         return Response(InvitationPreviewSerializer(data).data)
 
 
-class InvitationAcceptView(APIView):
+class InvitationAcceptView(TenantAPIView):
     """POST /api/invitations/<token>/accept/ — aceptar y entrar a la empresa.
 
     Crea la cuenta si hace falta y abre la sesión, como el acceso. Lleva
@@ -162,7 +162,7 @@ def team_rows(request: Request) -> list[dict]:
     )
 
 
-class TeamView(APIView):
+class TeamView(TenantAPIView):
     """GET /api/collaborators/ — colaboradores e invitaciones que esperan (US-138).
 
     Por páginas, como toda lista (iteracion-17): ``{count, next, previous,
@@ -177,7 +177,7 @@ class TeamView(APIView):
         return paginator.get_paginated_response(TeamRowSerializer(page, many=True).data)
 
 
-class TeamBulkView(APIView):
+class TeamBulkView(TenantAPIView):
     """POST /api/collaborators/bulk/<acción>/ — activar, desactivar, quitar o
     cancelar varios a la vez (US-138, iteracion-17).
 
@@ -219,7 +219,7 @@ class TeamBulkView(APIView):
         return Response(result.as_dict())
 
 
-class MemberView(APIView):
+class MemberView(TenantAPIView):
     """PATCH/DELETE /api/collaborators/members/<id>/ — activar, desactivar, quitar."""
 
     permission_classes = [IsVerifiedUser, IsCompanyAdmin]
@@ -239,7 +239,7 @@ class MemberView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class InvitationResendView(APIView):
+class InvitationResendView(TenantAPIView):
     """POST /api/collaborators/invitations/<id>/resend/ — enlace nuevo (US-139).
 
     Responde la fila con ``email_sent``; si el correo no sale, 503 con
@@ -257,7 +257,7 @@ class InvitationResendView(APIView):
         return Response({**row, "email_sent": sent.email_sent})
 
 
-class InvitationCancelView(APIView):
+class InvitationCancelView(TenantAPIView):
     """POST /api/collaborators/invitations/<id>/cancel/ — su enlace deja de servir."""
 
     permission_classes = [IsVerifiedUser, IsCompanyAdmin]

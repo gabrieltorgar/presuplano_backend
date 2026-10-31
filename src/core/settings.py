@@ -135,6 +135,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # La empresa de la RLS en el admin, ya con el usuario de la sesión (#22).
+    "core.middleware.AdminTenantContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -169,8 +171,19 @@ DATABASES["default"].update(
         "CONN_MAX_AGE": env.int("CONN_MAX_AGE", default=0),
         "CONN_HEALTH_CHECKS": True,
         "DISABLE_SERVER_SIDE_CURSORS": True,
+        # Cada petición en su transacción (iteracion-26 #22): el contexto de la
+        # RLS (common/tenancy.py) vive lo que ella, y un error no deja la mitad.
+        "ATOMIC_REQUESTS": True,
     }
 )
+# La caché (los límites de intentos) por otra conexión a la misma base, fuera
+# de esa transacción: un 401 o un 400 no revierte su propio intento (BOT-03.3).
+DATABASES["cache"] = {
+    **DATABASES["default"],
+    "ATOMIC_REQUESTS": False,
+    "TEST": {"MIRROR": "default"},
+}
+DATABASE_ROUTERS = ["core.routers.CacheRouter"]
 
 AUTH_USER_MODEL = "accounts.User"
 # La única pantalla con sesión de Django es el admin, y el login de Unfold no

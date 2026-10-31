@@ -15,7 +15,6 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -68,6 +67,7 @@ from common.authentication import CredentialExchangeMixin
 from common.cron import CronSecretAuthentication, IsCronJob
 from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
+from common.views import TenantAPIView
 
 #: Lo que responde un código equivocado, vencido, usado o agotado. Se responde,
 #: no se lanza (iteracion-26 #13): con ``ATOMIC_REQUESTS`` (#22) una excepción
@@ -76,7 +76,7 @@ INVALID_CODE = {"code": ["Código de verificación inválido"]}
 
 
 @method_decorator(ensure_csrf_cookie, name="get")
-class CsrfCookieView(APIView):
+class CsrfCookieView(TenantAPIView):
     """GET /api/auth/csrf/ — deja la cookie CSRF que la SPA repite en X-CSRFToken.
 
     Pública a propósito: no devuelve datos ni cambia nada, y la SPA la llama al
@@ -91,7 +91,7 @@ class CsrfCookieView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RegisterView(CredentialExchangeMixin, APIView):
+class RegisterView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/register/ — crear una cuenta con correo y contraseña.
 
     Abre la sesión de la cuenta sin verificar en las cookies HttpOnly (el
@@ -138,7 +138,7 @@ class RegisterView(CredentialExchangeMixin, APIView):
         return response
 
 
-class VerifyOtpView(CredentialExchangeMixin, APIView):
+class VerifyOtpView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/verify-otp/ — dar por bueno el correo con el código.
 
     Verificar es entrar (iteracion-26 #12): deja una sesión nueva de esa
@@ -163,7 +163,7 @@ class VerifyOtpView(CredentialExchangeMixin, APIView):
         return response
 
 
-class ResendOtpView(CredentialExchangeMixin, APIView):
+class ResendOtpView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/resend-otp/ — volver a pedir el código de verificación."""
 
     permission_classes = [AllowAny]
@@ -187,7 +187,7 @@ class ResendOtpView(CredentialExchangeMixin, APIView):
         )
 
 
-class LoginView(CredentialExchangeMixin, APIView):
+class LoginView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/login/ — abrir la sesión en cookies HttpOnly.
 
     El cuerpo sólo trae la cuenta: los tokens van en cookies que JavaScript no
@@ -231,7 +231,7 @@ class LoginView(CredentialExchangeMixin, APIView):
         return response
 
 
-class SessionRefreshView(APIView):
+class SessionRefreshView(TenantAPIView):
     """POST /api/auth/refresh/ — renovar la sesión con el refresh de la cookie.
 
     El refresh rota y el usado queda en la lista negra. Sin sesión o con una
@@ -266,7 +266,7 @@ class SessionRefreshView(APIView):
         return response
 
 
-class LogoutView(APIView):
+class LogoutView(TenantAPIView):
     """POST /api/auth/logout/ — cerrar la sesión: anula el refresh y borra las cookies.
 
     Público a propósito: salir sin sesión no falla, y una sesión vencida
@@ -288,7 +288,7 @@ class LogoutView(APIView):
         return response
 
 
-class FlushExpiredTokensView(APIView):
+class FlushExpiredTokensView(TenantAPIView):
     """GET /api/cron/flush-expired-tokens/ — borrar las sesiones vencidas.
 
     La llama el cron diario de Vercel (vercel.json → crons) con
@@ -305,7 +305,7 @@ class FlushExpiredTokensView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class PasswordResetRequestView(CredentialExchangeMixin, APIView):
+class PasswordResetRequestView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/password-reset/ — pedir recuperar la contraseña."""
 
     permission_classes = [AllowAny]
@@ -336,7 +336,7 @@ class PasswordResetRequestView(CredentialExchangeMixin, APIView):
         )
 
 
-class PasswordResetConfirmView(CredentialExchangeMixin, APIView):
+class PasswordResetConfirmView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva.
 
     Es verificar un código de seis dígitos: los límites de verificar.
@@ -356,7 +356,7 @@ class PasswordResetConfirmView(CredentialExchangeMixin, APIView):
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyAccountView(APIView):
+class MyAccountView(TenantAPIView):
     """GET/PATCH /api/auth/me/ — la cuenta de quien pregunta y su correo."""
 
     # GET sin verificar (VERIFICATION_EXEMPT): con ``is_email_verified`` en
@@ -389,7 +389,7 @@ class MyAccountView(APIView):
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyEmailView(APIView):
+class MyEmailView(TenantAPIView):
     """POST/DELETE /api/auth/me/email/ — pedir un correo nuevo, o desistir.
 
     El correo nuevo queda pendiente y recibe su código; la cuenta sigue
@@ -411,7 +411,7 @@ class MyEmailView(APIView):
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyEmailVerifyView(APIView):
+class MyEmailVerifyView(TenantAPIView):
     """POST /api/auth/me/email/verify/ — confirmar el correo nuevo con su código."""
 
     permission_classes = [IsVerifiedUser]
@@ -428,7 +428,7 @@ class MyEmailVerifyView(APIView):
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyEmailResendView(APIView):
+class MyEmailResendView(TenantAPIView):
     """POST /api/auth/me/email/resend/ — volver a mandar el código al correo nuevo."""
 
     permission_classes = [IsVerifiedUser]
@@ -439,7 +439,7 @@ class MyEmailResendView(APIView):
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyPasswordView(APIView):
+class MyPasswordView(TenantAPIView):
     """POST /api/auth/me/password/ — cambiar la contraseña sabiendo la actual."""
 
     permission_classes = [IsVerifiedUser]
@@ -457,7 +457,7 @@ class MyPasswordView(APIView):
         return response
 
 
-class MyAccountDeleteView(APIView):
+class MyAccountDeleteView(TenantAPIView):
     """POST /api/auth/me/delete/ — eliminar la cuenta con todo lo suyo.
 
     Es un POST y no un DELETE porque lleva cuerpo —la contraseña que lo
@@ -477,7 +477,7 @@ class MyAccountDeleteView(APIView):
         return response
 
 
-class MyOrganizationView(APIView):
+class MyOrganizationView(TenantAPIView):
     """GET/PATCH /api/auth/organization/ — the letterhead of the documents."""
 
     permission_classes = [IsVerifiedUser]
@@ -502,7 +502,7 @@ class MyOrganizationView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class MyOrganizationLogoView(APIView):
+class MyOrganizationLogoView(TenantAPIView):
     """GET /api/auth/organization/logo/ — el logotipo listo para imprimirse.
 
     Devuelve la imagen incrustada en la respuesta y no su dirección: el PDF se

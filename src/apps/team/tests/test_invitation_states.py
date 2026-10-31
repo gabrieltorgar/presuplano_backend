@@ -8,6 +8,7 @@ colaborador dentro ni le cambia el enlace a una que ya se usó.
 """
 
 import pytest
+from django.db import connections
 from rest_framework import status
 
 from apps.accounts.tests.factories import UserFactory
@@ -59,8 +60,14 @@ class TestResendingWhileItChanges:
         ],
     )
     def test_a_closed_invitation_keeps_its_link(
-        self, admin, correo_que_tarda, meanwhile, message
+        self, admin, correo_que_tarda, meanwhile, message, monkeypatch
     ) -> None:
+        # Lo de «mientras tanto» lo hizo y confirmó otra petición, pero aquí
+        # corre dentro de ésta: sin su transacción (ATOMIC_REQUESTS, iteracion-26
+        # #22) para que el 400 no revierta también lo que hizo la otra.
+        monkeypatch.setitem(
+            connections["default"].settings_dict, "ATOMIC_REQUESTS", False
+        )
         invitacion = InvitationFactory(account=admin, email="mar@despacho.mx")
         huella = invitacion.token_hash
 

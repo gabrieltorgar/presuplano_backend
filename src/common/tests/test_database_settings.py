@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 
 from django.conf import settings as dj_settings
+from django.core.cache.backends.db import DatabaseCache
+from django.db import router
 
 import core.settings as core_settings
 
@@ -48,3 +50,39 @@ def test_connections_last_one_request_unless_the_environment_says_otherwise() ->
     """Sin ``CONN_MAX_AGE``, 0: una conexión por petición, como pide el pooler."""
     assert _conn_max_age() == "0"
     assert _conn_max_age(CONN_MAX_AGE="60") == "60"
+
+
+def test_each_request_runs_in_its_transaction() -> None:
+    """SEC-01 · iteracion-26 #22 — El contexto de la RLS (``SET LOCAL``) vive lo
+    que la transacción: sin ``ATOMIC_REQUESTS`` moriría antes de la consulta."""
+    assert dj_settings.DATABASES["default"].get("ATOMIC_REQUESTS") is True
+
+
+def test_db_cache_writes_outside_atomic_requests() -> None:
+    """BOT-03.3 — Con ``ATOMIC_REQUESTS``, un 4xx revierte lo escrito en la
+    petición: si la caché escribiera por ``default``, el intento fallido nunca
+    contaría para su límite. Escribe por su propio alias, fuera de ella."""
+    cache = core_settings.CACHES["default"]
+    entry = DatabaseCache(cache["LOCATION"], {}).cache_model_class
+
+    alias = router.db_for_write(entry)
+
+    assert alias != "default"
+    assert dj_settings.DATABASES[alias].get("ATOMIC_REQUESTS") is False
+    assert router.db_for_read(entry) == alias
+
+
+def test_the_cache_alias_is_the_same_database() -> None:
+    """BOT-03.3 — Una conexión más a la misma base (``DATABASE_URL``, sin otra
+    variable), y la tabla que crea el build con ``createcachetable`` —que corre
+    en el alias ``default``— es la misma que lee el alias de la caché."""
+    default, cache = dj_settings.DATABASES["default"], dj_settings.DATABASES["cache"]
+    entry = DatabaseCache(core_settings.CACHES["default"]["LOCATION"], {})
+
+    assert (cache["ENGINE"], cache["NAME"], cache.get("HOST")) == (
+        default["ENGINE"],
+        default["NAME"],
+        default.get("HOST"),
+    )
+    assert cache["TEST"]["MIRROR"] == "default"
+    assert router.allow_migrate_model("default", entry.cache_model_class) is True

@@ -4,7 +4,7 @@ There is no «generate document» operation: the document is built from the
 quote whenever it is asked for, so it is always the current one.
 """
 
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -24,9 +24,10 @@ from apps.quotes.services import (
 )
 from apps.team.tenancy import account_of
 from common.permissions import IsVerifiedUser
+from common.views import TenantModelViewSet
 
 
-class QuoteViewSet(viewsets.ModelViewSet):
+class QuoteViewSet(TenantModelViewSet):
     """CRUD for the account's quotes; totals are computed from line items.
 
     The list (US-13, iteracion-17): ``?status=a,b``, ``?plan=a,b`` (the quotes

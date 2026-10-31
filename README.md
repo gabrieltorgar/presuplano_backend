@@ -458,6 +458,23 @@ servidor (`core/settings.py`). Las migraciones y la tabla de caché van por el
 host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
 `DATABASE_URL_UNPOOLED`; sin ninguna de las dos, el build se detiene.
 
+Aislamiento por empresa (RLS, desde iteracion-26): cada tabla de datos de
+trabajo lleva `FORCE ROW LEVEL SECURITY` y deja ver y escribir sólo las filas de
+la empresa del contexto (`app.company_id`); sin contexto, ninguna. Cada petición
+corre en su transacción (`ATOMIC_REQUESTS`) y fija ahí el contexto
+(`common/tenancy.py`): la API en `common.views.TenantContextMixin`, que toda
+vista de `apps/` hereda, y el admin en `core.middleware.AdminTenantContextMiddleware`.
+El rol de `DATABASE_URL` es el dueño de las tablas y se crea
+`NOSUPERUSER NOBYPASSRLS`: con superusuario o `BYPASSRLS` las políticas no lo
+detienen. Las tablas aisladas, sus políticas y las que quedan fuera (con su
+motivo) están en `common/rls.py`. La caché de los límites va por el alias
+`cache`: la misma base, en otra conexión fuera de la transacción de la petición,
+para que un intento fallido cuente. Una migración de datos sobre tablas de
+trabajo corre sin contexto y no ve filas: fija el de cada empresa
+(`set_tenant_context`) antes de tocar las suyas. Las pruebas de RLS (marca
+`rls`, `src/tests/security/test_rls.py`) corren en el quality gate de CI con
+PostgreSQL; en SQLite se saltan.
+
 ## Administración
 
 - Panel en `/admin/` del dominio de la API (Django Unfold); cada modelo de
@@ -478,6 +495,14 @@ host directo: `DATABASE_URL_MIGRATIONS` (rol dueño) o, si no está,
   folios; la cuenta dueña y los vínculos de un registro (su proyecto,
   cotización, partida, persona o correo invitado) se eligen al crearlo y
   después son de solo lectura.
+- Con la RLS (iteracion-26) el admin trabaja como una empresa más: quien entra
+  ve y edita lo de su empresa propia. Leer las de todas pide el permiso
+  `accounts.view_all_companies` (operador de plataforma; el superusuario lo
+  tiene, ser staff no), y aun así sólo lee: guardar o borrar una fila de otra
+  empresa lo rechaza la base (página de error). Borrar una cuenta la purga con
+  todo lo suyo y sus archivos (`purge_account`), como en la API; una con
+  cotizaciones o proyectos la sigue frenando el admin por sus registros
+  protegidos.
 - El login del admin (`core/admin_login.py`) se cierra 15 minutos tras
   `ADMIN_LOGIN_MAX_FAILURES` intentos fallidos (5 por omisión) desde una
   dirección o para un usuario: 429 con `Retry-After`.

@@ -1,6 +1,6 @@
 """Staff views: the register, the hand-outs and the payments."""
 
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
@@ -30,9 +30,10 @@ from apps.staff.services import (
 )
 from apps.team.tenancy import account_of
 from common.permissions import IsVerifiedUser
+from common.views import TenantModelViewSet, TenantReadOnlyModelViewSet
 
 
-class WorkerViewSet(viewsets.ModelViewSet):
+class WorkerViewSet(TenantModelViewSet):
     """CRUD del personal de la cuenta, con lo que hace y lo que se le debe.
 
     La lista (US-96 · US-97, iteracion-17): ``?has_balance=true``, ``?kind=``,
@@ -75,7 +76,7 @@ class WorkerViewSet(viewsets.ModelViewSet):
             set_worker_services(worker=worker, services=services)
 
 
-class AssignmentViewSet(viewsets.ModelViewSet):
+class AssignmentViewSet(TenantModelViewSet):
     """El reparto de las partidas de un proyecto entre el personal."""
 
     serializer_class = AssignmentSerializer
@@ -119,7 +120,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         return Response(AssignmentSerializer(assignment).data)
 
 
-class WorkerPaymentViewSet(viewsets.ReadOnlyModelViewSet):
+class WorkerPaymentViewSet(TenantReadOnlyModelViewSet):
     """Pagos al personal, y lo que queda debiéndose."""
 
     serializer_class = WorkerPaymentSerializer

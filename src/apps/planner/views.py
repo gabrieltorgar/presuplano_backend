@@ -1,7 +1,7 @@
 """Planner views: account-scoped plan CRUD and photo conversion."""
 
 from django.conf import settings
-from rest_framework import serializers, status, viewsets
+from rest_framework import serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException
 from rest_framework.parsers import MultiPartParser
@@ -20,6 +20,7 @@ from apps.planner.services import delete_plans
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
 from common.permissions import IsVerifiedUser
+from common.views import TenantModelViewSet
 
 
 class DailyPhotoLimitReached(APIException):
@@ -35,7 +36,7 @@ class PhotoServiceUnavailable(APIException):
     default_code = "photo_unavailable"
 
 
-class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
+class PlanViewSet(BulkActionMixin, TenantModelViewSet):
     """CRUD for the authenticated account's plans (isolated per account).
 
     The list (US-78, iteracion-17) is summaries without the document, by pages:

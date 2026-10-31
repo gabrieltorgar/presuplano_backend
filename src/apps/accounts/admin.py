@@ -13,6 +13,7 @@ from rest_framework_simplejwt.token_blacklist.models import (
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
+from apps.accounts.deletion import purge_account
 from apps.accounts.models import Organization, OtpCode, Subscription, User
 from common.admin import ProtectedFieldsAdminMixin
 
@@ -64,6 +65,16 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
             },
         ),
     )
+
+    # Borrar una cuenta es purgarla con todo lo suyo, archivos incluidos, y con
+    # el contexto de la RLS de esa cuenta: con el del admin no vería sus filas
+    # y el borrado chocaría con ellas (iteracion-26 #22).
+    def delete_model(self, request, obj) -> None:
+        purge_account(user=obj)
+
+    def delete_queryset(self, request, queryset) -> None:
+        for user in queryset:
+            purge_account(user=user)
 
 
 @admin.register(Subscription)

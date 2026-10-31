@@ -3,7 +3,6 @@
 from django.http import Http404
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from apps.folios.codes import DocumentType
 from apps.folios.selectors import folio_setting_row, folio_settings_for
@@ -16,6 +15,7 @@ from apps.folios.services import configure_folios, preview_folio
 from apps.team.permissions import IsCompanyAdmin
 from apps.team.tenancy import account_of
 from common.permissions import IsVerifiedUser
+from common.views import TenantAPIView
 
 
 def _document_type(value: str) -> str:
@@ -25,7 +25,7 @@ def _document_type(value: str) -> str:
     return value
 
 
-class FolioSettingsView(APIView):
+class FolioSettingsView(TenantAPIView):
     """GET /api/folio-settings/ — la configuración de cada tipo de documento.
 
     Es un recurso, no una lista: un objeto con una llave por tipo
@@ -41,7 +41,7 @@ class FolioSettingsView(APIView):
         )
 
 
-class FolioSettingDetailView(APIView):
+class FolioSettingDetailView(TenantAPIView):
     """GET/PUT /api/folio-settings/<tipo>/ — la modalidad y la clave de un tipo.
 
     Cambiarla es de quien administra la empresa (US-140); verla, de todos.
@@ -70,7 +70,7 @@ class FolioSettingDetailView(APIView):
         return Response(FolioSettingSerializer(row).data)
 
 
-class FolioPreviewView(APIView):
+class FolioPreviewView(TenantAPIView):
     """GET /api/folio-settings/<tipo>/preview/?mode=sequential&prefix=VEN.
 
     El folio que saldría con esa clave, sin guardarla ni apartarlo: si VEN

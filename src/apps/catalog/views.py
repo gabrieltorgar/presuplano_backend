@@ -1,6 +1,5 @@
 """Catalog views: account-scoped tariff CRUD."""
 
-from rest_framework import viewsets
 from rest_framework.decorators import action
 
 from apps.catalog.filters import TariffFilter
@@ -10,9 +9,10 @@ from apps.catalog.services import delete_tariff, delete_tariffs
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
 from common.permissions import IsVerifiedUser
+from common.views import TenantModelViewSet
 
 
-class TariffViewSet(BulkActionMixin, viewsets.ModelViewSet):
+class TariffViewSet(BulkActionMixin, TenantModelViewSet):
     """CRUD for the authenticated account's tariffs (isolated per account).
 
     GET /api/tariffs/?search=piso&unit_type=square_meter,unit&ordering=-unit_price

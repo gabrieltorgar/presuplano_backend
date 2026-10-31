@@ -3,15 +3,15 @@
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from apps.documents.serializers import SendDocumentSerializer
 from apps.documents.services import send_document
 from apps.team.tenancy import account_of
 from common.permissions import IsVerifiedUser
+from common.views import TenantAPIView
 
 
-class SendDocumentView(APIView):
+class SendDocumentView(TenantAPIView):
     """POST /api/documents/send/ — manda el PDF al correo de quien lo recibe."""
 
     permission_classes = [IsVerifiedUser]

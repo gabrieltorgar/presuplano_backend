@@ -1,6 +1,6 @@
 """Projects views: start project, register and correct progress, evidence."""
 
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
@@ -33,9 +33,10 @@ from apps.projects.services import (
 )
 from apps.team.tenancy import account_of
 from common.permissions import IsVerifiedUser
+from common.views import TenantGenericViewSet, TenantReadOnlyModelViewSet
 
 
-class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
+class ProjectViewSet(TenantReadOnlyModelViewSet):
     """List/retrieve projects; start a project; register progress.
 
     The list (US-67, iteracion-17) brings rows without progress entries or
@@ -101,7 +102,7 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(summary)
 
 
-class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
+class ProgressViewSet(TenantReadOnlyModelViewSet):
     """Retrieve, correct or delete a progress entry; attach its photos."""
 
     serializer_class = ProgressSerializer
@@ -146,7 +147,7 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class EvidenceViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
+class EvidenceViewSet(mixins.DestroyModelMixin, TenantGenericViewSet):
     """Quitar una foto de un avance."""
 
     serializer_class = EvidenceSerializer

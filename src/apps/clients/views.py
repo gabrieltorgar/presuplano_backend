@@ -1,6 +1,5 @@
 """Clients views: account-scoped client CRUD."""
 
-from rest_framework import viewsets
 from rest_framework.decorators import action
 
 from apps.clients.filters import ClientFilter
@@ -10,9 +9,10 @@ from apps.clients.services import delete_client, delete_clients
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
 from common.permissions import IsVerifiedUser
+from common.views import TenantModelViewSet
 
 
-class ClientViewSet(BulkActionMixin, viewsets.ModelViewSet):
+class ClientViewSet(BulkActionMixin, TenantModelViewSet):
     """CRUD for the authenticated account's clients (isolated per account).
 
     GET /api/clients/?page=1&search=reyes&has_contact=true&ordering=-created_at

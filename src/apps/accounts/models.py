@@ -73,6 +73,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_table = "account_user"
         verbose_name = _("usuario")
         verbose_name_plural = _("usuarios")
+        # Operador de plataforma (common.tenancy.PLATFORM_OPERATOR_PERM): lee en
+        # el admin los datos de todas las empresas, sin escribirlos (#22).
+        permissions = [
+            (
+                "view_all_companies",
+                _("Puede leer en el admin los datos de todas las empresas"),
+            )
+        ]
 
     def __str__(self) -> str:
         return self.email
