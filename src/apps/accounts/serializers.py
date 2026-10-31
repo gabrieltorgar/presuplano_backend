@@ -14,10 +14,27 @@ from common.phones import PhoneField
 from common.validators import IMAGES, validate_upload
 
 MIN_PASSWORD_LENGTH = 8
+#: Tope de una contraseña (MAN-04, iteracion-26 #17): sin él, un cuerpo de
+#: megas se deriva con PBKDF2 en cada intento.
+PASSWORD_MAX_LENGTH = 128
 
 #: Seis dígitos ASCII y nada más (iteracion-26 #13): nunca ``\d``, que acepta
 #: dígitos de otras escrituras (``int()`` también los lee).
 OTP_CODE_PATTERN = r"^[0-9]{6}\Z"
+
+
+def password_field() -> serializers.CharField:
+    """La contraseña de un formulario público: sólo de entrada y con tope."""
+    return serializers.CharField(
+        write_only=True,
+        max_length=PASSWORD_MAX_LENGTH,
+        style={"input_type": "password"},
+        error_messages={
+            "max_length": (
+                f"La contraseña puede tener hasta {PASSWORD_MAX_LENGTH} caracteres"
+            )
+        },
+    )
 
 
 def otp_code_field(**error_messages) -> serializers.RegexField:
@@ -34,13 +51,14 @@ class RegisterSerializer(AcceptanceSerializer):
     acceptance of the legal documents in force."""
 
     email = serializers.EmailField(
+        max_length=254,
         error_messages={
             "required": "Escribe tu correo para registrarte",
             "blank": "Escribe tu correo para registrarte",
             "invalid": "Escribe un correo válido",
-        }
+        },
     )
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password = password_field()
 
     def validate_email(self, value: str) -> str:
         if User.objects.filter(email__iexact=value.strip()).exists():
@@ -109,7 +127,7 @@ class PasswordResetRequestSerializer(EmailIdentitySerializer):
 class PasswordResetConfirmSerializer(VerifyOtpSerializer):
     """Confirmar la recuperación con el código y la contraseña nueva."""
 
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password = password_field()
 
     def validate_password(self, value: str) -> str:
         if len(value) < MIN_PASSWORD_LENGTH:
@@ -126,7 +144,7 @@ class PasswordResetConfirmSerializer(VerifyOtpSerializer):
 class LoginSerializer(EmailIdentitySerializer):
     """Validates login input."""
 
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password = password_field()
 
     def validate(self, attrs: dict) -> dict:
         password = attrs.get("password", "")

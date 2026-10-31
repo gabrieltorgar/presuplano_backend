@@ -137,9 +137,9 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `OTP_MAX_ATTEMPTS` | Failed tries a code survives before it is voided. |
 | `OTP_RESEND_COOLDOWN_SECONDS` | Seconds between two codes for the same email and purpose (also for unknown emails). |
 | `OTP_MAX_CODES_PER_HOUR` | Codes per hour for the same email and purpose. |
-| `RECAPTCHA_SECRET_KEY` | Verification turns on with the secret key (RECAPTCHA_ENABLED follows it). The site key goes to the frontend as VITE_RECAPTCHA_SITE_KEY: set both. |
+| `RECAPTCHA_SECRET_KEY` | Server-side secret key, one per environment. Its site key goes to the frontend as VITE_RECAPTCHA_SITE_KEY: set both together. Production (VERCEL_ENV=production) refuses to deploy without it (common.E003). |
 | `RECAPTCHA_MIN_SCORE` | — |
-| `RECAPTCHA_HOSTNAMES` | — |
+| `RECAPTCHA_HOSTNAMES` | Hosts the tokens may come from: itzaka.com by default without DEBUG, the local one (this value) with DEBUG; develop dev.itzaka.com. |
 | `RESEND_API_KEY` | Without the key no email goes out. Production refuses to deploy without it. |
 | `RESEND_FROM` | A sender of a domain verified in Resend: its test sender (onboarding@resend.dev) only delivers to the Resend account owner, and production refuses it too. |
 | `APP_BASE_URL` | Where the links in the emails lead: the application, not the API (production https://itzaka.com, develop https://dev.itzaka.com). |
@@ -341,7 +341,17 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   administrador); sin ella, la propia o la primera donde se colabora. Sin acceso
   a la pedida, 403 con `code: company_access`.
 - Formularios públicos (registro, acceso, recuperación, contacto e invitación):
-  reCAPTCHA v3 verificado en el servidor y campo trampa.
+  reCAPTCHA v3 verificado en el servidor (`common/recaptcha.py`) y campo trampa
+  (`website`). Si Google no contesta, las puertas de la cuenta (registro,
+  acceso, recuperación e invitación) responden 503 y el contacto se guarda bajo
+  su límite (`contact`, 5/h) marcado para revisar (`needs_review`). Con el campo
+  trampa lleno responden lo de siempre sin efecto: el registro, la recuperación,
+  el contacto y la invitación su 2xx (la invitación, el 404, 409 o 410 de un
+  enlace que no sirve, como la vía real); el acceso, el mismo 401 de unas
+  credenciales malas (un 2xx sin la sesión dejaría a la SPA creyendo que entró).
+  Un cuerpo que no es un objeto JSON es un 400; el cuerpo tiene tope
+  (`DATA_UPLOAD_MAX_MEMORY_SIZE`, 5 MB) y cada campo de texto el suyo
+  (contraseñas 128, correos 254, el token 8192).
 - Sin app móvil: no hay rutas `/api/auth/mobile/`.
 
 ## Integraciones
@@ -388,12 +398,18 @@ La foto de un plano en papel se convierte en un plano editable
 ### reCAPTCHA v3 — Google
 
 Verificación de los formularios públicos en el servidor (`common/recaptcha.py`).
+Sin `DEBUG` está encendida siempre, con llave o sin ella; con `DEBUG` sigue a la
+llave. **Production no despliega sin reCAPTCHA**: con `VERCEL_ENV=production`,
+sin `RECAPTCHA_SECRET_KEY` (`common.E003`) o con `RECAPTCHA_ENABLED` apagado
+(`common.E004`) el chequeo de `common/checks.py` detiene `migrate` en el build y
+la versión anterior sigue atendiendo.
 
 | Variable | Uso |
 |---|---|
-| `RECAPTCHA_SECRET_KEY` | Llave secreta; con ella se enciende la verificación |
+| `RECAPTCHA_SECRET_KEY` | Llave secreta v3 del entorno; va junto con `VITE_RECAPTCHA_SITE_KEY` del frontend |
+| `RECAPTCHA_ENABLED` | Sin definir: encendida sin `DEBUG`, sigue a la llave con `DEBUG`; apagarla sólo en develop sin llaves (vacía se lee como apagada) |
 | `RECAPTCHA_MIN_SCORE` | Puntaje mínimo |
-| `RECAPTCHA_HOSTNAMES` | Dominios desde los que se aceptan los tokens |
+| `RECAPTCHA_HOSTNAMES` | Dominios desde los que se aceptan los tokens: `itzaka.com` sin `DEBUG`, `localhost` con `DEBUG`; develop, `dev.itzaka.com` |
 
 ### Base de datos — Neon
 
@@ -454,6 +470,12 @@ Vercel (`vercel.json`):
   `GET /api/cron/flush-expired-tokens/` borra las sesiones vencidas. Vercel lo
   llama con `Authorization: Bearer <CRON_SECRET>`; sin `CRON_SECRET` en el
   entorno responde 401 y no corre.
+- reCAPTCHA (desde iteracion-26): Production no despliega sin
+  `RECAPTCHA_SECRET_KEY` ni con `RECAPTCHA_ENABLED` apagado. Antes de promover,
+  una persona crea las llaves v3 del dominio `itzaka.com` y pone juntas
+  `RECAPTCHA_SECRET_KEY` en el backend y `VITE_RECAPTCHA_SITE_KEY` en el
+  frontend de Production. develop (sin `DEBUG`) también verifica: sus propias
+  llaves con `RECAPTCHA_HOSTNAMES=dev.itzaka.com`, o `RECAPTCHA_ENABLED=False`.
 - Verificación después de desplegar: `/api/health/` responde 200 y
   `/admin/login/` carga con sus estilos.
 

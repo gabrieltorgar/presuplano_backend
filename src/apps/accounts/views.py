@@ -210,6 +210,9 @@ class LoginView(CredentialExchangeMixin, APIView):
             remote_ip=client_ip(request),
         )
         if verdict is Verdict.DROP:
+            # Decisión (MAN-04, iteracion-26 #17): el 401 de unas credenciales
+            # malas, idéntico, y no un 2xx. El éxito de siempre trae la sesión
+            # en cookies; uno sin ellas dejaría a la SPA creyendo que entró.
             raise AuthenticationFailed("Credenciales inválidas")
 
         serializer = LoginSerializer(data=request.data)

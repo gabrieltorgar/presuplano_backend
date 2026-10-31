@@ -356,13 +356,20 @@ OTP_RESEND_COOLDOWN_SECONDS = env("OTP_RESEND_COOLDOWN_SECONDS")
 OTP_MAX_CODES_PER_HOUR = env("OTP_MAX_CODES_PER_HOUR")
 
 # --- reCAPTCHA v3 en los formularios públicos (common/recaptcha.py) ---
-# Se verifica en cuanto hay llave secreta: sin ella no se cierra la puerta a
-# todos. La llave del sitio vive en el frontend (VITE_RECAPTCHA_SITE_KEY).
+# Fuera de DEBUG se verifica siempre (iteracion-26 #17), con llave o sin ella: un
+# despliegue sin llaves ya no deja los formularios sólo con el campo trampa, y
+# Production no despliega sin la llave ni con la verificación apagada
+# (common/checks.py). Con DEBUG sigue a la llave: en local no hay a quién
+# preguntar. La llave del sitio vive en el frontend (VITE_RECAPTCHA_SITE_KEY).
 RECAPTCHA_SECRET_KEY = env.str("RECAPTCHA_SECRET_KEY", default="").strip()
-RECAPTCHA_ENABLED = env.bool("RECAPTCHA_ENABLED", default=bool(RECAPTCHA_SECRET_KEY))
+RECAPTCHA_ENABLED = env.bool(
+    "RECAPTCHA_ENABLED", default=not DEBUG or bool(RECAPTCHA_SECRET_KEY)
+)
 RECAPTCHA_MIN_SCORE = env.float("RECAPTCHA_MIN_SCORE", default=0.5)
+# El dominio de la SPA, de donde salen los tokens; localhost sólo con DEBUG.
+# develop pone el suyo (dev.itzaka.com).
 RECAPTCHA_HOSTNAMES = env.list(
-    "RECAPTCHA_HOSTNAMES", default=["itzaka.grupotorresmucino.com", "localhost"]
+    "RECAPTCHA_HOSTNAMES", default=["localhost"] if DEBUG else ["itzaka.com"]
 )
 
 # Tope de lo que puede viajar adjunto en un correo. Un PDF de cotización pesa

@@ -67,8 +67,14 @@ PhoneNotVerified = AccountNotVerified
 
 
 def normalize_email(value: str | None) -> str:
-    """Un correo sin espacios y en minúsculas."""
-    return (value or "").strip().lower()
+    """Un correo sin espacios y en minúsculas; lo que no es texto, vacío.
+
+    Llega también de un cuerpo que nadie validó (el señuelo del registro):
+    un número o una lista no es un correo (MAN-04, iteracion-26 #17).
+    """
+    if not isinstance(value, str):
+        return ""
+    return value.strip().lower()
 
 
 def find_user(*, email: str) -> User | None:

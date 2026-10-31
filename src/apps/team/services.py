@@ -222,22 +222,23 @@ def decoy_acceptance(*, token: str) -> dict:
 
     Tiene la forma de una de verdad —la persona y la empresa a la que se
     entra—, para que nadie la distinga ni se rompa quien la lee, pero no hay
-    cuenta ni sesión detrás (iteracion-16).
+    cuenta ni sesión detrás (iteracion-16). Un enlace que no existe o que ya no
+    sirve responde lo mismo que en la vía real (MAN-04, iteracion-26 #17).
+
+    Raises:
+        NotFound, InvitationGone, InvitationUsed: el enlace no sirve.
     """
-    invitation = (
-        Invitation.objects.select_related("account")
-        .filter(token_hash=hash_token(token))
-        .first()
-    )
+    invitation = find_invitation(token=token)
+    _ensure_usable(invitation)
     return {
         "user": {
             "id": str(uuid.uuid4()),
-            "email": invitation.email if invitation else "",
+            "email": invitation.email,
             "is_email_verified": True,
         },
         "company": {
             "id": str(uuid.uuid4()),
-            "name": company_name(account=invitation.account) if invitation else "",
+            "name": company_name(account=invitation.account),
         },
     }
 
