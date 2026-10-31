@@ -6,13 +6,19 @@ la cuenta por 30 días. Ahora los pone el servidor en cookies que JavaScript no
 puede leer, el refresh rota y el viejo queda en la lista negra, y salir lo anula.
 """
 
+import json
+import os
+import subprocess
+import sys
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from django.conf import settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
+import core.settings as core_settings
 from apps.accounts.tests.factories import UserFactory
 from apps.legal.tests.consent import accepted
 from apps.team.tests.factories import InvitationFactory
@@ -176,6 +182,7 @@ def test_lifetimes_rotation_and_blacklist() -> None:
     assert jwt["REFRESH_TOKEN_LIFETIME"] <= timedelta(days=7)
     assert jwt["ROTATE_REFRESH_TOKENS"] is True
     assert jwt["BLACKLIST_AFTER_ROTATION"] is True
+    assert jwt["CHECK_REVOKE_TOKEN"] is True
     assert "rest_framework_simplejwt.token_blacklist" in settings.INSTALLED_APPS
     assert settings.CSRF_COOKIE_HTTPONLY is False
 
@@ -226,3 +233,134 @@ def test_web_auth_responses_carry_no_tokens(api_client, cuenta) -> None:
             format="json",
         )
     )
+
+
+#: Lo que decide a qué dominios responde la API y a dónde viajan sus cookies.
+DOMAIN_SETTINGS = (
+    "DEBUG",
+    "ALLOWED_HOSTS",
+    "CORS_ALLOWED_ORIGINS",
+    "CORS_ALLOW_CREDENTIALS",
+    "CSRF_TRUSTED_ORIGINS",
+    "CSRF_COOKIE_DOMAIN",
+    "CSRF_COOKIE_NAME",
+    "CSRF_COOKIE_HTTPONLY",
+    "CSRF_COOKIE_SECURE",
+    "SESSION_COOKIE_SECURE",
+    "APP_BASE_URL",
+)
+
+
+def ajustes_en(entorno_extra: dict[str, str]) -> dict:
+    """``core.settings`` en un intérprete limpio, sin las variables de dominio
+    de quien corre la suite (ni ``DEBUG`` ni las de Vercel) más las dadas."""
+    entorno = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in DOMAIN_SETTINGS and not k.startswith("VERCEL")
+    }
+    entorno.update(
+        {
+            "DJANGO_SETTINGS_MODULE": "core.settings",
+            "SECRET_KEY": "x" * 50,
+            **entorno_extra,
+        }
+    )
+    salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
+        [
+            sys.executable,
+            "-c",
+            "import json; from django.conf import settings as s; "
+            f"print(json.dumps({{n: getattr(s, n) for n in {DOMAIN_SETTINGS!r}}}))",
+        ],
+        cwd=Path(core_settings.__file__).resolve().parents[1],
+        env=entorno,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(salida.stdout)
+
+
+@pytest.mark.django_db
+def test_session_cookie_settings(settings, cuenta) -> None:
+    """SEC-04 · SEC-04.1 · SEC-04.4 · iteracion-26 #9 — La SPA en itzaka.com y la
+    API en api.itzaka.com: el mismo sitio, con las cookies seguras.
+
+    En Vercel y sin DEBUG, los valores por omisión son los de producción. Las
+    cookies JWT quedan sólo en la API (sin Domain); la CSRF, en el dominio padre
+    para que la SPA la lea y la repita en X-CSRFToken.
+    """
+    prod = ajustes_en({"VERCEL": "1"})
+
+    assert prod["DEBUG"] is False
+    assert prod["SESSION_COOKIE_SECURE"] is True
+    assert prod["CSRF_COOKIE_SECURE"] is True
+    assert prod["CSRF_COOKIE_HTTPONLY"] is False
+    assert prod["CSRF_COOKIE_DOMAIN"] == ".itzaka.com"
+    assert prod["CSRF_COOKIE_NAME"] == "csrftoken"
+    assert prod["ALLOWED_HOSTS"] == ["api.itzaka.com"]
+    assert prod["CORS_ALLOWED_ORIGINS"] == ["https://itzaka.com"]
+    assert prod["CSRF_TRUSTED_ORIGINS"] == ["https://itzaka.com"]
+    assert prod["CORS_ALLOW_CREDENTIALS"] is True
+    assert prod["APP_BASE_URL"] == "https://itzaka.com"
+
+    settings.SESSION_COOKIE_SECURE = True
+    settings.CSRF_COOKIE_SECURE = True
+    settings.CSRF_COOKIE_DOMAIN = prod["CSRF_COOKIE_DOMAIN"]
+    response = entrar(APIClient())
+
+    assert response.status_code == status.HTTP_200_OK
+    for name in (ACCESS_COOKIE, REFRESH_COOKIE):
+        cookie = response.cookies[name]
+        assert cookie["secure"] is True, name
+        assert cookie["httponly"] is True, name
+        assert cookie["samesite"] == "Lax", name
+        assert cookie["domain"] == "", f"{name}: las cookies JWT no llevan Domain"
+    csrf = response.cookies[settings.CSRF_COOKIE_NAME]
+    assert csrf.value
+    assert not csrf["httponly"]
+    assert csrf["secure"] is True
+    assert csrf["samesite"] == "Lax"
+    assert csrf["domain"] == ".itzaka.com"
+
+
+class TestDominiosPorEntorno:
+    def test_with_debug_the_defaults_are_local(self) -> None:
+        """SEC-04 · iteracion-26 #9 — En local, la SPA de Vite y cookies sin Domain."""
+        local = ajustes_en({"DEBUG": "True"})
+
+        assert local["ALLOWED_HOSTS"] == ["localhost", "127.0.0.1", "[::1]"]
+        assert local["CORS_ALLOWED_ORIGINS"] == ["http://localhost:5173"]
+        assert local["CSRF_TRUSTED_ORIGINS"] == ["http://localhost:5173"]
+        assert local["CSRF_COOKIE_DOMAIN"] is None
+        assert local["CSRF_COOKIE_NAME"] == "csrftoken"
+        assert local["APP_BASE_URL"] == "http://localhost:5173"
+
+    def test_develop_sets_its_own_domains(self) -> None:
+        """SEC-04 · iteracion-26 #9 — develop: dev.itzaka.com y api-dev.itzaka.com,
+        con su propia cookie CSRF en el mismo dominio padre."""
+        develop = ajustes_en(
+            {
+                "VERCEL": "1",
+                "ALLOWED_HOSTS": "api-dev.itzaka.com",
+                "CORS_ALLOWED_ORIGINS": "https://dev.itzaka.com",
+                "CSRF_COOKIE_NAME": "csrftoken_dev",
+                "APP_BASE_URL": "https://dev.itzaka.com",
+            }
+        )
+
+        assert develop["ALLOWED_HOSTS"] == ["api-dev.itzaka.com"]
+        assert develop["CORS_ALLOWED_ORIGINS"] == ["https://dev.itzaka.com"]
+        assert develop["CSRF_TRUSTED_ORIGINS"] == ["https://dev.itzaka.com"]
+        assert develop["CSRF_COOKIE_DOMAIN"] == ".itzaka.com"
+        assert develop["CSRF_COOKIE_NAME"] == "csrftoken_dev"
+        assert develop["APP_BASE_URL"] == "https://dev.itzaka.com"
+
+    def test_the_deployment_hosts_are_still_trusted(self) -> None:
+        """SEC-04 · iteracion-26 #9 — Los hosts que Vercel da al despliegue se
+        suman a los del dominio, nunca en su lugar."""
+        prod = ajustes_en({"VERCEL": "1", "VERCEL_URL": "itzaka-api-abc.vercel.app"})
+
+        assert prod["ALLOWED_HOSTS"] == ["api.itzaka.com", "itzaka-api-abc.vercel.app"]
+        assert prod["CORS_ALLOWED_ORIGINS"] == ["https://itzaka.com"]

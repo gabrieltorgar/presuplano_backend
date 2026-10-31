@@ -2,7 +2,8 @@
 
 A valid refresh must yield a fresh access so an active session is never dropped
 when the short-lived access expires. Since iteracion-12 both travel in HttpOnly
-cookies; a client that still sends the refresh in the body is served too.
+cookies; since iteracion-26 #10 a refresh in the body is not read (no client
+sends it, and a script holding one cannot turn it into a session).
 """
 
 import pytest
@@ -30,10 +31,10 @@ class TestTokenRefresh:
         assert response.cookies["itzaka_access"].value
         assert "access" not in response.data
 
-    def test_a_refresh_sent_in_the_body_still_works(
+    def test_a_refresh_sent_in_the_body_is_ignored(
         self, api_client, user_factory
     ) -> None:
-        """An API client without cookies can renew with the refresh in the body."""
+        """CRD-02.1 · iteracion-26 #10 — Only the cookie renews the session."""
         account = user_factory(is_email_verified=True, password="testpass123")
         login = api_client.post(
             LOGIN_URL, {"email": account.email, "password": "testpass123"}
@@ -42,8 +43,8 @@ class TestTokenRefresh:
 
         response = APIClient().post(REFRESH_URL, {"refresh": refresh})
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.cookies["itzaka_access"].value
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert not response.cookies["itzaka_access"].value
 
     def test_invalid_refresh_returns_401(self, api_client) -> None:
         """A bogus refresh token is rejected with 401."""

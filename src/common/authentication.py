@@ -41,3 +41,17 @@ class CookieJWTAuthentication(JWTAuthentication):
         user = self.get_user(validated)
         _enforce_csrf(request)
         return user, validated
+
+
+class CredentialExchangeMixin:
+    """Las vistas que cambian credenciales por una sesión (iteracion-26 #10).
+
+    Acceso, registro, código y recuperación declaran ``authentication_classes =
+    []``: no leen la sesión, así que una cookie de acceso muerta no las vuelve
+    401 ni una viva sin X-CSRFToken 403. Sin autenticadores, DRF respondería 403
+    a unas credenciales malas; con esto siguen siendo 401 (la SPA distingue
+    «contraseña incorrecta» de «sin verificar»), con la cabecera de la API.
+    """
+
+    def get_authenticate_header(self, request: Request) -> str:
+        return CookieJWTAuthentication().authenticate_header(request)

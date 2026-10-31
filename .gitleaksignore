@@ -1,3 +1,3 @@
 # Hallazgos de gitleaks revisados que no son secretos (uno por línea, su fingerprint).
-# Contraseña de prueba inventada en una prueba de reCAPTCHA (iteracion-12), no una credencial.
+# no es un secreto: contraseña de prueba inventada en src/common/tests/test_recaptcha.py (iteracion-12, US-83, commit 6e7cc23), no una credencial; nadie la rotó porque no da acceso a nada
 6e7cc23b023ae8848cb03494a8df2ce649f292aa:src/common/tests/test_recaptcha.py:generic-api-key:119

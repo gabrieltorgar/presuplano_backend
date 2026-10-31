@@ -96,7 +96,7 @@ class TestResend:
         cabeceras = urlopen.call_args.args[0].headers
         assert cabeceras["User-agent"] == mail.USER_AGENT
         assert "urllib" not in cabeceras["User-agent"]
-        assert "https://itzaka.grupotorresmucino.com" in cabeceras["User-agent"]
+        assert "https://itzaka.com" in cabeceras["User-agent"]
 
     def test_an_attachment_travels_encoded(self, configurado, mocker) -> None:
         """Flujo principal - El PDF va en base64, como pide la API."""

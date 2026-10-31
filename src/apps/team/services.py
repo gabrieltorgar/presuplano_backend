@@ -21,13 +21,39 @@ from apps.team.selectors import (
     company_name,
     get_invitation,
     get_member,
+    invitations_of,
     is_member,
     pending_invitation,
 )
 from common.bulk import NOT_FOUND, BulkResult, error_text
 from common.mail import mask_email
+from common.state_machine import Transitions, register
 
 logger = logging.getLogger("apps")
+
+#: Una invitación espera hasta que se acepta o se cancela, y de ahí ya no sale
+#: (SEC-03.1, iteracion-26 #20). Vencida no es un estado: es una pendiente
+#: cuyo enlace ya pasó de fecha, y reenviarla la renueva.
+INVITATION_TRANSITIONS = register(
+    Invitation,
+    Transitions(
+        field="status",
+        allowed={
+            Invitation.Status.PENDING: frozenset(
+                {Invitation.Status.ACCEPTED, Invitation.Status.CANCELLED}
+            ),
+            Invitation.Status.ACCEPTED: frozenset(),
+            Invitation.Status.CANCELLED: frozenset(),
+        },
+        terminal=frozenset({Invitation.Status.ACCEPTED, Invitation.Status.CANCELLED}),
+    ),
+)
+
+#: Por qué una invitación cerrada ya no se reenvía ni se cancela.
+NO_LONGER_WAITING = {
+    Invitation.Status.ACCEPTED: "Esta invitación ya se aceptó: ya es colaborador.",
+    Invitation.Status.CANCELLED: "Esta invitación ya se canceló.",
+}
 
 #: Cuánto vale un enlace de invitación.
 INVITATION_DAYS = 7
@@ -175,7 +201,7 @@ def find_invitation(*, token: str, lock: bool = False) -> Invitation:
     """
     queryset = Invitation.objects.select_related("account")
     if lock:
-        queryset = queryset.select_for_update()
+        queryset = queryset.select_for_update(of=("self",))
     invitation = queryset.filter(token_hash=hash_token(token)).first()
     if invitation is None:
         raise NotFound("Esta invitación no existe. Revisa el enlace o pide otra.")
@@ -222,22 +248,23 @@ def decoy_acceptance(*, token: str) -> dict:
 
     Tiene la forma de una de verdad —la persona y la empresa a la que se
     entra—, para que nadie la distinga ni se rompa quien la lee, pero no hay
-    cuenta ni sesión detrás (iteracion-16).
+    cuenta ni sesión detrás (iteracion-16). Un enlace que no existe o que ya no
+    sirve responde lo mismo que en la vía real (MAN-04, iteracion-26 #17).
+
+    Raises:
+        NotFound, InvitationGone, InvitationUsed: el enlace no sirve.
     """
-    invitation = (
-        Invitation.objects.select_related("account")
-        .filter(token_hash=hash_token(token))
-        .first()
-    )
+    invitation = find_invitation(token=token)
+    _ensure_usable(invitation)
     return {
         "user": {
             "id": str(uuid.uuid4()),
-            "email": invitation.email if invitation else "",
+            "email": invitation.email,
             "is_email_verified": True,
         },
         "company": {
             "id": str(uuid.uuid4()),
-            "name": company_name(account=invitation.account) if invitation else "",
+            "name": company_name(account=invitation.account),
         },
     }
 
@@ -265,6 +292,7 @@ def accept_invitation(
     """
     invitation = find_invitation(token=token, lock=True)
     _ensure_usable(invitation)
+    INVITATION_TRANSITIONS.check(invitation.status, Invitation.Status.ACCEPTED)
 
     user = find_user(email=invitation.email)
     if user is None:
@@ -353,6 +381,20 @@ def remove_member(*, account: User, member_id) -> None:
     logger.info("Collaborator removed", extra={"account_id": str(account.pk)})
 
 
+def _still_waiting(invitation: Invitation | None) -> Invitation:
+    """La invitación, si es de la empresa y todavía espera respuesta.
+
+    Raises:
+        NotFound: no es de esta empresa.
+        ValidationError: ya se aceptó o ya se canceló.
+    """
+    if invitation is None:
+        raise NotFound("Esa invitación no es de tu empresa.")
+    if invitation.status in INVITATION_TRANSITIONS.terminal:
+        raise ValidationError({"detail": NO_LONGER_WAITING[invitation.status]})
+    return invitation
+
+
 def _owned_waiting_invitation(*, account: User, invitation_id) -> Invitation:
     """Una invitación de la empresa que todavía espera respuesta.
 
@@ -360,16 +402,7 @@ def _owned_waiting_invitation(*, account: User, invitation_id) -> Invitation:
         NotFound: no es de esta empresa.
         ValidationError: ya se aceptó o ya se canceló.
     """
-    invitation = get_invitation(account=account, invitation_id=invitation_id)
-    if invitation is None:
-        raise NotFound("Esa invitación no es de tu empresa.")
-    if invitation.status == Invitation.Status.ACCEPTED:
-        raise ValidationError(
-            {"detail": "Esta invitación ya se aceptó: ya es colaborador."}
-        )
-    if invitation.status == Invitation.Status.CANCELLED:
-        raise ValidationError({"detail": "Esta invitación ya se canceló."})
-    return invitation
+    return _still_waiting(get_invitation(account=account, invitation_id=invitation_id))
 
 
 class EmailNotSent(APIException):
@@ -395,21 +428,31 @@ def resend_invitation(*, account: User, invitation_id) -> Sent:
 
     Sale con un enlace nuevo que vale 7 días, y el anterior deja de servir sólo
     cuando el correo salió: si no sale, la persona se queda con el enlace que ya
-    tenía en vez de quedarse sin ninguno (iteracion-16).
+    tenía en vez de quedarse sin ninguno (iteracion-16). El enlace nuevo se
+    guarda en la invitación releída y bloqueada: si mientras salía el correo la
+    aceptaron o la cancelaron, se queda como quedó (iteracion-26 #20).
 
     Raises:
         EmailNotSent: el correo no salió; la invitación quedó como estaba.
+        ValidationError: ya se aceptó o ya se canceló.
     """
     invitation = _owned_waiting_invitation(account=account, invitation_id=invitation_id)
     token, token_hash = _new_link()
     sent = _send(invitation, token)
     if not sent.email_sent:
         raise EmailNotSent()
-    invitation.token_hash = token_hash
-    invitation.sent_at = timezone.now()
-    invitation.expires_at = invitation.sent_at + timedelta(days=INVITATION_DAYS)
-    invitation.save(update_fields=["token_hash", "sent_at", "expires_at"])
-    return sent
+    with transaction.atomic():
+        invitation = _still_waiting(
+            invitations_of(account=account)
+            .select_for_update(of=("self",))
+            .filter(pk=invitation_id)
+            .first()
+        )
+        invitation.token_hash = token_hash
+        invitation.sent_at = timezone.now()
+        invitation.expires_at = invitation.sent_at + timedelta(days=INVITATION_DAYS)
+        invitation.save(update_fields=["token_hash", "sent_at", "expires_at"])
+    return Sent(invitation=invitation, email_sent=sent.email_sent)
 
 
 #: Las acciones en lote de la tabla de colaboradores (iteracion-17). Reenviar
@@ -471,9 +514,21 @@ def bulk_team_action(*, account: User, action: str, ids: list) -> BulkResult:
     return result
 
 
+@transaction.atomic
 def cancel_invitation(*, account: User, invitation_id) -> None:
-    """Cancelar una invitación pendiente (US-139): su enlace deja de servir."""
-    invitation = _owned_waiting_invitation(account=account, invitation_id=invitation_id)
+    """Cancelar una invitación pendiente (US-139): su enlace deja de servir.
+
+    Releída con su fila bloqueada, como al aceptarla: cancelar mientras
+    alguien la acepta deja una de las dos cosas, nunca una invitación
+    cancelada con el colaborador dentro (SEC-03.2, iteracion-26 #20).
+    """
+    invitation = _still_waiting(
+        invitations_of(account=account)
+        .select_for_update(of=("self",))
+        .filter(pk=invitation_id)
+        .first()
+    )
+    INVITATION_TRANSITIONS.check(invitation.status, Invitation.Status.CANCELLED)
     invitation.status = Invitation.Status.CANCELLED
     invitation.save(update_fields=["status"])
     logger.info("Invitation cancelled", extra={"invitation_id": str(invitation.pk)})

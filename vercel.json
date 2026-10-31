@@ -12,5 +12,11 @@
     "wsgi.py": {
       "excludeFiles": "{**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/fixtures/**,docs/**,reports/**,htmlcov/**,coverage.xml,.coverage,.pytest_cache/**,.ruff_cache/**,node_modules/**,.github/**,*.md,scripts/**}"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/flush-expired-tokens/",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

@@ -120,28 +120,35 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 |---|---|
 | `DEBUG` | — |
 | `SECRET_KEY` | — |
-| `ALLOWED_HOSTS` | — |
-| `CORS_ALLOWED_ORIGINS` | Exact origins, comma separated, never wildcards (also trusted for CSRF). |
-| `CSRF_TRUSTED_ORIGINS` | Extra exact origins trusted for CSRF, besides the CORS ones. |
-| `CSRF_COOKIE_DOMAIN` | Empty: host-only cookie (the SPA calls /api on its own domain). |
-| `CSRF_COOKIE_NAME` | Per environment when two share a domain; the SPA repeats it (VITE_CSRF_COOKIE_NAME). |
+| `ALLOWED_HOSTS` | API hosts (Vercel's deployment hosts are added): production api.itzaka.com, develop api-dev.itzaka.com. |
+| `CORS_ALLOWED_ORIGINS` | SPA exact origins, comma separated, never wildcards (also trusted for CSRF): production https://itzaka.com, develop https://dev.itzaka.com. |
+| `CSRF_TRUSTED_ORIGINS` | Extra exact origins trusted for CSRF, besides the CORS ones (usually empty). |
+| `CSRF_COOKIE_DOMAIN` | Parent domain of the CSRF cookie the SPA reads: .itzaka.com in production and develop (the default without DEBUG); empty locally (host-only). JWT cookies never get a Domain. |
+| `CSRF_COOKIE_NAME` | Django's default name in production and locally; develop adds the _dev suffix (both share .itzaka.com). The SPA repeats it (VITE_CSRF_COOKIE_NAME). |
 | `DATABASE_URL` | — |
 | `CONN_MAX_AGE` | Neon: DATABASE_URL is the pooled host (-pooler, transaction mode); keep 0 there. |
 | `LOG_DIR` | — |
-| `OTP_UNIVERSAL_CODE` | — |
-| `OTP_UNIVERSAL_CODE_ENABLED` | Only opens accounts while mail is not configured, and only where enabled: on by default with DEBUG, off in production unless set on purpose. |
+| `APP_ENV` | Which environment this is: develop, production or a developer machine; missing means production (fail closed), and a Vercel Production deployment is always production. |
+| `OTP_UNIVERSAL_CODE` | E2E-only universal code: only with APP_ENV local or develop (settings refuse to load with it anywhere else, never in Vercel Production), only for OTP_UNIVERSAL_EMAILS and only to verify an account. |
+| `OTP_UNIVERSAL_EMAILS` | Comma-separated accounts the universal code verifies (the E2E users). |
 | `OTP_TTL_MINUTES` | — |
 | `OTP_MAX_ATTEMPTS` | Failed tries a code survives before it is voided. |
-| `RECAPTCHA_SECRET_KEY` | Verification turns on with the secret key (RECAPTCHA_ENABLED follows it). The site key goes to the frontend as VITE_RECAPTCHA_SITE_KEY: set both. |
+| `OTP_RESEND_COOLDOWN_SECONDS` | Seconds between two codes for the same email and purpose (also for unknown emails). |
+| `OTP_MAX_CODES_PER_HOUR` | Codes per hour for the same email and purpose. |
+| `RECAPTCHA_SECRET_KEY` | Server-side secret key, one per environment. Its site key goes to the frontend as VITE_RECAPTCHA_SITE_KEY: set both together. Production (VERCEL_ENV=production) refuses to deploy without it (common.E003). |
 | `RECAPTCHA_MIN_SCORE` | — |
-| `RECAPTCHA_HOSTNAMES` | — |
+| `RECAPTCHA_HOSTNAMES` | Hosts the tokens may come from: itzaka.com by default without DEBUG, the local one (this value) with DEBUG; develop dev.itzaka.com. |
 | `RESEND_API_KEY` | Without the key no email goes out. Production refuses to deploy without it. |
 | `RESEND_FROM` | A sender of a domain verified in Resend: its test sender (onboarding@resend.dev) only delivers to the Resend account owner, and production refuses it too. |
-| `APP_BASE_URL` | Where the links in the emails lead: the application, not the API. |
+| `APP_BASE_URL` | Where the links in the emails lead: the application, not the API (production https://itzaka.com, develop https://dev.itzaka.com). |
 | `REQUIRE_EMAIL_DELIVERY` | On by default where VERCEL_ENV=production: `migrate` stops the deploy when mail cannot go out, and a mail that cannot be sent is logged as an error. |
+| `CRON_SECRET` | Vercel sends it as «Authorization: Bearer …» to the cron routes; without it they answer 401 and never run. |
 | `THROTTLE_ANON` | Run `uv run python src/manage.py createcachetable` once after migrating. |
 | `THROTTLE_USER` | — |
+| `THROTTLE_COSTLY` | Per account per hour for actions that send email or call a paid API (documents, invitations, photo plans). |
+| `ADMIN_LOGIN_MAX_FAILURES` | Failed admin logins from one IP or for one username before a 15-minute lock (429). |
 | `NUM_PROXIES` | Proxies in front of Django (Vercel = 1), so limits key on the client IP. |
+| `UPLOAD_MAX_BYTES` | Max bytes per file through the API (default 4 MiB): a Vercel function rejects bodies over 4.5 MB before Django. On Vercel any upload cap over 4 MiB stops the deploy (core.E002). |
 | `R2_ACCOUNT_ID` | — |
 | `R2_ACCESS_KEY_ID` | — |
 | `R2_SECRET_ACCESS_KEY` | — |
@@ -308,6 +315,27 @@ Pendiente: la tabla sale de `uv run python src/manage.py api_routes --format md`
 
 <!-- /readme:auto:api -->
 
+La API lee sólo JSON: otro tipo de cuerpo responde 415. Las subidas
+(logotipo, evidencia de un avance, foto de un plano, texturas y modelos, y el
+PDF que se envía por correo) son `multipart/form-data`, declarado en su vista.
+Cada archivo cabe en `UPLOAD_MAX_BYTES` (4 MiB por omisión): una función de
+Vercel corta en 4.5 MB el cuerpo entero antes de Django, y en Vercel un tope
+mayor detiene el despliegue (`core/checks.py`, `core.E002`, que revisa también
+`PLAN_ASSET_MAX_BYTES`, `DOCUMENT_EMAIL_MAX_BYTES` y `PHOTO_PLAN_MAX_BYTES`;
+el logotipo tiene el suyo, 2 MB). Cada subida se juzga por su contenido
+(`common/validators.py`): la firma real (filetype), y toda imagen pasa por
+Pillow `verify()` y un tope de píxeles (rota o descomunal es un 400, nunca un
+500). El nombre guardado lo pone el servidor: un uuid y la extensión del tipo
+detectado. Archivos de más de 4 MiB no tienen todavía una subida firmada al
+bucket: hoy no entran.
+
+Cabeceras de seguridad en cada respuesta (`core/settings_csp.py`,
+`core/middleware.py`): la API lleva la Content-Security-Policy aplicada
+`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`
+(sirve JSON: nada que cargar ni quién la enmarque), además de
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` y
+`Referrer-Policy: same-origin`, también con `DEBUG`.
+
 Todas las listas paginan en el servidor: `?page=&page_size=` (20 por omisión,
 máximo 100) y responden `{count, next, previous, results}`. Cada una declara
 sus filtros (`filters.py` de su app; `?campo=a,b` para varios valores), su
@@ -317,18 +345,95 @@ con lista blanca y desempate por id). Las acciones sobre varios registros son
 `{"select_all": true, "exclude_ids": [...]}` más la query string de la lista, y
 responden `{requested, processed, failed}` (`common/bulk.py`).
 
+Estados, importes y dueño nunca los escribe el cliente: van de solo lectura en
+cada serializer (y lo que el cuerpo mande de más se ignora), los importes los
+calcula el servidor (el total y los subtotales de una cotización, lo ganado y
+el precio de mano de obra de un avance) y el estado cambia sólo por su acción:
+la cotización se vuelve proyecto con `POST /api/projects/`, el proyecto se cierra
+con `POST /api/projects/{id}/finalize/` y la invitación se acepta o se cancela
+con las suyas. Cada modelo con estado registra su tabla de transiciones en su
+servicio (`common/state_machine.py`: cotización `draft → in_project`, proyecto
+`in_progress → finished`, invitación `pending → accepted | cancelled`); un
+estado final no tiene salida y una fila en él ya no se edita. Los servicios
+revisan la tabla sobre la fila releída con `select_for_update` en su
+transacción: un doble clic, un reintento o dos peticiones a la vez no hacen dos
+proyectos de una cotización ni escriben en un proyecto ya finalizado, y dos
+avances o repartos simultáneos no superan la partida. Las pruebas de
+concurrencia real corren sólo con PostgreSQL (CI).
+
 ## Autenticación y sesión
 
 - Web: sesión con JWT en cookies `HttpOnly` que emite la API
-  (`POST /api/auth/login/`; `POST /api/auth/refresh/` rota el refresh y el
-  anterior queda en la lista negra; `POST /api/auth/logout/`). La SPA pide
+  (`POST /api/auth/login/`; `POST /api/auth/refresh/` rota el refresh de su
+  cookie —nunca uno del cuerpo— y el anterior queda en la lista negra;
+  `POST /api/auth/logout/`). Acceso, registro, código y recuperación no leen la
+  sesión: una cookie vieja no los bloquea. Cada token lleva la huella de la
+  contraseña (`CHECK_REVOKE_TOKEN`): cambiarla, recuperarla o ponerla en el admin
+  deja fuera al instante a toda sesión anterior; quien la cambió sigue dentro con
+  una nueva. La SPA pide
   `GET /api/auth/csrf/` al arrancar: deja la cookie CSRF (`CSRF_COOKIE_NAME`,
   `csrftoken` por omisión) y cada escritura lleva la cabecera `X-CSRFToken`. El
   navegador nunca lee ni envía tokens: no hay `Authorization: Bearer` para la
-  web, y la aplicación llama a la API por su propio dominio (`/api/*`).
+  web. La aplicación (`https://itzaka.com`) llama a la API en su subdominio
+  (`https://api.itzaka.com`), el mismo sitio: las cookies JWT quedan sólo en la
+  API (sin `Domain`) y la CSRF en `.itzaka.com` (`CSRF_COOKIE_DOMAIN`), para que
+  la SPA la lea. Orígenes exactos en `CORS_ALLOWED_ORIGINS` (también de
+  confianza para CSRF), con credenciales.
 - Registro con correo y contraseña; la cuenta se confirma con un código de 6
   dígitos que llega por correo (`/api/auth/verify-otp/`, `/api/auth/resend-otp/`).
-  La contraseña se recupera también con un código.
+  Registrarse ya abre la sesión (sin verificar) y verificar el código abre una
+  nueva, verificada: no se vuelve a pedir la contraseña. Límite del registro:
+  5 por hora y dirección (`register`). La contraseña se recupera también con un
+  código.
+- Códigos de un solo uso (`OtpCode`, en `apps/accounts`): 6 dígitos de
+  `secrets.randbelow`, guardados como HMAC con la `SECRET_KEY` (nunca en claro
+  ni en el admin) y comparados en tiempo constante; vencen a los
+  `OTP_TTL_MINUTES` y mueren a los `OTP_MAX_ATTEMPTS` intentos fallidos, que se
+  cuentan en la fila bajo `select_for_update`. Pedir otro anula el anterior. El
+  campo `code` acepta sólo `^[0-9]{6}\Z`, y un código equivocado responde 400
+  `{"code": ["Código de verificación inválido"]}` sin lanzar excepción: el
+  intento cuenta también con `ATOMIC_REQUESTS`.
+- Pedir un código (reenvío, recuperación, correo nuevo y el acceso de una
+  cuenta sin verificar) pasa antes por una cuota por correo y propósito, sin
+  buscar la cuenta: `OTP_RESEND_COOLDOWN_SECONDS` entre envíos y
+  `OTP_MAX_CODES_PER_HOUR` por hora; pasarse responde 429 con `Retry-After`,
+  igual exista o no el correo (el acceso sin verificar sigue en su 403, sin
+  mandar otro). El primer código, el del registro, no cuenta. Reenvío y
+  recuperación responden siempre el mismo 200, y verificar o recuperar con un
+  correo sin cuenta (o ya verificado) responde el mismo 400 que un código
+  equivocado.
+- Código universal (sólo para la suite E2E): `OTP_UNIVERSAL_CODE` no tiene
+  valor por omisión y sólo puede existir con `APP_ENV` `local` o `develop`.
+  Sin `APP_ENV` es `production`, y un despliegue Production de Vercel
+  (`VERCEL_ENV=production`) lo es siempre: con el código en otro entorno los
+  settings no cargan y el build falla. Sirve sólo para las cuentas de
+  `OTP_UNIVERSAL_EMAILS` (correos exactos, separados por comas) y sólo para
+  verificar la cuenta (`verify-otp/`); nunca para recuperar la contraseña ni
+  para cambiar el correo. Cada uso queda en el log, sin el código. Sin correo
+  configurado (en local) el código propio se emite igual, pero no llega: para
+  probar el registro en local, `APP_ENV=local` con el código y tu correo en la
+  lista.
+- Cambio de correo (`me/email/`): el código va sólo al correo nuevo, la cuenta
+  sigue con el de siempre hasta confirmarlo y el anterior recibe un aviso sin
+  código. Cambiar la contraseña (`me/password/`) o recuperarla pasa por los
+  validadores de Django y deja fuera a toda sesión anterior; quien la cambió
+  sigue dentro con una nueva, y quien la recuperó entra con la nueva.
+- Límites de intentos (DRF, en la caché compartida de la base): por dirección,
+  el alcance de cada vista —acceso `login` 10/min, registro `register` 5/h,
+  pedir código `otp_request` 3/min, verificar un código (también recuperar con
+  él y confirmar el correo nuevo) `otp_verify` 10/min, pedir recuperar
+  `password_reset` 5/h, `me/password/` y `me/delete/` `password_change` 5/h,
+  contacto `contact` 5/h—, y por cuenta, sobre el correo enviado
+  (`common.throttling.IdentifierRateThrottle`): `login_email` 20/h,
+  `otp_email` 10/h, `password_reset_email` 3/h; rotar la dirección no los
+  reinicia. Enviar un documento, invitar o reenviar una invitación y convertir
+  la foto de un plano comparten `costly` (`THROTTLE_COSTLY`, 20/h por cuenta).
+  Pasarse responde 429 con `Retry-After` (expuesto por CORS).
+- Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
+  verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
+  `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin
+  verificar sólo responden `GET /api/auth/me/` y las rutas públicas de la sesión
+  (código, reenvío, renovar, salir y CSRF).
 - Colaboradores: entran por el enlace de su invitación
   (`/api/invitations/<token>/accept/`), que crea la cuenta ya confirmada o pide la
   contraseña de quien ya tiene una.
@@ -336,7 +441,17 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   administrador); sin ella, la propia o la primera donde se colabora. Sin acceso
   a la pedida, 403 con `code: company_access`.
 - Formularios públicos (registro, acceso, recuperación, contacto e invitación):
-  reCAPTCHA v3 verificado en el servidor y campo trampa.
+  reCAPTCHA v3 verificado en el servidor (`common/recaptcha.py`) y campo trampa
+  (`website`). Si Google no contesta, las puertas de la cuenta (registro,
+  acceso, recuperación e invitación) responden 503 y el contacto se guarda bajo
+  su límite (`contact`, 5/h) marcado para revisar (`needs_review`). Con el campo
+  trampa lleno responden lo de siempre sin efecto: el registro, la recuperación,
+  el contacto y la invitación su 2xx (la invitación, el 404, 409 o 410 de un
+  enlace que no sirve, como la vía real); el acceso, el mismo 401 de unas
+  credenciales malas (un 2xx sin la sesión dejaría a la SPA creyendo que entró).
+  Un cuerpo que no es un objeto JSON es un 400; el cuerpo tiene tope
+  (`DATA_UPLOAD_MAX_MEMORY_SIZE`, 5 MB) y cada campo de texto el suyo
+  (contraseñas 128, correos 254, el token 8192).
 - Sin app móvil: no hay rutas `/api/auth/mobile/`.
 
 ## Integraciones
@@ -346,7 +461,10 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
 Los códigos de verificación, las invitaciones y los documentos salen por la API
 HTTP de Resend (`common/mail.py`); las invitaciones de una tanda, en una sola
 petición. En producción el despliegue se detiene si falta la llave o el
-remitente es el de prueba (`common/checks.py`, corre con `migrate`).
+remitente es el de prueba (`common/checks.py`, corre con `migrate`). Los
+registros nunca llevan contraseñas, códigos, tokens ni la llave, y los correos
+van enmascarados (`j***@dominio.com`), también en lo que Resend contesta al
+rechazar un envío (`common.mail.mask_addresses`).
 
 | Variable | Uso |
 |---|---|
@@ -354,7 +472,7 @@ remitente es el de prueba (`common/checks.py`, corre con `migrate`).
 | `RESEND_FROM` | Remitente de un dominio verificado en Resend; el de prueba (`onboarding@resend.dev`) sólo entrega al dueño de la cuenta |
 | `APP_BASE_URL` | Dominio de la aplicación en los enlaces de los correos |
 | `REQUIRE_EMAIL_DELIVERY` | Correo obligatorio; encendido por omisión con `VERCEL_ENV=production` |
-| `DOCUMENT_EMAIL_MAX_BYTES` | Tope del PDF que viaja adjunto |
+| `DOCUMENT_EMAIL_MAX_BYTES` | Tope del PDF que viaja adjunto (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### Archivos — Cloudflare R2
 
@@ -367,6 +485,7 @@ Logotipos, evidencia de los avances y las texturas y modelos del editor, por
 | `R2_ENDPOINT_URL`, `R2_PUBLIC_URL` | Endpoint S3 y host público de los objetos |
 | `R2_SIGNED_URLS`, `R2_SIGNED_URL_SECONDS` | URLs firmadas que vencen, para un bucket privado |
 | `USE_R2` | Fuerza R2 encendido o apagado |
+| `PLAN_ASSET_MAX_BYTES` | Tope por textura o modelo del editor (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### IA — Anthropic
 
@@ -378,17 +497,23 @@ La foto de un plano en papel se convierte en un plano editable
 | `ANTHROPIC_API_KEY` | Llave de la API |
 | `PHOTO_PLAN_MODEL` | Modelo que lee la foto |
 | `PHOTO_PLAN_DAILY_LIMIT` | Conversiones por cuenta al día |
-| `PHOTO_PLAN_MAX_BYTES` | Tope de la foto |
+| `PHOTO_PLAN_MAX_BYTES` | Tope de la foto (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### reCAPTCHA v3 — Google
 
 Verificación de los formularios públicos en el servidor (`common/recaptcha.py`).
+Sin `DEBUG` está encendida siempre, con llave o sin ella; con `DEBUG` sigue a la
+llave. **Production no despliega sin reCAPTCHA**: con `VERCEL_ENV=production`,
+sin `RECAPTCHA_SECRET_KEY` (`common.E003`) o con `RECAPTCHA_ENABLED` apagado
+(`common.E004`) el chequeo de `common/checks.py` detiene `migrate` en el build y
+la versión anterior sigue atendiendo.
 
 | Variable | Uso |
 |---|---|
-| `RECAPTCHA_SECRET_KEY` | Llave secreta; con ella se enciende la verificación |
+| `RECAPTCHA_SECRET_KEY` | Llave secreta v3 del entorno; va junto con `VITE_RECAPTCHA_SITE_KEY` del frontend |
+| `RECAPTCHA_ENABLED` | Sin definir: encendida sin `DEBUG`, sigue a la llave con `DEBUG`; apagarla sólo en develop sin llaves (vacía se lee como apagada) |
 | `RECAPTCHA_MIN_SCORE` | Puntaje mínimo |
-| `RECAPTCHA_HOSTNAMES` | Dominios desde los que se aceptan los tokens |
+| `RECAPTCHA_HOSTNAMES` | Dominios desde los que se aceptan los tokens: `itzaka.com` sin `DEBUG`, `localhost` con `DEBUG`; develop, `dev.itzaka.com` |
 
 ### Base de datos — Neon
 
@@ -399,11 +524,54 @@ lo que también admite el host con pooler de Neon (PgBouncer en modo
 transacción). El build de Vercel migra y crea la tabla de caché con esa misma
 `DATABASE_URL`.
 
+Aislamiento por empresa (RLS, desde iteracion-26): cada tabla de datos de
+trabajo lleva `FORCE ROW LEVEL SECURITY` y deja ver y escribir sólo las filas de
+la empresa del contexto (`app.company_id`); sin contexto, ninguna. Cada petición
+corre en su transacción (`ATOMIC_REQUESTS`) y fija ahí el contexto
+(`common/tenancy.py`): la API en `common.views.TenantContextMixin`, que toda
+vista de `apps/` hereda, y el admin en `core.middleware.AdminTenantContextMiddleware`.
+El rol de `DATABASE_URL` es el dueño de las tablas y se crea
+`NOSUPERUSER NOBYPASSRLS`: con superusuario o `BYPASSRLS` las políticas no lo
+detienen. Las tablas aisladas, sus políticas y las que quedan fuera (con su
+motivo) están en `common/rls.py`. La caché de los límites va por el alias
+`cache`: la misma base, en otra conexión fuera de la transacción de la petición,
+para que un intento fallido cuente. Una migración de datos sobre tablas de
+trabajo corre sin contexto y no ve filas: fija el de cada empresa
+(`set_tenant_context`) antes de tocar las suyas. Las pruebas de RLS (marca
+`rls`, `src/tests/security/test_rls.py`) corren en el quality gate de CI con
+PostgreSQL; en SQLite se saltan.
+
 ## Administración
 
 - Panel en `/admin/` del dominio de la API (Django Unfold); cada modelo de
   `apps/` tiene su registro, y las sesiones emitidas y anuladas (lista negra
-  de simplejwt) se consultan ahí, de solo lectura las emitidas.
+  de simplejwt) se consultan ahí, de solo lectura las emitidas. Los códigos de
+  verificación también son de solo lectura (para qué, intentos y vigencia),
+  sin su huella.
+- CSP propia del admin (`ADMIN_CSP`, puesta por `core.middleware.AdminCSPMiddleware`
+  justo después de `csp.middleware.CSPMiddleware`): sólo bajo `/admin/` (y, con
+  `DEBUG`, en el HTML de la API navegable) Unfold recibe `'unsafe-eval'` en
+  `script-src` (Alpine) y `'unsafe-inline'` en `style-src`; scripts en línea,
+  nunca. Las imágenes, del propio admin y del bucket (`R2_PUBLIC_URL`, o el
+  endpoint S3 con el bucket delante si las direcciones van firmadas): la vista
+  previa de logotipos y fotos.
+- Lo protegido no se edita en el admin (`common.admin.ProtectedFieldsAdminMixin`):
+  el estado de cotizaciones, proyectos, invitaciones y suscripciones y el precio
+  de mano de obra de un avance se ven y cambian sólo por su servicio, como los
+  folios; la cuenta dueña y los vínculos de un registro (su proyecto,
+  cotización, partida, persona o correo invitado) se eligen al crearlo y
+  después son de solo lectura.
+- Con la RLS (iteracion-26) el admin trabaja como una empresa más: quien entra
+  ve y edita lo de su empresa propia. Leer las de todas pide el permiso
+  `accounts.view_all_companies` (operador de plataforma; el superusuario lo
+  tiene, ser staff no), y aun así sólo lee: guardar o borrar una fila de otra
+  empresa lo rechaza la base (página de error). Borrar una cuenta la purga con
+  todo lo suyo y sus archivos (`purge_account`), como en la API; una con
+  cotizaciones o proyectos la sigue frenando el admin por sus registros
+  protegidos.
+- El login del admin (`core/admin_login.py`) se cierra 15 minutos tras
+  `ADMIN_LOGIN_MAX_FAILURES` intentos fallidos (5 por omisión) desde una
+  dirección o para un usuario: 429 con `Retry-After`.
 - Acceso: sólo el equipo de Itzaka, con un superusuario creado con
   `createsuperuser`; las cuentas de los clientes y sus colaboradores no entran
   al admin. Las credenciales nunca viven en el repositorio ni en este README.
@@ -423,14 +591,33 @@ Vercel (`vercel.json`):
 
 <!-- /readme:auto:despliegue -->
 
-- Producción: https://api-itzaka.grupotorresmucino.com (admin en `/admin/`); la
-  aplicación la llama por su propio dominio, https://itzaka.grupotorresmucino.com/api/.
+- Producción: https://api.itzaka.com (admin en `/admin/`), que la aplicación,
+  https://itzaka.com, llama en su subdominio. develop: https://api-dev.itzaka.com
+  para https://dev.itzaka.com, con `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
+  `APP_BASE_URL` y `CSRF_COOKIE_NAME=csrftoken_dev` propios (los valores por
+  omisión, sin `DEBUG`, son los de producción; con `DEBUG`, los locales).
 - Los valores por entorno viven en Infisical (`preview` y `prod`, que se sincronizan con Vercel: «Secretos (Infisical)»); los nombres, en `tecnico/infraestructura.md`
   de la memoria del proyecto, que es privada.
+- Entorno y código de pruebas E2E: Production (`main`) no lleva `APP_ENV` (o
+  lleva `production`) y nunca `OTP_UNIVERSAL_CODE` ni `OTP_UNIVERSAL_EMAILS`:
+  si llegaran, el build falla. develop (Preview) lleva `APP_ENV=develop` y, para
+  la suite E2E, `OTP_UNIVERSAL_CODE` (seis dígitos) y `OTP_UNIVERSAL_EMAILS` con
+  los correos exactos de las cuentas E2E (el código sólo verifica esas cuentas).
+  Desde iteracion-26 `OTP_UNIVERSAL_CODE_ENABLED` ya no se lee.
 - Cada entorno de Vercel (Production y Preview) lleva una sola `DATABASE_URL`:
   la función la usa y el build migra con ella. El `buildCommand` no pasa de 256
   caracteres, el máximo que admite el esquema de `vercel.json`. Vercel instala
   desde `uv.lock` (no hay `requirements.txt`).
+- Cron diario de Vercel (`crons` de `vercel.json`, sólo en Production):
+  `GET /api/cron/flush-expired-tokens/` borra las sesiones vencidas. Vercel lo
+  llama con `Authorization: Bearer <CRON_SECRET>`; sin `CRON_SECRET` en el
+  entorno responde 401 y no corre.
+- reCAPTCHA (desde iteracion-26): Production no despliega sin
+  `RECAPTCHA_SECRET_KEY` ni con `RECAPTCHA_ENABLED` apagado. Antes de promover,
+  una persona crea las llaves v3 del dominio `itzaka.com` y pone juntas
+  `RECAPTCHA_SECRET_KEY` en el backend y `VITE_RECAPTCHA_SITE_KEY` en el
+  frontend de Production. develop (sin `DEBUG`) también verifica: sus propias
+  llaves con `RECAPTCHA_HOSTNAMES=dev.itzaka.com`, o `RECAPTCHA_ENABLED=False`.
 - Verificación después de desplegar: `/api/health/` responde 200 y
   `/admin/login/` carga con sus estilos.
 

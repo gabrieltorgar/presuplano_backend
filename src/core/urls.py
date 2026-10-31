@@ -5,7 +5,11 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from core.admin_login import admin_login
+
 urlpatterns = [
+    # Primero el login del admin con su límite de intentos: el de Django, detrás.
+    path("admin/login/", admin_login),
     path("admin/", admin.site.urls),
     path("api/", include("api.urls")),
 ]

@@ -82,11 +82,12 @@ class TestPoliticaDeContenido:
     def test_every_response_carries_a_strict_csp(self, client) -> None:
         response = client.get("/api/health/")
 
+        # La API sirve JSON: nada que cargar (iteracion-26 #18).
         csp = response["Content-Security-Policy"]
-        assert "default-src 'self'" in csp
+        assert "default-src 'none'" in csp
         assert "frame-ancestors 'none'" in csp
-        assert "object-src 'none'" in csp
-        assert "unsafe-inline" not in csp.split("script-src", 1)[-1].split(";")[0]
+        assert "base-uri 'none'" in csp
+        assert "unsafe" not in csp
 
     @pytest.mark.django_db
     def test_only_the_admin_gets_what_unfold_needs(self, client) -> None:

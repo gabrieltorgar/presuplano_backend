@@ -1,11 +1,10 @@
 """Planner views: account-scoped plan CRUD and photo conversion."""
 
 from django.conf import settings
-from rest_framework import serializers, status, viewsets
+from rest_framework import serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException
-from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -20,6 +19,8 @@ from apps.planner.serializers import (
 from apps.planner.services import delete_plans
 from apps.team.tenancy import account_of
 from common.bulk import BulkActionMixin
+from common.permissions import IsVerifiedUser
+from common.views import TenantModelViewSet
 
 
 class DailyPhotoLimitReached(APIException):
@@ -35,7 +36,7 @@ class PhotoServiceUnavailable(APIException):
     default_code = "photo_unavailable"
 
 
-class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
+class PlanViewSet(BulkActionMixin, TenantModelViewSet):
     """CRUD for the authenticated account's plans (isolated per account).
 
     The list (US-78, iteracion-17) is summaries without the document, by pages:
@@ -44,7 +45,7 @@ class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
     and orders by last change or name, the one touched last first by default.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = PlanFilter
     search_fields = ("name",)
     ordering_fields = ("updated_at", "name")
@@ -72,7 +73,9 @@ class PlanViewSet(BulkActionMixin, viewsets.ModelViewSet):
         detail=False,
         methods=["post"],
         url_path="photo-conversions",
-        parser_classes=[MultiPartParser, FormParser],
+        parser_classes=[MultiPartParser],
+        # Cada foto la lee un servicio de pago (iteracion-26 #16).
+        throttle_scope="costly",
     )
     def photo_conversions(self, request: Request) -> Response:
         """US-129: the walls and rooms of a photo of a paper plan.

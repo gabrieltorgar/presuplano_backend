@@ -1,9 +1,8 @@
 """Payments views: register payment, list, summary and voucher."""
 
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -20,13 +19,15 @@ from apps.payments.services import (
 from apps.projects.models import Project
 from apps.projects.selectors import advanced_value, quoted_value
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
+from common.views import TenantReadOnlyModelViewSet
 
 
-class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
+class PaymentViewSet(TenantReadOnlyModelViewSet):
     """List/register payments; project payment summary; payment voucher."""
 
     serializer_class = PaymentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas, ``?project=`` y en orden de fecha.
     # Sin búsqueda: se piden los de un proyecto, no se buscan.
     filterset_class = PaymentFilter

@@ -11,6 +11,8 @@ from rest_framework.exceptions import APIException, Throttled, ValidationError
 from rest_framework.serializers import as_serializer_error
 from rest_framework.views import exception_handler as drf_exception_handler
 
+from apps.accounts.otp_quota import OTPCooldown
+
 logger = logging.getLogger("apps")
 
 #: Lo que se le dice a la petición que perdió contra otra simultánea.
@@ -63,7 +65,9 @@ def api_exception_handler(exc, context):
       terminan en un 500 (iteracion-16): la que perdió recibe 409 con qué
       hacer. El mensaje de la base —tablas, restricciones— nunca llega al
       cliente.
-    - El 429 se dice como lo diría la aplicación.
+    - El 429 se dice como lo diría la aplicación, también el de la espera
+      del código de un solo uso (``OTPCooldown``, iteracion-26 #14), con su
+      ``Retry-After``.
     """
     if isinstance(exc, DjangoValidationError):
         exc = ValidationError(as_serializer_error(exc))
@@ -74,6 +78,10 @@ def api_exception_handler(exc, context):
     elif isinstance(exc, IntegrityError):
         logger.warning("Integrity conflict: %s", type(exc).__name__)
         exc = Conflict()
+    elif isinstance(exc, OTPCooldown):
+        wait = exc.wait
+        exc = Throttled(wait=wait)
+        exc.detail = f"Ya te enviamos un código. {_wait_text(wait)}"
     elif isinstance(exc, Throttled):
         exc.detail = f"Demasiados intentos. {_wait_text(exc.wait)}"
     response = drf_exception_handler(exc, context)

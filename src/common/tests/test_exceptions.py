@@ -12,6 +12,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.test import APIClient, APIRequestFactory
 from rest_framework.views import APIView
 
+from apps.accounts.otp_quota import OTPCooldown
 from apps.staff.models import Worker, WorkerPayment
 from apps.staff.tests.factories import WorkerFactory
 from common.exceptions import CONFLICT_MESSAGE, api_exception_handler
@@ -155,3 +156,21 @@ def test_an_id_that_is_not_a_uuid_is_a_400_with_its_reason(user, url, params) ->
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "UUID" in str(response.data["non_field_errors"])
+
+
+@pytest.mark.parametrize(
+    ("wait", "text"),
+    [
+        (42, "Intenta de nuevo en 42 segundos."),
+        (3600, "Intenta de nuevo en 60 minutos."),
+    ],
+)
+def test_the_otp_cooldown_is_a_429_with_retry_after(wait, text) -> None:
+    """CRD-04.2 · iteracion-26 #14 — La espera del código de un solo uso se dice
+    como la aplicación, con cuánto falta en ``Retry-After``."""
+    response = api_exception_handler(OTPCooldown(wait=wait), {})
+
+    assert response is not None
+    assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert response["Retry-After"] == str(wait)
+    assert response.data == {"detail": f"Ya te enviamos un código. {text}"}

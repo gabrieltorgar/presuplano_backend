@@ -1,5 +1,7 @@
 """Lecturas de colaboradores e invitaciones."""
 
+from django.db.models import QuerySet
+
 from apps.accounts.models import Organization, User
 from apps.team.models import Invitation, Membership
 
@@ -103,6 +105,15 @@ def get_member(*, account: User, member_id) -> Membership | None:
     )
 
 
+def invitations_of(*, account: User) -> QuerySet[Invitation]:
+    """Las invitaciones de esa empresa.
+
+    De aquí relee, con su fila bloqueada, el servicio que va a cambiar una
+    (SEC-03, iteracion-26 #20).
+    """
+    return Invitation.objects.filter(account=account)
+
+
 def get_invitation(*, account: User, invitation_id) -> Invitation | None:
     """La invitación de esa empresa con ese id, o nada si es de otra."""
-    return Invitation.objects.filter(account=account, pk=invitation_id).first()
+    return invitations_of(account=account).filter(pk=invitation_id).first()

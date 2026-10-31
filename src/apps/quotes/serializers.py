@@ -218,6 +218,9 @@ class QuoteSerializer(serializers.ModelSerializer):
             "validity_days",
             "created_at",
         ]
+        # Forma de lectura: crear y editar pasan por QuoteWriteSerializer, y el
+        # estado lo cambia sólo la conversión en proyecto (SEC-03).
+        read_only_fields = ["folio", "status", "created_at"]
 
     def get_total(self, obj: Quote) -> Decimal:
         return sum((item.subtotal for item in obj.items.all()), Decimal("0"))
