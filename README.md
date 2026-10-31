@@ -472,7 +472,10 @@ corren sólo con PostgreSQL (CI): en SQLite se saltan con su motivo
   Un cuerpo que no es un objeto JSON es un 400; el cuerpo tiene tope
   (`DATA_UPLOAD_MAX_MEMORY_SIZE` = `UPLOAD_MAX_BYTES`, 4 MiB, bajo los 4.5 MB
   de Vercel) y cada campo de texto el suyo
-  (contraseñas 128, correos 254, el token 8192).
+  (contraseñas 128, correos 254, el token 8192). Un cuerpo de más de ese tope,
+  en cualquier ruta, responde 400 con su motivo («Lo que enviaste pesa más de
+  4 MB…», `code: request_too_big`, `common/exceptions.py`), no la página «Bad
+  Request» de Django.
 - Sin app móvil: no hay rutas `/api/auth/mobile/`.
 
 ## Integraciones
