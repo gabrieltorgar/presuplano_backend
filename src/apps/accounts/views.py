@@ -86,12 +86,18 @@ class CsrfCookieView(APIView):
 
 
 class RegisterView(CredentialExchangeMixin, APIView):
-    """POST /api/auth/register/ — crear una cuenta con correo y contraseña."""
+    """POST /api/auth/register/ — crear una cuenta con correo y contraseña.
+
+    Abre la sesión de la cuenta sin verificar en las cookies HttpOnly (el
+    cuerpo es sólo la cuenta): con ella la SPA pide ``me/`` y lleva a la
+    pantalla del código; ninguna ruta de datos la acepta hasta verificar
+    (IsVerifiedUser, iteracion-26 #12).
+    """
 
     permission_classes = [AllowAny]
     # Intercambio de credenciales: una cookie de acceso vieja no lo vuelve 401.
     authentication_classes: list = []
-    throttle_scope = "signup"
+    throttle_scope = "register"
 
     def post(self, request: Request) -> Response:
         verdict = guard_public_form(
@@ -118,13 +124,21 @@ class RegisterView(CredentialExchangeMixin, APIView):
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             **serializer.validated_data,
         )
-        return Response(
+        response = Response(
             UserAccountSerializer(user).data, status=status.HTTP_201_CREATED
         )
+        set_session_cookies(response, start_session(user=user))
+        get_token(request)
+        return response
 
 
 class VerifyOtpView(CredentialExchangeMixin, APIView):
-    """POST /api/auth/verify-otp/ — dar por bueno el correo con el código."""
+    """POST /api/auth/verify-otp/ — dar por bueno el correo con el código.
+
+    Verificar es entrar (iteracion-26 #12): deja una sesión nueva de esa
+    cuenta en las cookies, también en un navegador que llegó por el acceso
+    de una cuenta sin verificar, sin volver a pedir la contraseña.
+    """
 
     permission_classes = [AllowAny]
     authentication_classes: list = []  # el código es la credencial
@@ -134,7 +148,10 @@ class VerifyOtpView(CredentialExchangeMixin, APIView):
         serializer = VerifyOtpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = verify_account(**serializer.validated_data)
-        return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
+        response = Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
+        set_session_cookies(response, start_session(user=user))
+        get_token(request)
+        return response
 
 
 class ResendOtpView(CredentialExchangeMixin, APIView):

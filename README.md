@@ -276,7 +276,10 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   confianza para CSRF), con credenciales.
 - Registro con correo y contraseña; la cuenta se confirma con un código de 6
   dígitos que llega por correo (`/api/auth/verify-otp/`, `/api/auth/resend-otp/`).
-  La contraseña se recupera también con un código.
+  Registrarse ya abre la sesión (sin verificar) y verificar el código abre una
+  nueva, verificada: no se vuelve a pedir la contraseña. Límite del registro:
+  5 por hora y dirección (`register`). La contraseña se recupera también con un
+  código.
 - Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
   verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
   `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin

@@ -229,7 +229,9 @@ REST_FRAMEWORK = {
         "anon": env("THROTTLE_ANON"),
         "user": env("THROTTLE_USER"),
         "login": "10/min",
-        "signup": "10/hour",
+        # Cinco cuentas por hora y dirección: cada registro abre una sesión y
+        # manda un correo (iteracion-26 #12).
+        "register": "5/hour",
         "otp": "5/min",
         "password_reset": "5/hour",
         "contact": "5/hour",
