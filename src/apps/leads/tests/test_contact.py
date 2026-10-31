@@ -7,6 +7,11 @@ salida para el que hoy no se registra.
 
 import pytest
 from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
+
+from apps.accounts.tests.factories import UserFactory
+from common.auth_cookies import ACCESS_COOKIE
 
 URL = "/api/contact/"
 
@@ -93,3 +98,36 @@ class TestContactLead:
         response = api_client.get(URL)
 
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+#: Un mensaje que pasa la validación del formulario de contacto.
+MENSAJE = {
+    "name": "Javier López",
+    "phone": "5512345678",
+    "message": "Quiero saber si sirve para remodelaciones.",
+}
+
+
+@pytest.mark.django_db
+class TestContactNoLeeLaSesion:
+    """SEC-04.5 · iteracion-27 #7 — el formulario es público: no lee la sesión."""
+
+    def test_a_live_session_cookie_without_csrf_does_not_block_it(self) -> None:
+        """SEC-04.5 · iteracion-27 #7 — Con la cookie de una sesión de otra visita
+        y sin X-CSRFToken, el mensaje llega: no es un 403 de CSRF."""
+        client = APIClient(enforce_csrf_checks=True)
+        client.cookies[ACCESS_COOKIE] = str(AccessToken.for_user(UserFactory()))
+
+        response = client.post(URL, MENSAJE, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_a_dead_session_cookie_does_not_block_it(self) -> None:
+        """SEC-04.5 · iteracion-27 #7 — Con una cookie de sesión vencida o falsa,
+        tampoco falla."""
+        client = APIClient(enforce_csrf_checks=True)
+        client.cookies[ACCESS_COOKIE] = "vieja"
+
+        response = client.post(URL, MENSAJE, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED

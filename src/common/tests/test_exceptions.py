@@ -174,3 +174,43 @@ def test_the_otp_cooldown_is_a_429_with_retry_after(wait, text) -> None:
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
     assert response["Retry-After"] == str(wait)
     assert response.data == {"detail": f"Ya te enviamos un código. {text}"}
+
+
+@pytest.mark.django_db
+class TestCuerpoDemasiadoGrande:
+    """API-02 · iteracion-27 #7 — Un cuerpo de más de DATA_UPLOAD_MAX_MEMORY_SIZE
+    es un 400 que dice por qué, con la forma de la API: nunca la página «Bad
+    Request» de Django sin motivo (la SPA solo podía decir «400»)."""
+
+    def test_a_body_over_the_cap_is_a_400_with_its_reason(self, settings, user) -> None:
+        settings.DATA_UPLOAD_MAX_MEMORY_SIZE = 1024
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            "/api/plans/",
+            {"name": "Casa Reyes", "document": {"walls": [], "notes": "x" * 4096}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["code"] == "request_too_big"
+        assert "pesa más de" in response.data["detail"]
+
+    def test_the_handler_names_the_cap(self, settings) -> None:
+        from django.core.exceptions import RequestDataTooBig
+
+        settings.DATA_UPLOAD_MAX_MEMORY_SIZE = 4 * 1024 * 1024
+
+        response = api_exception_handler(RequestDataTooBig("too big"), {})
+
+        assert response is not None
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {
+            "detail": (
+                "Lo que enviaste pesa más de 4 MB, lo más que recibe el servidor. "
+                "Si es un plano, lo que más pesa suele ser el plano de fondo "
+                "escaneado o una textura suelta."
+            ),
+            "code": "request_too_big",
+        }

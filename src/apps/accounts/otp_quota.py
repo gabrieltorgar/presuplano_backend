@@ -36,7 +36,9 @@ def check_request_quota(*, email: str, purpose: str) -> None:
             pasado ``OTP_MAX_CODES_PER_HOUR`` en la hora.
     """
     key = salted_hmac(
-        "apps.accounts.otp-quota", f"{purpose}:{email.strip().lower()}"
+        "apps.accounts.otp-quota",
+        f"{purpose}:{email.strip().lower()}",
+        algorithm="sha256",
     ).hexdigest()
     cooldown, now = settings.OTP_RESEND_COOLDOWN_SECONDS, int(time.time())
     if not cache.add(f"otp:cd:{key}", now, cooldown):

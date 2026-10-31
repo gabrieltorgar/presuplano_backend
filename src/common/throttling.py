@@ -37,6 +37,6 @@ class IdentifierRateThrottle(SimpleRateThrottle):
         if not email:
             return None
         ident = salted_hmac(
-            "throttle", f"{data.get('purpose', '')}:{email}"
+            "throttle", f"{data.get('purpose', '')}:{email}", algorithm="sha256"
         ).hexdigest()
         return self.cache_format % {"scope": self.scope, "ident": ident}

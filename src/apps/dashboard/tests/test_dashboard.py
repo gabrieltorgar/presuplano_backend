@@ -4,7 +4,7 @@ Lo que el arquitecto quiere ver al abrir: qué hay en marcha, cuánto de lo que
 cotiza se vuelve obra, qué le deben, qué debe, y qué se vende.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -17,6 +17,7 @@ from apps.projects.services import register_progress, start_project
 from apps.quotes.services import create_quote
 from apps.staff.services import assign_service, pay_worker
 from apps.staff.tests.factories import WorkerFactory
+from common.business_time import business_today
 
 URL = "/api/dashboard/"
 
@@ -54,7 +55,10 @@ def make_account(user):
     obra = start_project(owner=user, quote=vendida)
     otra = start_project(owner=user, quote=segunda)
 
-    hoy = date.today()
+    # Hoy del negocio (México), como el mes en curso de los ingresos (#11 de
+    # iteracion-27): date.today() de la máquina de CI (UTC) es mañana a partir
+    # de las 18:00 de México.
+    hoy = business_today()
     register_payment(owner=user, project=obra, amount=Decimal("20000"), date=hoy)
     register_payment(owner=user, project=otra, amount=Decimal("5000"), date=hoy)
 
@@ -150,7 +154,7 @@ class TestDashboard:
 
         meses = data["monthly_income"]
         assert len(meses) == 6
-        assert meses[-1]["month"] == date.today().strftime("%Y-%m")
+        assert meses[-1]["month"] == business_today().strftime("%Y-%m")
         # Lo cobrado este mes: 20 000 + 5 000.
         assert Decimal(meses[-1]["amount"]) == Decimal("25000.00")
         assert Decimal(meses[0]["amount"]) == Decimal("0.00")
@@ -160,7 +164,7 @@ class TestDashboard:
     ) -> None:
         """Caso de borde - Un cobro viejo no se cuenta en este mes."""
         cuenta = make_account(user)
-        viejo = date.today() - timedelta(days=400)
+        viejo = business_today() - timedelta(days=400)
         register_payment(
             owner=user, project=cuenta["obra"], amount=Decimal("9000"), date=viejo
         )

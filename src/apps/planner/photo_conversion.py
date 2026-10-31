@@ -21,11 +21,11 @@ import statistics
 import anthropic
 import numpy as np
 from django.conf import settings
-from django.utils import timezone
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from apps.planner import photo_cleanup, photo_geometry
 from apps.planner.models import PhotoConversion
+from common.business_time import business_day_start
 
 logger = logging.getLogger(__name__)
 
@@ -484,8 +484,12 @@ def to_plan(reading: dict, *, metres_per_pixel: float | None = None) -> dict:
 
 
 def conversions_today(owner) -> int:
-    """How many photos this account had read since midnight."""
-    midnight = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    """How many photos this account had read since midnight, Mexico time.
+
+    The daily cap follows the business day (iteracion-27 #11): with UTC it
+    started over at 18:00 in Mexico.
+    """
+    midnight = business_day_start()
     return PhotoConversion.objects.filter(owner=owner, created_at__gte=midnight).count()
 
 

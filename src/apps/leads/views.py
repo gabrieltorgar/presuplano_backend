@@ -18,6 +18,9 @@ logger = logging.getLogger("apps")
 class ContactView(TenantAPIView):
     """POST /api/contact/ — dejar un mensaje sin tener cuenta."""
 
+    # Público: no lee la sesión. Una cookie de otra visita (viva sin X-CSRFToken,
+    # o vencida) no lo vuelve un 403 de CSRF ni un 401 (iteracion-27 #7).
+    authentication_classes: list = []
     permission_classes = [AllowAny]
     throttle_scope = "contact"
 
