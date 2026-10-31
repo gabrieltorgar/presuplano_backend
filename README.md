@@ -150,8 +150,76 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `R2_PUBLIC_URL` | Public host that serves the objects (r2.dev subdomain or your custom domain) |
 | `R2_SIGNED_URLS` | Private bucket: signed URLs that expire, from the S3 endpoint (not the public host). Turn on after making the bucket private and allowing the app's origin in the bucket's CORS policy (the 3D editor fetches textures and meshes). |
 | `R2_SIGNED_URL_SECONDS` | — |
+| `ANTHROPIC_API_KEY` | Without the key the conversion answers "not available". Server only. |
 
 <!-- /readme:auto:variables -->
+
+### Secretos (Infisical)
+
+Los valores de estas variables viven en **Infisical**, en el proyecto del backend
+(`itzaka-backend`, uno por backend). `src/core/.env.example` es solo la lista de
+nombres: en local no se llena un `.env`, la CLI de Infisical inyecta los valores
+como variables de entorno del proceso y `core/settings.py` los lee con
+`django-environ`. Un `src/core/.env` local, si existe, solo cubre lo que el
+entorno no trae y nunca le gana a Infisical. Vercel recibe sus valores por la
+sincronización de Infisical: no se capturan a mano en Vercel.
+
+| Entorno (`--env`) | Para qué | Base de datos |
+|---|---|---|
+| `dev` | Servidor local y comandos de `manage.py` | rama `dev` de Neon, con datos sintéticos |
+| `test` | Pruebas que usan la base (`pytest`) | rama `test` de Neon: las pruebas crean y usan su propia base `test_<nombre>` |
+| `preview` | `develop` desplegado en Vercel (Preview); solo lo lee la sincronización | rama `develop` de Neon |
+| `prod` | `main` desplegado en Vercel (Production); solo lo lee la sincronización | rama principal de Neon |
+
+Primera vez en una máquina:
+
+1. Instala la CLI (`winget install infisical`, `brew install infisical/get-cli/infisical`
+   o `npm install -g @infisical/cli`) y revisa la versión con `infisical --version`:
+   estos comandos usan el grupo `sm` (0.44.8 o posterior; con 0.43.145 o anterior
+   se escriben sin `sm`, `infisical run`).
+2. Inicia sesión con tu cuenta: `infisical login` (sin navegador, `infisical login -i`);
+   `infisical login status` muestra con qué cuenta y en qué instancia estás.
+3. El repositorio se enlaza al proyecto con `.infisical.yaml` en la raíz, que no
+   lleva secretos y se commitea. Si todavía no existe, quien administra Infisical
+   corre `infisical init` en la raíz y elige `itzaka-backend`; el archivo queda con
+   el `project-id` y el entorno por omisión es `dev`. **Nunca** se le asignan ramas a
+   entornos (`overrides.git-branch`): un comando local en `main` no debe caer en `prod`.
+
+Comandos de todos los días:
+
+| Qué | Comando |
+|---|---|
+| Servidor | `infisical sm run --env=dev -- uv run python src/manage.py runserver` |
+| Migraciones y cualquier comando de `manage.py` | `infisical sm run --env=dev -- uv run python src/manage.py migrate` (igual con `createcachetable`, `createsuperuser`, `shell`…) |
+| Pruebas con base de datos | `infisical sm run --env=test -- uv run python -m pytest` (una ruta al final para correr solo esas) |
+| Lint, formato y README | `uv run ruff check .`, `uv run ruff format .`, `python3 scripts/readme_sync.py …`: no necesitan Infisical |
+
+- `preview` y `prod` nunca se usan en local: esas bases las migra el build de
+  Vercel. Tampoco exportes los secretos a un archivo (`infisical sm export`) ni los
+  pegues en un `.env`, el chat o un issue.
+- La base de `test` la comparten quienes corren pruebas: una corrida a la vez
+  sobre ella (dos al mismo tiempo se pisan la base `test_<nombre>`).
+- Agentes y CI entran con una identidad de máquina (Universal Auth) que solo lee
+  `dev` y `test`. Con identidad, la CLI no toma el proyecto de `.infisical.yaml`:
+  se pasa `--projectId` con el `project-id` de ese archivo, y `INFISICAL_TOKEN` sale
+  de `infisical login --method=universal-auth … --silent --plain` en el mismo
+  comando, sin imprimirlo. El procedimiento está en `tecnico/infraestructura.md` de
+  la memoria.
+
+Si falta un secreto:
+
+1. Revisa que tu sesión siga viva (`infisical login status`) y que pediste el
+   entorno correcto (`--env`).
+2. Averigua qué nombres faltan sin imprimir valores:
+   `infisical sm run --env=dev -- uv run python -c "import os, sys; print([n for n in sys.argv[1:] if not os.environ.get(n)])" DATABASE_URL SECRET_KEY`.
+   Sin `DATABASE_URL` los settings caen a SQLite sin avisar; sin `RESEND_API_KEY`
+   no sale ningún correo.
+3. Pídele a quien administra el proyecto de Infisical que lo agregue en ese entorno
+   con el mismo nombre de `src/core/.env.example`. Nunca lo inventes ni lo pongas en
+   un `.env`. Si la variable es nueva, su nombre entra a `src/core/.env.example` en
+   el mismo commit que el código que la lee.
+4. En Vercel, un valor nuevo o cambiado llega con el siguiente despliegue después de
+   la sincronización.
 
 ## Comandos
 
@@ -357,7 +425,7 @@ Vercel (`vercel.json`):
 
 - Producción: https://api-itzaka.grupotorresmucino.com (admin en `/admin/`); la
   aplicación la llama por su propio dominio, https://itzaka.grupotorresmucino.com/api/.
-- Las variables por entorno (sólo nombres) viven en `tecnico/infraestructura.md`
+- Los valores por entorno viven en Infisical (`preview` y `prod`, que se sincronizan con Vercel: «Secretos (Infisical)»); los nombres, en `tecnico/infraestructura.md`
   de la memoria del proyecto, que es privada.
 - Cada entorno de Vercel (Production y Preview) lleva una sola `DATABASE_URL`:
   la función la usa y el build migra con ella. El `buildCommand` no pasa de 256
