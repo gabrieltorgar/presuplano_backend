@@ -93,7 +93,11 @@ class TestPasswordReset:
         assert not user.check_password("nuevaclave123")
 
     def test_an_unknown_email_cannot_be_confirmed(self, api_client, settings) -> None:
-        """Caso alternativo - Sin cuenta no hay nada que recuperar."""
+        """Caso alternativo - Sin cuenta no hay nada que recuperar.
+
+        Con el mismo 400 que un código equivocado (iteracion-26 #14 · CRD-04.2):
+        el 404 «No existe una cuenta» decía quién es cliente.
+        """
         response = api_client.post(
             CONFIRM_URL,
             {
@@ -104,7 +108,8 @@ class TestPasswordReset:
             format="json",
         )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {"code": ["Código de verificación inválido"]}
 
     def test_a_short_password_is_rejected(self, api_client, user, settings) -> None:
         """Caso alternativo - La contraseña nueva cumple lo mismo que al alta."""

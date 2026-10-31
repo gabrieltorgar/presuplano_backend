@@ -104,8 +104,14 @@ class TestCambiarElCorreo:
         assert user.email == anterior
         assert user.pending_email == "nuevo@estudio.mx"
 
-    def test_the_code_can_be_sent_again(self, authenticated_client, correo) -> None:
-        """Flujo alternativo - Si no llegó, se pide otra vez."""
+    def test_the_code_can_be_sent_again(
+        self, authenticated_client, correo, settings
+    ) -> None:
+        """Flujo alternativo - Si no llegó, se pide otra vez.
+
+        Pasada la espera entre códigos (iteracion-26 #14), que tiene su prueba.
+        """
+        settings.OTP_RESEND_COOLDOWN_SECONDS = 0
         authenticated_client.post(EMAIL, {"email": "nuevo@estudio.mx"})
         primero = ultimo_codigo(correo)
 

@@ -16,7 +16,6 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 from rest_framework.exceptions import (
     AuthenticationFailed,
-    NotFound,
     PermissionDenied,
     ValidationError,
 )
@@ -29,6 +28,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.deletion import purge_account
 from apps.accounts.emails import send_email_changed_notice, send_otp_email
 from apps.accounts.models import Organization, OtpCode, Subscription, User
+from apps.accounts.otp_quota import OTPCooldown, check_request_quota
 from apps.legal.services import record_acceptance
 from common import mail
 
@@ -273,17 +273,13 @@ def verify_account(*, email: str, code: str) -> User | None:
     """Dar por bueno el correo de quien demuestra tener el código.
 
     Devuelve ``None`` si el código no sirve: la vista responde el 400 y el
-    intento queda contado (iteracion-26 #13).
-
-    Raises:
-        NotFound: no hay cuenta con ese correo.
-        ValidationError: ya estaba verificada.
+    intento queda contado (iteracion-26 #13). Un correo sin cuenta, o de una ya
+    verificada, devuelve lo mismo (iteracion-26 #14): responder distinto
+    convertiría el endpoint en un detector de clientes.
     """
     user = find_user(email=email)
-    if user is None:
-        raise NotFound("No existe una cuenta con ese correo.")
-    if user.is_email_verified:
-        raise ValidationError("El correo ya está verificado")
+    if user is None or user.is_email_verified:
+        return None
 
     if not check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code=code):
         return None
@@ -299,8 +295,13 @@ def resend_otp(*, email: str) -> None:
 
     Ni un correo desconocido ni uno ya verificado se distinguen en la
     respuesta —eso convertiría el endpoint en un detector de clientes—, así
-    que sólo se anota y, cuando toca, se envía.
+    que sólo se anota y, cuando toca, se envía. La cuota va antes de buscar la
+    cuenta (iteracion-26 #14): la espera es la misma exista o no.
+
+    Raises:
+        OTPCooldown: dentro de la espera o pasado el tope por hora (429).
     """
+    check_request_quota(email=normalize_email(email), purpose=OtpCode.Purpose.SIGNUP)
     user = find_user(email=email)
     pending = user is not None and not user.is_verified
     logger.info(
@@ -361,8 +362,15 @@ def login_user(*, email: str, password: str) -> tuple[User, RefreshToken | None]
         raise AuthenticationFailed("Credenciales inválidas")
     if not user.is_verified:
         # Quien entra sin verificar no se quedó fuera: recibe el código otra vez
-        # y la pantalla lo lleva a escribirlo, como al registrarse.
-        send_verification_code(user=user)
+        # y la pantalla lo lleva a escribirlo, como al registrarse. Dentro de la
+        # espera no sale otro: el de hace un momento sigue sirviendo, y el 403
+        # no se vuelve 429.
+        try:
+            check_request_quota(email=user.email, purpose=OtpCode.Purpose.SIGNUP)
+        except OTPCooldown:
+            pass
+        else:
+            send_verification_code(user=user)
         return user, None
 
     session = start_session(user=user)
@@ -374,8 +382,15 @@ def start_password_reset(*, email: str) -> None:
     """Arrancar la recuperación de una contraseña olvidada.
 
     Un correo desconocido no dice nada —responder distinto convertiría el
-    endpoint en un detector de clientes—, así que sólo se anota.
+    endpoint en un detector de clientes—, así que sólo se anota. La cuota va
+    antes de buscar la cuenta (iteracion-26 #14).
+
+    Raises:
+        OTPCooldown: dentro de la espera o pasado el tope por hora (429).
     """
+    check_request_quota(
+        email=normalize_email(email), purpose=OtpCode.Purpose.PASSWORD_RESET
+    )
     user = find_user(email=email)
     logger.info("Account recovery requested", extra={"account_known": user is not None})
     if user is not None:
@@ -386,18 +401,21 @@ def reset_password(*, email: str, code: str, password: str) -> User | None:
     """Cambiar la contraseña de quien demuestra tener el correo.
 
     Devuelve ``None`` si el código no sirve: la vista responde el 400 y el
-    intento queda contado (iteracion-26 #13).
+    intento queda contado (iteracion-26 #13). Un correo sin cuenta devuelve lo
+    mismo (iteracion-26 #14).
 
     Raises:
-        NotFound: no existe una cuenta con ese correo.
-        ValidationError: la contraseña es débil.
+        ValidationError: la contraseña es débil (con o sin cuenta: la misma
+            regla, para que ese 400 tampoco diga si el correo existe).
     """
     user = find_user(email=email)
-    if user is None:
-        raise NotFound("No existe una cuenta con ese correo.")
 
     # Antes de gastar el código: una contraseña débil no obliga a pedir otro.
-    check_password_strength(password=password, user=user)
+    check_password_strength(
+        password=password, user=user or User(email=normalize_email(email))
+    )
+    if user is None:
+        return None
     if not check_otp(user=user, purpose=OtpCode.Purpose.PASSWORD_RESET, code=code):
         return None
 
@@ -428,6 +446,8 @@ def request_email_change(*, user: User, email: str) -> User:
 
     Raises:
         ValidationError: vacío, igual al actual o ya de otra cuenta.
+        OTPCooldown: el correo nuevo recibió un código hace poco, o ya
+            demasiados en la hora (iteracion-26 #14).
     """
     nuevo = normalize_email(email)
     if not nuevo:
@@ -436,6 +456,7 @@ def request_email_change(*, user: User, email: str) -> User:
         raise ValidationError({"email": "Ese ya es el correo de tu cuenta"})
     if _email_taken(nuevo, by_other_than=user):
         raise ValidationError({"email": "Ese correo ya está registrado"})
+    check_request_quota(email=nuevo, purpose=OtpCode.Purpose.EMAIL_CHANGE)
 
     user.pending_email = nuevo
     user.save(update_fields=["pending_email", "updated_at"])
@@ -449,9 +470,11 @@ def resend_email_change(*, user: User) -> User:
 
     Raises:
         ValidationError: no hay un cambio de correo pendiente.
+        OTPCooldown: dentro de la espera o pasado el tope por hora (429).
     """
     if not user.pending_email:
         raise ValidationError("No tienes un cambio de correo pendiente")
+    check_request_quota(email=user.pending_email, purpose=OtpCode.Purpose.EMAIL_CHANGE)
     send_verification_code(
         user=user, purpose=OtpCode.Purpose.EMAIL_CHANGE, to=user.pending_email
     )

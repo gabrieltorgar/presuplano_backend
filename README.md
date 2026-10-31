@@ -134,6 +134,8 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `OTP_UNIVERSAL_CODE_ENABLED` | Only opens accounts while mail is not configured, and only where enabled: on by default with DEBUG, off in production unless set on purpose. |
 | `OTP_TTL_MINUTES` | — |
 | `OTP_MAX_ATTEMPTS` | Failed tries a code survives before it is voided. |
+| `OTP_RESEND_COOLDOWN_SECONDS` | Seconds between two codes for the same email and purpose (also for unknown emails). |
+| `OTP_MAX_CODES_PER_HOUR` | Codes per hour for the same email and purpose. |
 | `RECAPTCHA_SECRET_KEY` | Verification turns on with the secret key (RECAPTCHA_ENABLED follows it). The site key goes to the frontend as VITE_RECAPTCHA_SITE_KEY: set both. |
 | `RECAPTCHA_MIN_SCORE` | — |
 | `RECAPTCHA_HOSTNAMES` | — |
@@ -288,6 +290,20 @@ responden `{requested, processed, failed}` (`common/bulk.py`).
   campo `code` acepta sólo `^[0-9]{6}\Z`, y un código equivocado responde 400
   `{"code": ["Código de verificación inválido"]}` sin lanzar excepción: el
   intento cuenta también con `ATOMIC_REQUESTS`.
+- Pedir un código (reenvío, recuperación, correo nuevo y el acceso de una
+  cuenta sin verificar) pasa antes por una cuota por correo y propósito, sin
+  buscar la cuenta: `OTP_RESEND_COOLDOWN_SECONDS` entre envíos y
+  `OTP_MAX_CODES_PER_HOUR` por hora; pasarse responde 429 con `Retry-After`,
+  igual exista o no el correo (el acceso sin verificar sigue en su 403, sin
+  mandar otro). El primer código, el del registro, no cuenta. Reenvío y
+  recuperación responden siempre el mismo 200, y verificar o recuperar con un
+  correo sin cuenta (o ya verificado) responde el mismo 400 que un código
+  equivocado.
+- Cambio de correo (`me/email/`): el código va sólo al correo nuevo, la cuenta
+  sigue con el de siempre hasta confirmarlo y el anterior recibe un aviso sin
+  código. Cambiar la contraseña (`me/password/`) o recuperarla pasa por los
+  validadores de Django y deja fuera a toda sesión anterior; quien la cambió
+  sigue dentro con una nueva, y quien la recuperó entra con la nueva.
 - Permiso por omisión `common.permissions.IsVerifiedUser`: sesión y correo
   verificado. Sin sesión, 401; con una cuenta sin verificar, 403 con
   `code: email_not_verified` (la SPA lleva a la pantalla del código). Sin

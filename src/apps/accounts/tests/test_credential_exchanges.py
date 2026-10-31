@@ -235,7 +235,8 @@ class TestLosIntercambiosNoAutentican:
             (
                 "/api/auth/verify-otp/",
                 {"email": "nadie@estudio.mx", "code": "000000"},
-                status.HTTP_404_NOT_FOUND,
+                # Un correo sin cuenta: el 400 de un código equivocado (#14).
+                status.HTTP_400_BAD_REQUEST,
             ),
             (
                 "/api/auth/resend-otp/",
@@ -254,7 +255,7 @@ class TestLosIntercambiosNoAutentican:
                     "code": "000000",
                     "password": "Teja-Roja-81",
                 },
-                status.HTTP_404_NOT_FOUND,
+                status.HTTP_400_BAD_REQUEST,
             ),
         ],
     )

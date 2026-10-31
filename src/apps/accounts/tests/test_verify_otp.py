@@ -47,13 +47,17 @@ class TestVerifyOtp:
     def test_verify_already_verified_returns_400(
         self, api_client, user_factory
     ) -> None:
-        """Caso de borde - Correo ya verificado."""
+        """Caso de borde - Correo ya verificado.
+
+        Responde lo mismo que un código equivocado (iteracion-26 #14 · CRD-04.2):
+        «ya está verificado» decía que el correo es de un cliente.
+        """
         account = user_factory(is_email_verified=True)
         payload = {"email": account.email, "code": settings.OTP_UNIVERSAL_CODE}
 
         response = api_client.post(VERIFY_URL, payload)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "El correo ya está verificado" in str(response.data)
+        assert response.data == {"code": ["Código de verificación inválido"]}
         account.refresh_from_db()
         assert account.is_email_verified is True

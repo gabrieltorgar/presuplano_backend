@@ -29,6 +29,10 @@ env = environ.Env(
     OTP_TTL_MINUTES=(int, 10),
     # Intentos fallidos que aguanta un código antes de morir (iteracion-12).
     OTP_MAX_ATTEMPTS=(int, 5),
+    # Espera entre dos códigos y tope por hora, por destino y propósito
+    # (iteracion-26 #14): se aplican exista o no la cuenta.
+    OTP_RESEND_COOLDOWN_SECONDS=(int, 60),
+    OTP_MAX_CODES_PER_HOUR=(int, 5),
     THROTTLE_ANON=(str, "60/min"),
     THROTTLE_USER=(str, "300/min"),
     # Long enough to keep an active session working; a refresh token silently
@@ -308,6 +312,8 @@ OTP_UNIVERSAL_CODE = env("OTP_UNIVERSAL_CODE")
 # propósito, para que una llave de correo que falte no abra todas las cuentas.
 OTP_UNIVERSAL_CODE_ENABLED = env.bool("OTP_UNIVERSAL_CODE_ENABLED", default=DEBUG)
 OTP_MAX_ATTEMPTS = env("OTP_MAX_ATTEMPTS")
+OTP_RESEND_COOLDOWN_SECONDS = env("OTP_RESEND_COOLDOWN_SECONDS")
+OTP_MAX_CODES_PER_HOUR = env("OTP_MAX_CODES_PER_HOUR")
 
 # --- reCAPTCHA v3 en los formularios públicos (common/recaptcha.py) ---
 # Se verifica en cuanto hay llave secreta: sin ella no se cierra la puerta a
