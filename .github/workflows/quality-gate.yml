@@ -42,6 +42,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: uv sync --locked --all-groups          # falla si uv.lock no corresponde a pyproject.toml
+      - run: uv run ruff check .                    # lint antes de las pruebas ([tool.ruff] de pyproject.toml), sin || true
       - run: rm -rf reports coverage && mkdir -p reports
       - name: Pruebas con cobertura (el resultado lo decide el gate)
         run: uv run pytest --junitxml=reports/junit.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=term || true

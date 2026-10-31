@@ -176,16 +176,16 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 Pasos de `quality-gate` (`.github/workflows/quality-gate.yml`), en orden; los mismos comandos sirven en local (con el valor de `MIN_COVERAGE` ya puesto):
 
 1. `uv sync --locked --all-groups`
-2. `rm -rf reports coverage && mkdir -p reports`
-3. Pruebas con cobertura (el resultado lo decide el gate): `uv run pytest --junitxml=reports/junit.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=term`
-4. Quality gate: `python3 scripts/test_gate.py --junit reports/junit.xml --cobertura reports/coverage.xml --min 0.90 --allow-skip-reason 'got empty parameter set'`
-5. README sincronizado (git-deploy-ops readme-format.md): `python3 scripts/readme_sync.py --check --kind backend`
+2. `uv run ruff check .`
+3. `rm -rf reports coverage && mkdir -p reports`
+4. Pruebas con cobertura (el resultado lo decide el gate): `uv run pytest --junitxml=reports/junit.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=term`
+5. Quality gate: `python3 scripts/test_gate.py --junit reports/junit.xml --cobertura reports/coverage.xml --min 0.90 --allow-skip-reason 'got empty parameter set'`
+6. README sincronizado (git-deploy-ops readme-format.md): `python3 scripts/readme_sync.py --check --kind backend`
 
 Cobertura mínima: **90 %** (`MIN_COVERAGE` del workflow). Una prueba en rojo, una omitida sin motivo permitido o una cobertura menor bloquean el merge.
 
 | Workflow | Check | Obligatorio en `main` y `develop` |
 |---|---|---|
-| `.github/workflows/ci.yml` | `test-backend` | no |
 | `.github/workflows/quality-gate.yml` | `quality-gate` | sí |
 | `.github/workflows/security.yml` | `security` | sí |
 

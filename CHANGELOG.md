@@ -5,6 +5,12 @@ Todas las notas de cambios relevantes de la API. El formato sigue
 
 ## [Unreleased] — En curso
 
+### Changed
+- **ci — TEC Se retira ci.yml; su lint pasa al quality gate**: `quality-gate.yml` corre `uv run ruff check .` después de `uv sync --locked --all-groups` y antes de las pruebas, sin `|| true`: un error de lint bloquea el merge igual que una prueba en rojo. Era lo único que solo corría `ci.yml`. (SRV-03.2 · iteracion-26 #3)
+
+### Removed
+- **ci — TEC Se retira ci.yml; su lint pasa al quality gate**: `.github/workflows/ci.yml` (check `test-backend`) se borra: repetía lo que ya corre `quality-gate` (`uv sync`, pytest con cobertura ≥ 90 % sobre PostgreSQL), con acciones sin fijar por SHA, sin `permissions` de nivel superior y sin `persist-credentials: false`. Un pull request a `main` o `develop` queda con sus dos checks, `quality-gate` y `security`, y ya no corre nada en el push a esas ramas, a las que solo se llega por pull request. Lo único que hacía solo `ci.yml`, `uv run ruff check .`, pasa al quality gate (ver Changed). (SRV-03.2 · iteracion-26 #3)
+
 ### Fixed
 - **vercel.json · core/.env.example · tests/platform · README — TEC El build de Vercel migra con la DATABASE_URL de la app**: Vercel rechazaba todo el vercel.json de la 4.0.0 («buildCommand should NOT be longer than 256 characters»: medía 331) y los despliegues del backend quedaron detenidos. El build vuelve al de antes de la iteracion-25: uv sync --frozen --no-dev, migrate --noinput y createcachetable con la misma DATABASE_URL de la API (142 caracteres). Se retiran DATABASE_URL_UNPOOLED y DATABASE_URL_MIGRATIONS de src/core/.env.example y del README; los ajustes del pooler (CONN_HEALTH_CHECKS, DISABLE_SERVER_SIDE_CURSORS, CONN_MAX_AGE en 0) se quedan. La prueba base test_vercel_json_follows_the_deploy_standard exige un buildCommand de 256 caracteres o menos que no reasigne DATABASE_URL, y test_env_example_names_only_the_app_database_url que .env.example nombre solo DATABASE_URL. (GIT-02, DJ-01 · iteracion-26 #1)
 
