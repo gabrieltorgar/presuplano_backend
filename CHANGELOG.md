@@ -3,6 +3,14 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [Unreleased] — En curso
+
+### Changed
+- **ci — TEC Se retira ci.yml; su lint pasa al quality gate**: `quality-gate.yml` corre `uv run ruff check .` después de `uv sync --locked --all-groups` y antes de las pruebas, sin `|| true`: un error de lint bloquea el merge igual que una prueba en rojo. Era lo único que solo corría `ci.yml`. (SRV-03.2 · iteracion-26 #3)
+
+### Removed
+- **ci — TEC Se retira ci.yml; su lint pasa al quality gate**: `.github/workflows/ci.yml` (check `test-backend`) se borra: repetía lo que ya corre `quality-gate` (`uv sync`, pytest con cobertura ≥ 90 % sobre PostgreSQL), con acciones sin fijar por SHA, sin `permissions` de nivel superior y sin `persist-credentials: false`. Un pull request a `main` o `develop` queda con sus dos checks, `quality-gate` y `security`, y ya no corre nada en el push a esas ramas, a las que solo se llega por pull request. Lo único que hacía solo `ci.yml`, `uv run ruff check .`, pasa al quality gate (ver Changed). (SRV-03.2 · iteracion-26 #3)
+
 ## [4.0.0] — 2026-10-30 · iteracion-25: PDF de cotización con desglose por habitación, folios de documentos configurables por organización, la API responde 409 o 400 con su motivo en vez de un 500, base de datos lista para el pooler de Neon y quality gate, security y pruebas base al día con git-deploy-ops
 
 ### Added
