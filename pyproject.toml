@@ -1,6 +1,6 @@
 [project]
 name = "itzaka-backend"
-version = "4.0.0"
+version = "5.0.0"
 description = "Itzaka — cotizador multi-tenant para arquitectos (backend API)"
 requires-python = ">=3.12"
 dependencies = [

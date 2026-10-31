@@ -31,12 +31,15 @@ WRITE = "/api/auth/organization/"
 
 
 def test_token_blacklist_is_installed():
-    """Sin token_blacklist, rotar y salir dejan vivos los refresh viejos."""
+    """CRD-02: sin token_blacklist, rotar y salir dejan vivos los refresh viejos;
+    sin CHECK_REVOKE_TOKEN, cambiar la contraseña deja viva cada sesión de antes
+    (iteracion-26 #11)."""
     jwt = dj_settings.SIMPLE_JWT
     assert "rest_framework_simplejwt.token_blacklist" in dj_settings.INSTALLED_APPS
     assert hasattr(RefreshToken, "blacklist")
     assert jwt["ROTATE_REFRESH_TOKENS"] is True
     assert jwt["BLACKLIST_AFTER_ROTATION"] is True
+    assert jwt.get("CHECK_REVOKE_TOKEN") is True, "la contraseña nueva no revoca"
     assert jwt["ACCESS_TOKEN_LIFETIME"] <= timedelta(minutes=30)
     assert jwt["REFRESH_TOKEN_LIFETIME"] <= timedelta(days=7)
 

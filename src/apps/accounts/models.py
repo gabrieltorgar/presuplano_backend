@@ -73,6 +73,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_table = "account_user"
         verbose_name = _("usuario")
         verbose_name_plural = _("usuarios")
+        # Operador de plataforma (common.tenancy.PLATFORM_OPERATOR_PERM): lee en
+        # el admin los datos de todas las empresas, sin escribirlos (#22).
+        permissions = [
+            (
+                "view_all_companies",
+                _("Puede leer en el admin los datos de todas las empresas"),
+            )
+        ]
 
     def __str__(self) -> str:
         return self.email
@@ -193,10 +201,13 @@ class Organization(models.Model):
 class OtpCode(models.Model):
     """Un código de un solo uso, con su plazo y para qué sirve.
 
-    Hasta ahora el código era uno solo para todos (``OTP_UNIVERSAL_CODE``):
-    servía para el MVP porque no había por dónde mandarlo. Con el correo sí lo
-    hay, así que cada cuenta con correo recibe el suyo, se guarda cifrado —lo
-    que llega a la base no sirve para entrar— y muere al usarse o al vencer.
+    Al principio el código era uno solo para todos (``OTP_UNIVERSAL_CODE``):
+    servía para el MVP porque no había por dónde mandarlo; hoy sólo queda para la
+    suite E2E, en local y develop (iteracion-26 #15). Con el correo sí lo hay,
+    así que cada cuenta con correo recibe el suyo, se guarda su HMAC con
+    la ``SECRET_KEY`` —lo que llega a la base no sirve para entrar, ni una copia
+    de ella sola— y muere al usarse, al vencer o al agotar sus intentos
+    (iteracion-26 #13).
     """
 
     class Purpose(models.TextChoices):

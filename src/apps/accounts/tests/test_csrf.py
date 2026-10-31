@@ -100,8 +100,8 @@ def ajustes_con(entorno_extra: dict[str, str]) -> dict:
 
 class TestCsrfYCorsDesdeElEntorno:
     def test_without_variables_the_cookie_is_host_only_csrftoken(self) -> None:
-        """SEC-04 · iteracion-24 #1 — La SPA llama a /api en su dominio: sin Domain."""
-        ajustes = ajustes_con({})
+        """SEC-04 · iteracion-26 #9 — En local (DEBUG), la cookie queda sin Domain."""
+        ajustes = ajustes_con({"DEBUG": "True"})
 
         assert ajustes["CSRF_COOKIE_NAME"] == "csrftoken"
         assert ajustes["CSRF_COOKIE_DOMAIN"] is None

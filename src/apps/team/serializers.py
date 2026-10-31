@@ -2,6 +2,8 @@
 
 from rest_framework import serializers
 
+from apps.accounts.serializers import PASSWORD_MAX_LENGTH
+
 #: Cuántos correos caben en una sola tanda.
 MAX_EMAILS = 20
 
@@ -57,9 +59,13 @@ class AcceptInvitationSerializer(serializers.Serializer):
 
     password = serializers.CharField(
         write_only=True,
+        max_length=PASSWORD_MAX_LENGTH,
         error_messages={
             "required": "Escribe tu contraseña.",
             "blank": "Escribe tu contraseña.",
+            "max_length": (
+                f"La contraseña puede tener hasta {PASSWORD_MAX_LENGTH} caracteres."
+            ),
         },
     )
     terms_version = serializers.CharField(

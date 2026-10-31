@@ -4,10 +4,12 @@ from django.contrib import admin
 from unfold.admin import ModelAdmin
 
 from apps.planner.models import PhotoConversion, Plan
+from common.admin import ProtectedFieldsAdminMixin
 
 
 @admin.register(Plan)
-class PlanAdmin(ModelAdmin):
+class PlanAdmin(ProtectedFieldsAdminMixin, ModelAdmin):
+    set_on_create_fields = ("owner",)
     list_display = ["name", "owner", "updated_at"]
     search_fields = ["name", "owner__email"]
     list_filter = ["updated_at"]

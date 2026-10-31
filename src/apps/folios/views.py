@@ -1,10 +1,8 @@
 """Folios views: la configuración de folios de la empresa en la que se trabaja."""
 
 from django.http import Http404
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from apps.folios.codes import DocumentType
 from apps.folios.selectors import folio_setting_row, folio_settings_for
@@ -16,6 +14,8 @@ from apps.folios.serializers import (
 from apps.folios.services import configure_folios, preview_folio
 from apps.team.permissions import IsCompanyAdmin
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
+from common.views import TenantAPIView
 
 
 def _document_type(value: str) -> str:
@@ -25,14 +25,14 @@ def _document_type(value: str) -> str:
     return value
 
 
-class FolioSettingsView(APIView):
+class FolioSettingsView(TenantAPIView):
     """GET /api/folio-settings/ — la configuración de cada tipo de documento.
 
     Es un recurso, no una lista: un objeto con una llave por tipo
     (``{"quote": {...}, "project": {...}}``), en el orden de ``DocumentType``.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def get(self, request: Request) -> Response:
         rows = folio_settings_for(owner=account_of(request))
@@ -41,7 +41,7 @@ class FolioSettingsView(APIView):
         )
 
 
-class FolioSettingDetailView(APIView):
+class FolioSettingDetailView(TenantAPIView):
     """GET/PUT /api/folio-settings/<tipo>/ — la modalidad y la clave de un tipo.
 
     Cambiarla es de quien administra la empresa (US-140); verla, de todos.
@@ -49,8 +49,8 @@ class FolioSettingDetailView(APIView):
 
     def get_permissions(self):
         if self.request.method == "GET":
-            return [IsAuthenticated()]
-        return [IsAuthenticated(), IsCompanyAdmin()]
+            return [IsVerifiedUser()]
+        return [IsVerifiedUser(), IsCompanyAdmin()]
 
     def get(self, request: Request, document_type: str) -> Response:
         row = folio_setting_row(
@@ -70,14 +70,14 @@ class FolioSettingDetailView(APIView):
         return Response(FolioSettingSerializer(row).data)
 
 
-class FolioPreviewView(APIView):
+class FolioPreviewView(TenantAPIView):
     """GET /api/folio-settings/<tipo>/preview/?mode=sequential&prefix=VEN.
 
     El folio que saldría con esa clave, sin guardarla ni apartarlo: si VEN
     llegó a 100, la vista previa dice VEN-101.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def get(self, request: Request, document_type: str) -> Response:
         kind = _document_type(document_type)

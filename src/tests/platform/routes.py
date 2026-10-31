@@ -1,8 +1,9 @@
 """El inventario de rutas de la API para las pruebas base (TDD-B01, iteracion-25 #10).
 
 Recorre el URLconf y entrega cada vista de DRF bajo ``api/`` con sus acciones,
-su límite de intentos y sus permisos efectivos. ``as_view`` de DRF guarda
-``cls``, ``initkwargs`` y, en los ViewSets, ``actions``; el router pasa lo de
+sus límites de intentos (por dirección y por cuenta, iteracion-26 #16) y sus
+permisos efectivos. ``as_view`` de DRF guarda ``cls``, ``initkwargs`` y, en los
+ViewSets, ``actions``; el router pasa lo de
 ``@action(throttle_scope=…, permission_classes=…)`` por ``initkwargs``.
 """
 
@@ -42,6 +43,10 @@ def api_routes(patterns=None, prefix: str = "") -> Iterator[SimpleNamespace]:
             actions=actions,
             methods=sorted(actions) or [m for m in HTTP_METHODS if hasattr(cls, m)],
             scope=kwargs.get("throttle_scope", getattr(cls, "throttle_scope", None)),
+            identifier_scope=kwargs.get(
+                "identifier_throttle_scope",
+                getattr(cls, "identifier_throttle_scope", None),
+            ),
             permissions=list(kwargs.get("permission_classes", cls.permission_classes)),
         )
 

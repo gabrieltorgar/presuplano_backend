@@ -11,13 +11,11 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.serializers import (
@@ -32,14 +30,17 @@ from apps.accounts.serializers import (
     PasswordResetRequestSerializer,
     RegisterSerializer,
     ResendOtpSerializer,
+    SessionRefreshSerializer,
     UserAccountSerializer,
     VerifyOtpSerializer,
 )
 from apps.accounts.services import (
+    AccountNotVerified,
     cancel_email_change,
     change_password,
     confirm_email_change,
     delete_account,
+    flush_expired_sessions,
     get_my_organization,
     login_user,
     normalize_email,
@@ -62,11 +63,20 @@ from common.auth_cookies import (
     set_session_cookies,
     set_token_cookies,
 )
+from common.authentication import CredentialExchangeMixin
+from common.cron import CronSecretAuthentication, IsCronJob
+from common.permissions import IsVerifiedUser
 from common.recaptcha import Verdict, guard_public_form
+from common.views import TenantAPIView
+
+#: Lo que responde un código equivocado, vencido, usado o agotado. Se responde,
+#: no se lanza (iteracion-26 #13): con ``ATOMIC_REQUESTS`` (#22) una excepción
+#: revertiría el intento que se acaba de contar.
+INVALID_CODE = {"code": ["Código de verificación inválido"]}
 
 
 @method_decorator(ensure_csrf_cookie, name="get")
-class CsrfCookieView(APIView):
+class CsrfCookieView(TenantAPIView):
     """GET /api/auth/csrf/ — deja la cookie CSRF que la SPA repite en X-CSRFToken.
 
     Pública a propósito: no devuelve datos ni cambia nada, y la SPA la llama al
@@ -81,11 +91,19 @@ class CsrfCookieView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RegisterView(APIView):
-    """POST /api/auth/register/ — crear una cuenta con correo y contraseña."""
+class RegisterView(CredentialExchangeMixin, TenantAPIView):
+    """POST /api/auth/register/ — crear una cuenta con correo y contraseña.
+
+    Abre la sesión de la cuenta sin verificar en las cookies HttpOnly (el
+    cuerpo es sólo la cuenta): con ella la SPA pide ``me/`` y lleva a la
+    pantalla del código; ninguna ruta de datos la acepta hasta verificar
+    (IsVerifiedUser, iteracion-26 #12).
+    """
 
     permission_classes = [AllowAny]
-    throttle_scope = "signup"
+    # Intercambio de credenciales: una cookie de acceso vieja no lo vuelve 401.
+    authentication_classes: list = []
+    throttle_scope = "register"
 
     def post(self, request: Request) -> Response:
         verdict = guard_public_form(
@@ -112,29 +130,46 @@ class RegisterView(APIView):
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             **serializer.validated_data,
         )
-        return Response(
+        response = Response(
             UserAccountSerializer(user).data, status=status.HTTP_201_CREATED
         )
+        set_session_cookies(response, start_session(user=user))
+        get_token(request)
+        return response
 
 
-class VerifyOtpView(APIView):
-    """POST /api/auth/verify-otp/ — dar por bueno el correo con el código."""
+class VerifyOtpView(CredentialExchangeMixin, TenantAPIView):
+    """POST /api/auth/verify-otp/ — dar por bueno el correo con el código.
+
+    Verificar es entrar (iteracion-26 #12): deja una sesión nueva de esa
+    cuenta en las cookies, también en un navegador que llegó por el acceso
+    de una cuenta sin verificar, sin volver a pedir la contraseña.
+    """
 
     permission_classes = [AllowAny]
-    throttle_scope = "otp"
+    authentication_classes: list = []  # el código es la credencial
+    throttle_scope = "otp_verify"
+    identifier_throttle_scope = "otp_email"
 
     def post(self, request: Request) -> Response:
         serializer = VerifyOtpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = verify_account(**serializer.validated_data)
-        return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
+        if user is None:
+            return Response(INVALID_CODE, status=status.HTTP_400_BAD_REQUEST)
+        response = Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
+        set_session_cookies(response, start_session(user=user))
+        get_token(request)
+        return response
 
 
-class ResendOtpView(APIView):
+class ResendOtpView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/resend-otp/ — volver a pedir el código de verificación."""
 
     permission_classes = [AllowAny]
-    throttle_scope = "otp"
+    authentication_classes: list = []  # basta el correo; no lee la sesión
+    # La espera y el tope por hora exactos están en otp_quota.py (#14).
+    throttle_scope = "otp_request"
 
     def post(self, request: Request) -> Response:
         serializer = ResendOtpSerializer(data=request.data)
@@ -152,7 +187,7 @@ class ResendOtpView(APIView):
         )
 
 
-class LoginView(APIView):
+class LoginView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/login/ — abrir la sesión en cookies HttpOnly.
 
     El cuerpo sólo trae la cuenta: los tokens van en cookies que JavaScript no
@@ -160,7 +195,12 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
+    # Intercambio de credenciales: no lee la sesión, así que ni una cookie de
+    # acceso muerta (401) ni una viva sin X-CSRFToken (403) impiden entrar. El
+    # CSRF de login lo cierran los parsers de solo JSON.
+    authentication_classes: list = []
     throttle_scope = "login"
+    identifier_throttle_scope = "login_email"
 
     def post(self, request: Request) -> Response:
         verdict = guard_public_form(
@@ -170,11 +210,19 @@ class LoginView(APIView):
             remote_ip=client_ip(request),
         )
         if verdict is Verdict.DROP:
+            # Decisión (MAN-04, iteracion-26 #17): el 401 de unas credenciales
+            # malas, idéntico, y no un 2xx. El éxito de siempre trae la sesión
+            # en cookies; uno sin ellas dejaría a la SPA creyendo que entró.
             raise AuthenticationFailed("Credenciales inválidas")
 
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user, session = login_user(**serializer.validated_data)
+        if session is None:
+            # Sin verificar: el código ya salió. Se responde el 403 (no se lanza)
+            # para que ese código quede en la base con ATOMIC_REQUESTS.
+            unverified = AccountNotVerified(user.verification_identity)
+            return Response(unverified.detail, status=unverified.status_code)
         response = Response(
             {"user": UserAccountSerializer(user).data}, status=status.HTTP_200_OK
         )
@@ -183,23 +231,25 @@ class LoginView(APIView):
         return response
 
 
-class SessionRefreshView(APIView):
+class SessionRefreshView(TenantAPIView):
     """POST /api/auth/refresh/ — renovar la sesión con el refresh de la cookie.
 
     El refresh rota y el usado queda en la lista negra. Sin sesión o con una
     anulada responde 401 y borra las cookies. Público a propósito: lo que
-    autoriza es la cookie de refresh, no el access vencido.
+    autoriza es la cookie de refresh, no el access vencido. Sólo la cookie:
+    un refresh en el cuerpo no se lee (iteracion-26 #10), y el cuerpo de la
+    respuesta nunca trae tokens.
     """
 
     permission_classes = [AllowAny]
     authentication_classes: list = []
 
     def post(self, request: Request) -> Response:
-        raw = refresh_from(request) or request.data.get("refresh")
-        serializer = TokenRefreshSerializer(data={"refresh": raw or ""})
+        raw = refresh_from(request)
+        serializer = SessionRefreshSerializer(data={"refresh": raw or ""})
         try:
             serializer.is_valid(raise_exception=True)
-        except (InvalidToken, TokenError, ValidationError):
+        except (AuthenticationFailed, TokenError, ValidationError):
             response = Response(
                 {"detail": "La sesión terminó. Vuelve a iniciar sesión."},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -216,7 +266,7 @@ class SessionRefreshView(APIView):
         return response
 
 
-class LogoutView(APIView):
+class LogoutView(TenantAPIView):
     """POST /api/auth/logout/ — cerrar la sesión: anula el refresh y borra las cookies.
 
     Público a propósito: salir sin sesión no falla, y una sesión vencida
@@ -238,11 +288,30 @@ class LogoutView(APIView):
         return response
 
 
-class PasswordResetRequestView(APIView):
+class FlushExpiredTokensView(TenantAPIView):
+    """GET /api/cron/flush-expired-tokens/ — borrar las sesiones vencidas.
+
+    La llama el cron diario de Vercel (vercel.json → crons) con
+    ``Authorization: Bearer <CRON_SECRET>``. Ninguna sesión la abre: sin el
+    secreto configurado, sin la cabecera o con otro secreto responde 401 y
+    no corre (common/cron.py).
+    """
+
+    authentication_classes = [CronSecretAuthentication]
+    permission_classes = [IsCronJob]
+
+    def get(self, request: Request) -> Response:
+        flush_expired_sessions()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetRequestView(CredentialExchangeMixin, TenantAPIView):
     """POST /api/auth/password-reset/ — pedir recuperar la contraseña."""
 
     permission_classes = [AllowAny]
+    authentication_classes: list = []  # quien la olvidó no tiene sesión
     throttle_scope = "password_reset"
+    identifier_throttle_scope = "password_reset_email"
 
     def post(self, request: Request) -> Response:
         verdict = guard_public_form(
@@ -267,23 +336,45 @@ class PasswordResetRequestView(APIView):
         )
 
 
-class PasswordResetConfirmView(APIView):
-    """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva."""
+class PasswordResetConfirmView(CredentialExchangeMixin, TenantAPIView):
+    """POST /api/auth/password-reset/confirm/ — fijar la contraseña nueva.
+
+    Es verificar un código de seis dígitos: los límites de verificar.
+    """
 
     permission_classes = [AllowAny]
-    throttle_scope = "otp"
+    authentication_classes: list = []  # el código es la credencial
+    throttle_scope = "otp_verify"
+    identifier_throttle_scope = "otp_email"
 
     def post(self, request: Request) -> Response:
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = reset_password(**serializer.validated_data)
+        if user is None:
+            return Response(INVALID_CODE, status=status.HTTP_400_BAD_REQUEST)
         return Response(UserAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyAccountView(APIView):
+class MyAccountView(TenantAPIView):
     """GET/PATCH /api/auth/me/ — la cuenta de quien pregunta y su correo."""
 
+    # GET sin verificar (VERIFICATION_EXEMPT): con ``is_email_verified`` en
+    # falso, la SPA lleva a la pantalla del código. Lo demás pide verificar.
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return super().get_permissions()
+        return [IsVerifiedUser()]
+
+    def check_throttles(self, request: Request) -> None:
+        # PATCH manda el código al correo nuevo, como POST me/email/: su mismo
+        # límite. GET (la SPA lo pide al arrancar) sólo lleva el de la cuenta.
+        self.throttle_scope = (
+            MyEmailView.throttle_scope if request.method == "PATCH" else None
+        )
+        super().check_throttles(request)
 
     def get(self, request: Request) -> Response:
         # La SPA lo pide al arrancar: asegura la cookie CSRF aunque haya vencido.
@@ -298,14 +389,16 @@ class MyAccountView(APIView):
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyEmailView(APIView):
+class MyEmailView(TenantAPIView):
     """POST/DELETE /api/auth/me/email/ — pedir un correo nuevo, o desistir.
 
     El correo nuevo queda pendiente y recibe su código; la cuenta sigue
     entrando con el de siempre hasta que se confirma.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
+    # Manda un código (y cancelar comparte el alcance de la ruta).
+    throttle_scope = "otp_request"
 
     def post(self, request: Request) -> Response:
         serializer = EmailChangeSerializer(data=request.data)
@@ -318,34 +411,39 @@ class MyEmailView(APIView):
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyEmailVerifyView(APIView):
+class MyEmailVerifyView(TenantAPIView):
     """POST /api/auth/me/email/verify/ — confirmar el correo nuevo con su código."""
 
-    permission_classes = [IsAuthenticated]
-    throttle_scope = "otp"
+    permission_classes = [IsVerifiedUser]
+    throttle_scope = "otp_verify"
+    # Sin correo en el cuerpo: cuenta el de la sesión.
+    identifier_throttle_scope = "otp_email"
 
     def post(self, request: Request) -> Response:
         serializer = EmailChangeConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = confirm_email_change(user=request.user, **serializer.validated_data)
+        if user is None:
+            return Response(INVALID_CODE, status=status.HTTP_400_BAD_REQUEST)
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyEmailResendView(APIView):
+class MyEmailResendView(TenantAPIView):
     """POST /api/auth/me/email/resend/ — volver a mandar el código al correo nuevo."""
 
-    permission_classes = [IsAuthenticated]
-    throttle_scope = "otp"
+    permission_classes = [IsVerifiedUser]
+    throttle_scope = "otp_request"
 
     def post(self, request: Request) -> Response:
         user = resend_email_change(user=request.user)
         return Response(MyAccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
-class MyPasswordView(APIView):
+class MyPasswordView(TenantAPIView):
     """POST /api/auth/me/password/ — cambiar la contraseña sabiendo la actual."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
+    throttle_scope = "password_change"
 
     def post(self, request: Request) -> Response:
         serializer = PasswordChangeSerializer(data=request.data)
@@ -359,14 +457,16 @@ class MyPasswordView(APIView):
         return response
 
 
-class MyAccountDeleteView(APIView):
+class MyAccountDeleteView(TenantAPIView):
     """POST /api/auth/me/delete/ — eliminar la cuenta con todo lo suyo.
 
     Es un POST y no un DELETE porque lleva cuerpo —la contraseña que lo
     confirma— y no todos los intermediarios respetan el cuerpo de un DELETE.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
+    # Pide la contraseña: con su límite, no es una forma de probarla.
+    throttle_scope = "password_change"
 
     def post(self, request: Request) -> Response:
         serializer = DeleteAccountSerializer(data=request.data)
@@ -377,12 +477,12 @@ class MyAccountDeleteView(APIView):
         return response
 
 
-class MyOrganizationView(APIView):
+class MyOrganizationView(TenantAPIView):
     """GET/PATCH /api/auth/organization/ — the letterhead of the documents."""
 
-    permission_classes = [IsAuthenticated]
-    # El logotipo llega como formulario; el nombre y el color, como JSON.
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    permission_classes = [IsVerifiedUser]
+    # El logotipo llega como multipart; el nombre y el color, como JSON.
+    parser_classes = [MultiPartParser, JSONParser]
 
     def get(self, request: Request) -> Response:
         # La de la empresa en la que se trabaja (iteracion-14).
@@ -402,7 +502,7 @@ class MyOrganizationView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class MyOrganizationLogoView(APIView):
+class MyOrganizationLogoView(TenantAPIView):
     """GET /api/auth/organization/logo/ — el logotipo listo para imprimirse.
 
     Devuelve la imagen incrustada en la respuesta y no su dirección: el PDF se
@@ -410,7 +510,7 @@ class MyOrganizationLogoView(APIView):
     de otro dominio que no lo autoriza. Sin esto, el documento salía sin marca.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def get(self, request: Request) -> Response:
         return Response(
