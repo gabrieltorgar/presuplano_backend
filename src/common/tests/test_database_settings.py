@@ -48,3 +48,20 @@ def test_connections_last_one_request_unless_the_environment_says_otherwise() ->
     """Sin ``CONN_MAX_AGE``, 0: una conexión por petición, como pide el pooler."""
     assert _conn_max_age() == "0"
     assert _conn_max_age(CONN_MAX_AGE="60") == "60"
+
+
+def test_env_example_names_only_the_app_database_url() -> None:
+    """Una sola conexión por entorno: la API y el build de Vercel usan DATABASE_URL.
+
+    iteracion-26 #1: se retiran DATABASE_URL_UNPOOLED y DATABASE_URL_MIGRATIONS
+    (el buildCommand que las usaba pasaba de los 256 caracteres de Vercel).
+    """
+    env_example = Path(core_settings.__file__).with_name(".env.example")
+    names = {
+        line.split("=", 1)[0].lstrip("# ").strip()
+        for line in env_example.read_text(encoding="utf-8").splitlines()
+        if "=" in line
+    }
+
+    assert "DATABASE_URL" in names
+    assert not names & {"DATABASE_URL_UNPOOLED", "DATABASE_URL_MIGRATIONS"}

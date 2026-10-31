@@ -7,7 +7,7 @@
       "develop": true
     }
   },
-  "buildCommand": "uv sync --frozen --no-dev && DATABASE_URL=\"${DATABASE_URL_MIGRATIONS:-${DATABASE_URL_UNPOOLED:?falta DATABASE_URL_MIGRATIONS o DATABASE_URL_UNPOOLED}}\" uv run --no-sync python src/manage.py migrate --noinput && DATABASE_URL=\"${DATABASE_URL_MIGRATIONS:-$DATABASE_URL_UNPOOLED}\" uv run --no-sync python src/manage.py createcachetable",
+  "buildCommand": "uv sync --frozen --no-dev && uv run --no-sync python src/manage.py migrate --noinput && uv run --no-sync python src/manage.py createcachetable",
   "functions": {
     "wsgi.py": {
       "excludeFiles": "{**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/fixtures/**,docs/**,reports/**,htmlcov/**,coverage.xml,.coverage,.pytest_cache/**,.ruff_cache/**,node_modules/**,.github/**,*.md,scripts/**}"
