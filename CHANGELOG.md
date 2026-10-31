@@ -3,6 +3,11 @@
 Todas las notas de cambios relevantes de la API. El formato sigue
 [Keep a Changelog](https://keepachangelog.com/es-ES/) y versionado semántico.
 
+## [Unreleased] — En curso
+
+### Changed
+- **core/settings.py · core/.env.example · README — TEC Secretos del backend en Infisical**: Los valores de las variables viven en Infisical (proyecto itzaka-backend, entornos dev, test, preview y prod): en local se corre con `infisical sm run --env=<entorno> -- <comando>` y Vercel los recibe por la sincronización de Infisical; `src/core/.env.example` sigue siendo la lista de nombres y lo dice en su encabezado, y nombra ahora `ANTHROPIC_API_KEY`. Los settings leían `src/src/core/.env` (BASE_DIR ya es `src/`), así que el `src/core/.env` que pedía el README nunca se cargaba: ahora se lee `src/core/.env` como respaldo local, sin pisar nunca lo que trae el entorno. El README tiene la sección «Secretos (Infisical)»: qué entorno usar para el servidor, `manage.py` y las pruebas, cómo entran agentes y CI y qué hacer si falta un secreto. Pruebas: `common/tests/test_settings_environment.py`. (iteracion-26 #2)
+
 ## [4.0.0] — 2026-10-30 · iteracion-25: PDF de cotización con desglose por habitación, folios de documentos configurables por organización, la API responde 409 o 400 con su motivo en vez de un 500, base de datos lista para el pooler de Neon y quality gate, security y pruebas base al día con git-deploy-ops
 
 ### Added

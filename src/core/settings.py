@@ -39,7 +39,10 @@ env = environ.Env(
 )
 
 # Load .env from core/ if present (optional — all vars have safe defaults).
-_env_file = BASE_DIR / "src" / "core" / ".env"
+# BASE_DIR is src/, so the file is src/core/.env. It is only a local fallback:
+# read_env never overrides what the environment already holds (Infisical's
+# `infisical sm run` or Vercel), so a stale .env never beats the vault.
+_env_file = BASE_DIR / "core" / ".env"
 if _env_file.exists():
     environ.Env.read_env(str(_env_file))
 
