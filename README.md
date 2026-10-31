@@ -129,6 +129,7 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `CONN_MAX_AGE` | Neon: DATABASE_URL is the pooled host (-pooler, transaction mode); keep 0 there. |
 | `LOG_DIR` | — |
 | `APP_ENV` | Which environment this is: develop, production or a developer machine; missing means production (fail closed), and a Vercel Production deployment is always production. |
+| `BUSINESS_TIME_ZONE` | IANA zone that decides a business day or month (the current month of income on the home screen, the daily cap of plan photos); timestamps are still stored and compared in UTC (TIME_ZONE). Empty means America/Mexico_City; an unknown zone stops the settings from loading. |
 | `OTP_UNIVERSAL_CODE` | E2E-only universal code: only with APP_ENV local or develop (settings refuse to load with it anywhere else, never in Vercel Production), only for OTP_UNIVERSAL_EMAILS and only to verify an account. |
 | `OTP_UNIVERSAL_EMAILS` | Comma-separated accounts the universal code verifies (the E2E users). |
 | `OTP_TTL_MINUTES` | — |
@@ -314,6 +315,13 @@ Cobertura mínima: **90 %** (`MIN_COVERAGE` del workflow). Una prueba en rojo, u
 Pendiente: la tabla sale de `uv run python src/manage.py api_routes --format md` (django-backend-conventions) al correr `readme_sync.py --write` con Django instalado.
 
 <!-- /readme:auto:api -->
+
+Los momentos se guardan y se comparan en UTC (`TIME_ZONE`); lo que decide un
+día o un mes de negocio —el mes en curso de los ingresos de Inicio, el tope
+diario de fotos de plano— se calcula en `BUSINESS_TIME_ZONE`
+(`America/Mexico_City` por omisión, `common/business_time.py`): con UTC, a las
+18:00 de México ya era el día siguiente y el último día del mes contaba el mes
+siguiente. Una zona que no existe no deja cargar los settings.
 
 La API lee sólo JSON: otro tipo de cuerpo responde 415. Las subidas
 (logotipo, evidencia de un avance, foto de un plano, texturas y modelos, y el
@@ -509,7 +517,7 @@ La foto de un plano en papel se convierte en un plano editable
 |---|---|
 | `ANTHROPIC_API_KEY` | Llave de la API |
 | `PHOTO_PLAN_MODEL` | Modelo que lee la foto |
-| `PHOTO_PLAN_DAILY_LIMIT` | Conversiones por cuenta al día |
+| `PHOTO_PLAN_DAILY_LIMIT` | Conversiones por cuenta al día (el día de `BUSINESS_TIME_ZONE`) |
 | `PHOTO_PLAN_MAX_BYTES` | Tope de la foto (por omisión `UPLOAD_MAX_BYTES`) |
 
 ### reCAPTCHA v3 — Google

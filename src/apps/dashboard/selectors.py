@@ -17,6 +17,7 @@ from apps.payments.services import receivable_balance
 from apps.projects.models import Progress, Project
 from apps.quotes.models import Quote, QuoteItem
 from apps.staff.selectors import list_workers_for_owner, worker_totals
+from common.business_time import business_today
 from common.money import money
 
 ZERO = Decimal("0.00")
@@ -76,7 +77,8 @@ def monthly_income(*, owner, today: date | None = None) -> list[dict]:
     Income is money RECEIVED, not money earned: what the account can count on
     is what the client has already paid.
     """
-    today = today or date.today()
+    # El mes en curso es el de México, no el de UTC (iteracion-27 #11).
+    today = today or business_today()
     months = _last_months(today, INCOME_MONTHS)
     first = date(months[0][0], months[0][1], 1)
 

@@ -8,6 +8,7 @@ library with significant config gets its own ``settings_<name>.py``.
 import tomllib
 from datetime import timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import environ
 from corsheaders.defaults import default_headers
@@ -218,6 +219,20 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "es"
 TIME_ZONE = "UTC"
+
+# La zona del negocio (iteracion-27 #11): TIME_ZONE sigue en UTC (así se guardan
+# y comparan los momentos), y lo que decide un día o un mes de negocio —el mes en
+# curso de los ingresos, el tope diario de fotos— se calcula en esta zona
+# (common/business_time.py). Vacía, la de México. Una zona que no existe no deja
+# cargar los settings: el build y cada proceso fallan con su nombre.
+BUSINESS_TIME_ZONE = env.str("BUSINESS_TIME_ZONE", default="") or "America/Mexico_City"
+try:
+    ZoneInfo(BUSINESS_TIME_ZONE)
+except (ZoneInfoNotFoundError, ValueError) as error:
+    raise ImproperlyConfigured(
+        f"BUSINESS_TIME_ZONE={BUSINESS_TIME_ZONE!r} no es una zona horaria IANA "
+        "(p. ej. America/Mexico_City)."
+    ) from error
 USE_I18N = True
 USE_TZ = True
 
