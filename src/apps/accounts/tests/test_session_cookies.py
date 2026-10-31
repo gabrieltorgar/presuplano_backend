@@ -364,3 +364,43 @@ class TestDominiosPorEntorno:
 
         assert prod["ALLOWED_HOSTS"] == ["api.itzaka.com", "itzaka-api-abc.vercel.app"]
         assert prod["CORS_ALLOWED_ORIGINS"] == ["https://itzaka.com"]
+
+    def test_production_trusts_only_exact_origins_for_csrf(self) -> None:
+        """SEC-04 · iteracion-27 #7 — En producción, CSRF confía solo en los
+        orígenes exactos configurados: los hosts *.vercel.app del despliegue
+        siguen en ALLOWED_HOSTS, pero no como orígenes de confianza."""
+        prod = ajustes_en(
+            {
+                "VERCEL": "1",
+                "VERCEL_ENV": "production",
+                "VERCEL_URL": "itzaka-api-abc.vercel.app",
+                "VERCEL_PROJECT_PRODUCTION_URL": "itzaka-api.vercel.app",
+            }
+        )
+
+        assert prod["CSRF_TRUSTED_ORIGINS"] == ["https://itzaka.com"]
+        assert "itzaka-api-abc.vercel.app" in prod["ALLOWED_HOSTS"]
+
+    def test_preview_still_trusts_its_deployment_hosts(self) -> None:
+        """SEC-04 · iteracion-27 #7 — En Preview (develop, que todavía vive en
+        *.vercel.app) los hosts del despliegue siguen siendo de confianza."""
+        preview = ajustes_en(
+            {
+                "VERCEL": "1",
+                "VERCEL_ENV": "preview",
+                "VERCEL_URL": "itzaka-api-git-develop.vercel.app",
+                "CORS_ALLOWED_ORIGINS": "https://dev.cuotreka.vercel.app",
+            }
+        )
+
+        assert preview["CSRF_TRUSTED_ORIGINS"] == [
+            "https://itzaka-api-git-develop.vercel.app",
+            "https://dev.cuotreka.vercel.app",
+        ]
+
+    def test_without_vercel_env_the_deployment_hosts_are_not_trusted(self) -> None:
+        """SEC-04 · iteracion-27 #7 — Sin VERCEL_ENV no se sabe si es Preview:
+        falla cerrado, como en producción."""
+        prod = ajustes_en({"VERCEL": "1", "VERCEL_URL": "itzaka-api-abc.vercel.app"})
+
+        assert prod["CSRF_TRUSTED_ORIGINS"] == ["https://itzaka.com"]
