@@ -357,6 +357,61 @@ class TestDominiosPorEntorno:
         assert develop["CSRF_COOKIE_NAME"] == "csrftoken_dev"
         assert develop["APP_BASE_URL"] == "https://dev.itzaka.com"
 
+    def test_the_csrf_cookie_domain_is_deduced_from_the_spa_and_the_api(self) -> None:
+        """SEC-04.4 · iteracion-30 #1 — La SPA en itzaka.grupotorresmucino.com y la
+        API en api-itzaka.grupotorresmucino.com: sin CSRF_COOKIE_DOMAIN la cookie
+        iba en .itzaka.com, el navegador la tiraba y cada escritura respondía
+        «CSRF token missing»."""
+        prod = ajustes_en(
+            {
+                "VERCEL": "1",
+                "VERCEL_ENV": "production",
+                "VERCEL_URL": "itzaka-api-abc.vercel.app",
+                "ALLOWED_HOSTS": "api-itzaka.grupotorresmucino.com",
+                "CORS_ALLOWED_ORIGINS": "https://itzaka.grupotorresmucino.com",
+            }
+        )
+
+        assert prod["CSRF_COOKIE_DOMAIN"] == ".grupotorresmucino.com"
+
+    def test_an_empty_csrf_cookie_domain_is_also_deduced(self) -> None:
+        """SEC-04.4 · iteracion-30 #1"""
+        prod = ajustes_en(
+            {
+                "VERCEL": "1",
+                "ALLOWED_HOSTS": "api-itzaka.grupotorresmucino.com",
+                "CORS_ALLOWED_ORIGINS": "https://itzaka.grupotorresmucino.com",
+                "CSRF_COOKIE_DOMAIN": "",
+            }
+        )
+
+        assert prod["CSRF_COOKIE_DOMAIN"] == ".grupotorresmucino.com"
+
+    def test_a_csrf_cookie_domain_set_by_hand_wins(self) -> None:
+        """SEC-04.4 · iteracion-30 #1 — Forzarlo sigue siendo posible."""
+        prod = ajustes_en(
+            {
+                "VERCEL": "1",
+                "ALLOWED_HOSTS": "api.b.example.mx",
+                "CORS_ALLOWED_ORIGINS": "https://app.b.example.mx",
+                "CSRF_COOKIE_DOMAIN": ".example.mx",
+            }
+        )
+
+        assert prod["CSRF_COOKIE_DOMAIN"] == ".example.mx"
+
+    def test_with_debug_the_csrf_cookie_domain_is_not_deduced(self) -> None:
+        """SEC-04.4 · iteracion-30 #1 — En local queda en su host."""
+        local = ajustes_en(
+            {
+                "DEBUG": "True",
+                "ALLOWED_HOSTS": "api-itzaka.grupotorresmucino.com",
+                "CORS_ALLOWED_ORIGINS": "https://itzaka.grupotorresmucino.com",
+            }
+        )
+
+        assert local["CSRF_COOKIE_DOMAIN"] is None
+
     def test_the_deployment_hosts_are_still_trusted(self) -> None:
         """SEC-04 · iteracion-26 #9 — Los hosts que Vercel da al despliegue se
         suman a los del dominio, nunca en su lugar."""
