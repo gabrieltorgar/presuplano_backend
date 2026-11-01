@@ -14,6 +14,8 @@ import environ
 from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 
+from .cookie_domain import csrf_cookie_domain
+
 # BASE_DIR = repo root (parents: settings.py -> core -> src -> repo)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -491,3 +493,16 @@ from .env import *  # noqa: E402,F403
 from .settings_csp import *  # noqa: E402,F403
 from .settings_storages import *  # noqa: E402,F403
 from .settings_unfold import *  # noqa: E402,F403
+
+# --- Dominio de la cookie CSRF (iteracion-30 #1, SEC-04.4) ---
+# La SPA lee la cookie CSRF, así que va en el dominio que comparte con la API.
+# Sin CSRF_COOKIE_DOMAIN (core/env.py) y sin DEBUG, sale de CORS_ALLOWED_ORIGINS
+# y ALLOWED_HOSTS (itzaka.grupotorresmucino.com y api-itzaka.grupotorresmucino.com
+# → .grupotorresmucino.com; sin uno común, None). Puesta a mano gana siempre. En
+# Production, common.E005–E007 revisan que cubra a las dos (common/checks.py).
+if not DEBUG:
+    CSRF_COOKIE_DOMAIN = csrf_cookie_domain(
+        CSRF_COOKIE_DOMAIN,  # noqa: F405 -- lo lee core/env.py
+        CORS_ALLOWED_ORIGINS,
+        ALLOWED_HOSTS,
+    )

@@ -123,7 +123,7 @@ Archivo: `src/core/.env.example` → cópialo a `src/core/.env`. Aquí solo van 
 | `ALLOWED_HOSTS` | API hosts (Vercel's deployment hosts are added): production api.itzaka.com, develop api-dev.itzaka.com. |
 | `CORS_ALLOWED_ORIGINS` | SPA exact origins, comma separated, never wildcards (also trusted for CSRF): production https://itzaka.com, develop https://dev.itzaka.com. |
 | `CSRF_TRUSTED_ORIGINS` | Extra exact origins trusted for CSRF, besides the CORS ones (usually empty). |
-| `CSRF_COOKIE_DOMAIN` | Parent domain of the CSRF cookie the SPA reads: .itzaka.com in production and develop (the default without DEBUG); empty locally (host-only). JWT cookies never get a Domain. |
+| `CSRF_COOKIE_DOMAIN` | Domain of the CSRF cookie the SPA reads. Empty, it is deduced without DEBUG: the one the SPA (CORS_ALLOWED_ORIGINS) and the API (ALLOWED_HOSTS) share, e.g. .grupotorresmucino.com or .itzaka.com; locally host-only. Set it only to force it. JWT cookies never get a Domain. |
 | `CSRF_COOKIE_NAME` | Django's default name in production and locally; develop adds the _dev suffix (both share .itzaka.com). The SPA repeats it (VITE_CSRF_COOKIE_NAME). |
 | `DATABASE_URL` | — |
 | `CONN_MAX_AGE` | Neon: DATABASE_URL is the pooled host (-pooler, transaction mode); keep 0 there. |
@@ -403,8 +403,25 @@ corren sólo con PostgreSQL (CI): en SQLite se saltan con su motivo
   navegador nunca lee ni envía tokens: no hay `Authorization: Bearer` para la
   web. La aplicación (`https://itzaka.com`) llama a la API en su subdominio
   (`https://api.itzaka.com`), el mismo sitio: las cookies JWT quedan sólo en la
-  API (sin `Domain`) y la CSRF en `.itzaka.com` (`CSRF_COOKIE_DOMAIN`), para que
-  la SPA la lea. Orígenes exactos en `CORS_ALLOWED_ORIGINS` (también de
+  API (sin `Domain`) y la CSRF en el dominio que comparten la SPA y la API, para
+  que la SPA la lea. Ese dominio se deduce solo (iteracion-30 #1): sin
+  `CSRF_COOKIE_DOMAIN` (o vacía) y sin `DEBUG`, `core/settings.py` lo calcula con
+  `core/cookie_domain.py` después de leer `ALLOWED_HOSTS` y
+  `CORS_ALLOWED_ORIGINS`: el sufijo común más largo, por etiquetas, entre un host
+  de la SPA (sus orígenes `https`) y uno de la API (sin comodines, `localhost`,
+  IPs ni los `*.vercel.app` del despliegue), con un punto al inicio
+  (`itzaka.grupotorresmucino.com` y `api-itzaka.grupotorresmucino.com` →
+  `.grupotorresmucino.com`; `itzaka.com` y `api.itzaka.com` → `.itzaka.com`). Con
+  varios pares gana el que cubre a más orígenes de la SPA (con empate, el primero
+  de `CORS_ALLOWED_ORIGINS`). Nunca es una sola etiqueta (`.com`), un sufijo
+  público de plataforma (`vercel.app`, `netlify.app`, `pages.dev`,
+  `herokuapp.com`, `onrender.com`, `github.io`, `web.app`, `firebaseapp.com`,
+  `fly.dev`, `up.railway.app`) ni un segundo nivel de país (`com.mx`, `org.mx`,
+  `gob.mx`, `edu.mx` necesitan una etiqueta más); sin uno válido queda vacío y
+  la cookie se queda en el host de la API, como en local. `CSRF_COOKIE_DOMAIN`
+  sólo sirve para forzarlo y, puesta, gana siempre (hasta 7.0.0 valía
+  `.itzaka.com` por omisión, y el navegador tiraba la cookie de la API en
+  `grupotorresmucino.com`). Orígenes exactos en `CORS_ALLOWED_ORIGINS` (también de
   confianza para CSRF), con credenciales. Los hosts que Vercel da al despliegue
   (`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, en
   `*.vercel.app`) entran siempre en `ALLOWED_HOSTS`, pero como orígenes de
@@ -642,6 +659,17 @@ Vercel (`vercel.json`):
   para https://dev.itzaka.com, con `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
   `APP_BASE_URL` y `CSRF_COOKIE_NAME=csrftoken_dev` propios (los valores por
   omisión, sin `DEBUG`, son los de producción; con `DEBUG`, los locales).
+  `CSRF_COOKIE_DOMAIN` no hace falta en ningún entorno: sale de `ALLOWED_HOSTS` y
+  `CORS_ALLOWED_ORIGINS`.
+- Cookie CSRF (desde iteracion-30): Production no despliega si la SPA no podría
+  leerla, porque cada escritura respondería «CSRF token missing». Los chequeos
+  de `security` (corren con `migrate`) dan `common.E005` si el dominio de la
+  cookie, deducido o puesto, no cubre a todos los hosts de la SPA (los orígenes
+  `https` de `CORS_ALLOWED_ORIGINS`), `common.E006` si no cubre a los de la API
+  (`ALLOWED_HOSTS` sin comodines, `localhost`, IPs ni `*.vercel.app`) y
+  `common.E007` si no hay dominio y la SPA vive en otro host; cada uno dice el
+  dominio que tiene, los hosts que quedan fuera y el que esperaba. Fuera de
+  Production no estorban.
 - Los valores por entorno viven en Infisical (`preview` y `prod`, que se sincronizan con Vercel: «Secretos (Infisical)»); los nombres, en `tecnico/infraestructura.md`
   de la memoria del proyecto, que es privada.
 - Entorno y código de pruebas E2E: Production (`main`) no lleva `APP_ENV` (o

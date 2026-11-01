@@ -52,13 +52,14 @@ SESSION_COOKIE_SAMESITE = "Lax"
 # HttpOnly no añade protección y deja sin poder escribir a la aplicación.
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
-# La SPA (itzaka.com) llama a la API en su subdominio (api.itzaka.com) y lee
-# esta cookie para repetirla: va en el dominio padre (iteracion-26 #9). Las
-# cookies JWT, nunca: quedan sólo en la API. En local, sin Domain (vacío también
-# la deja sólo en su host). El nombre cambia por entorno cuando dos comparten
-# dominio (develop: csrftoken_dev); la SPA lo repite en VITE_CSRF_COOKIE_NAME.
-_CSRF_DOMAIN = None if DEBUG else ".itzaka.com"
-CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=_CSRF_DOMAIN) or None
+# La SPA llama a la API en su subdominio y lee esta cookie para repetirla: va en
+# el dominio que comparten (iteracion-26 #9). Sin la variable, settings.py lo
+# deduce después de leer ALLOWED_HOSTS y CORS_ALLOWED_ORIGINS (iteracion-30 #1;
+# antes, por omisión, .itzaka.com); con DEBUG o sin un dominio común queda sólo
+# en su host. CSRF_COOKIE_DOMAIN sólo lo fuerza. Las cookies JWT, nunca: quedan
+# sólo en la API. El nombre cambia por entorno cuando dos comparten dominio
+# (develop: csrftoken_dev); la SPA lo repite en VITE_CSRF_COOKIE_NAME.
+CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default="") or None
 CSRF_COOKIE_NAME = env("CSRF_COOKIE_NAME", default="csrftoken")
 
 # --- Login del admin (core/admin_login.py, iteracion-26 #16) ---
