@@ -97,11 +97,13 @@ def project_rows_for_owner(*, owner) -> QuerySet[Project]:
 
 
 def list_projects_for_owner(*, owner) -> QuerySet[Project]:
-    """Return the owner's projects with everything their screen shows (no N+1)."""
+    """Return the owner's projects with everything their detail shows (no N+1).
+
+    The detail no longer carries the progress entries and their photos: they
+    come by pages from ``progress_rows_for_owner`` (iteracion-28 #16).
+    """
     return project_rows_for_owner(owner=owner).prefetch_related(
         "quote__items__progresses",
-        "progresses__worker",
-        "progresses__evidences",
     )
 
 
@@ -123,6 +125,15 @@ def progresses_for_owner(*, owner) -> QuerySet[Progress]:
     return Progress.objects.filter(project__owner=owner).select_related(
         "quote_item", "project", "worker"
     )
+
+
+def progress_rows_for_owner(*, owner) -> QuerySet[Progress]:
+    """The owner's progress entries as their list shows them, photos included.
+
+    One query for the page and one for the photos of its rows, whatever the
+    page size (US-113, iteracion-28 #16).
+    """
+    return progresses_for_owner(owner=owner).prefetch_related("evidences")
 
 
 def evidences_for_owner(*, owner) -> QuerySet[Evidence]:

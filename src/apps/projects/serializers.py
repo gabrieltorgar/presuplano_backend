@@ -97,6 +97,34 @@ class EvidenceSerializer(serializers.ModelSerializer):
         return absolute_media_url(obj.image, self.context.get("request"))
 
 
+class ProgressRowSerializer(ProgressSerializer):
+    """Un avance como lo muestra «Avances registrados» (US-113 · US-16).
+
+    La fila de ``GET /api/progresses/?project=`` (iteracion-28 #16): el servicio,
+    su unidad, quién lo hizo y sus fotos, que antes llegaban, de todos los
+    avances a la vez, dentro del detalle del proyecto. Las fotos son de la fila
+    —la pantalla las pinta junto a cada avance—, así que llegan con ella.
+    """
+
+    item = serializers.CharField(source="quote_item.name", read_only=True)
+    unit_type = serializers.CharField(source="quote_item.unit_type", read_only=True)
+    worker_name = serializers.SerializerMethodField()
+    evidence = EvidenceSerializer(source="evidences", many=True, read_only=True)
+
+    class Meta(ProgressSerializer.Meta):
+        fields = [
+            *ProgressSerializer.Meta.fields,
+            "item",
+            "unit_type",
+            "worker_name",
+            "evidence",
+        ]
+
+    def get_worker_name(self, obj: Progress) -> str:
+        """Vacío cuando es trabajo de la casa."""
+        return obj.worker.name if obj.worker_id else ""
+
+
 class ProjectListSerializer(serializers.ModelSerializer):
     """A row of the projects list: its values, no lines, progress or photos.
 
@@ -140,10 +168,14 @@ class ProjectListSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(ProjectListSerializer):
-    """Read shape of a project with quoted/advanced/percentage values."""
+    """Read shape of a project with quoted/advanced/percentage values.
+
+    Sus partidas sí (las de su cotización, que no crecen con la obra); sus
+    avances no: la pantalla y el documento de estado los piden por páginas a
+    ``GET /api/progresses/?project=`` (iteracion-28 #16).
+    """
 
     items = serializers.SerializerMethodField()
-    progresses = serializers.SerializerMethodField()
 
     class Meta(ProjectListSerializer.Meta):
         fields = [
@@ -156,40 +188,9 @@ class ProjectSerializer(ProjectListSerializer):
             "advanced_value",
             "progress_percentage",
             "items",
-            "progresses",
             "created_at",
         ]
         read_only_fields = ["folio", "quote", "status", "created_at"]
-
-    def get_progresses(self, obj: Project) -> list[dict]:
-        """Lo registrado en obra, avance por avance, con sus fotos.
-
-        Es lo que muestra la pantalla del proyecto para revisar y corregir, y lo
-        que lee el documento de estado.
-        """
-        request = self.context.get("request")
-        return [
-            {
-                "id": str(progress.id),
-                "quote_item": str(progress.quote_item_id),
-                "date": str(progress.date),
-                "item": progress.quote_item.name,
-                "unit_type": progress.quote_item.unit_type,
-                "quantity": str(progress.quantity),
-                "earned_value": str(progress.earned_value.quantize(Decimal("0.01"))),
-                "worker": str(progress.worker_id) if progress.worker_id else None,
-                "worker_name": progress.worker.name if progress.worker_id else "",
-                "evidence": [
-                    {
-                        "id": str(evidence.id),
-                        "image": absolute_media_url(evidence.image, request),
-                        "created_at": evidence.created_at.isoformat(),
-                    }
-                    for evidence in progress.evidences.all()
-                ],
-            }
-            for progress in obj.progresses.all()
-        ]
 
     def get_items(self, obj: Project) -> list[dict]:
         """Line items with their pending (still-registerable) quantity."""
