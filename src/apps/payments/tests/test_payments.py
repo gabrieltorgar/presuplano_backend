@@ -177,12 +177,14 @@ class TestPaymentSummary:
         response = authenticated_client.get(
             f"{PAYMENTS_URL}summary/", {"project": str(project.id)}
         )
+        # La lista, por páginas en su propio endpoint (iteracion-28 #17).
+        listed = authenticated_client.get(PAYMENTS_URL, {"project": str(project.id)})
 
         assert Decimal(response.data["total_paid"]) == Decimal("1000.00")
         assert Decimal(response.data["pending_balance"]) == Decimal("4100.00")
         assert Decimal(response.data["credit_balance"]) == Decimal("0")
-        assert response.data["payments"][0]["method"] == "cash"
-        assert len(response.data["payments"]) == 1
+        assert listed.data["results"][0]["method"] == "cash"
+        assert listed.data["count"] == 1
 
     def test_summary_without_payments(self, authenticated_client, user) -> None:
         """Caso alternativo - Proyecto sin pagos."""

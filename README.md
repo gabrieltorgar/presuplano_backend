@@ -359,7 +359,10 @@ no lo lee). Los avances de un proyecto, con su servicio, quién lo hizo y sus
 fotos en cada fila, son `GET /api/progresses/?project=<id>` (el más reciente
 arriba con `?ordering=-date,-created_at`); el detalle
 `GET /api/projects/{id}/` trae el proyecto, sus cifras y sus partidas, sin
-`progresses`. Lo que necesita la lista entera, como el documento de estado
+`progresses`. Los cobros de un proyecto son `GET /api/payments/?project=<id>`;
+su resumen, `GET /api/payments/summary/?project=<id>`, trae solo las cifras
+(cotizado, avanzado, pagado, por cobrar y saldo a favor) y el cliente, sin
+`payments`. Lo que necesita la lista entera, como el documento de estado
 del proyecto, la recorre página por página siguiendo `next`.
 
 Estados, importes y dueño nunca los escribe el cliente: van de solo lectura en
