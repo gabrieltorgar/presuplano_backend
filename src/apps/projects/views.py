@@ -1,9 +1,8 @@
 """Projects views: start project, register and correct progress, evidence."""
 
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, status
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -33,9 +32,11 @@ from apps.projects.services import (
     update_progress,
 )
 from apps.team.tenancy import account_of
+from common.permissions import IsVerifiedUser
+from common.views import TenantGenericViewSet, TenantReadOnlyModelViewSet
 
 
-class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
+class ProjectViewSet(TenantReadOnlyModelViewSet):
     """List/retrieve projects; start a project; register progress.
 
     The list (US-67, iteracion-17) brings rows without progress entries or
@@ -45,7 +46,7 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     filterset_class = ProjectFilter
     search_fields = ("quote__client__name",)
     ordering_fields = (
@@ -101,12 +102,11 @@ class ProjectViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(summary)
 
 
-class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
+class ProgressViewSet(TenantReadOnlyModelViewSet):
     """Retrieve, correct or delete a progress entry; attach its photos."""
 
     serializer_class = ProgressSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [JSONParser, MultiPartParser, FormParser]
+    permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas, por proyecto, partida o persona, y en
     # el orden en que se trabajó.
     filterset_class = ProgressFilter
@@ -130,7 +130,8 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
         delete_progress(progress=self.get_object())
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["post"])
+    # La foto llega como multipart; corregir el avance, como JSON (por omisión).
+    @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def evidence(self, request: Request, pk: str | None = None) -> Response:
         progress = self.get_object()
         image = request.FILES.get("image")
@@ -146,11 +147,11 @@ class ProgressViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class EvidenceViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
+class EvidenceViewSet(mixins.DestroyModelMixin, TenantGenericViewSet):
     """Quitar una foto de un avance."""
 
     serializer_class = EvidenceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def get_queryset(self):
         return evidences_for_owner(owner=account_of(self.request))

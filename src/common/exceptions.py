@@ -3,6 +3,8 @@
 import logging
 import math
 
+from django.conf import settings
+from django.core.exceptions import RequestDataTooBig
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.db.models import ProtectedError, RestrictedError
@@ -11,6 +13,8 @@ from rest_framework.exceptions import APIException, Throttled, ValidationError
 from rest_framework.serializers import as_serializer_error
 from rest_framework.views import exception_handler as drf_exception_handler
 
+from apps.accounts.otp_quota import OTPCooldown
+
 logger = logging.getLogger("apps")
 
 #: Lo que se le dice a la petición que perdió contra otra simultánea.
@@ -18,6 +22,27 @@ CONFLICT_MESSAGE = (
     "Otra petición hizo este mismo cambio al mismo tiempo. Actualiza y vuelve "
     "a intentarlo."
 )
+
+
+class RequestTooBig(APIException):
+    """400: el cuerpo pasa de ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (iteracion-27 #7).
+
+    Django lo corta antes de la validación de la vista (``RequestDataTooBig``)
+    y, sin esto, respondía su página «Bad Request» sin motivo. Es un 400, como
+    el tope propio del documento de un plano, y dice qué pesa.
+    """
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "request_too_big"
+
+
+def _too_big_text() -> str:
+    limit = settings.DATA_UPLOAD_MAX_MEMORY_SIZE // (1024 * 1024)
+    return (
+        f"Lo que enviaste pesa más de {limit} MB, lo más que recibe el servidor. "
+        "Si es un plano, lo que más pesa suele ser el plano de fondo escaneado o "
+        "una textura suelta."
+    )
 
 
 class Conflict(APIException):
@@ -63,7 +88,12 @@ def api_exception_handler(exc, context):
       terminan en un 500 (iteracion-16): la que perdió recibe 409 con qué
       hacer. El mensaje de la base —tablas, restricciones— nunca llega al
       cliente.
-    - El 429 se dice como lo diría la aplicación.
+    - El 429 se dice como lo diría la aplicación, también el de la espera
+      del código de un solo uso (``OTPCooldown``, iteracion-26 #14), con su
+      ``Retry-After``.
+    - Un cuerpo de más de ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (``RequestDataTooBig``)
+      es un 400 que dice qué pesa, con ``code: request_too_big`` (iteracion-27
+      #7), no la página de Django sin motivo.
     """
     if isinstance(exc, DjangoValidationError):
         exc = ValidationError(as_serializer_error(exc))
@@ -74,9 +104,15 @@ def api_exception_handler(exc, context):
     elif isinstance(exc, IntegrityError):
         logger.warning("Integrity conflict: %s", type(exc).__name__)
         exc = Conflict()
+    elif isinstance(exc, OTPCooldown):
+        wait = exc.wait
+        exc = Throttled(wait=wait)
+        exc.detail = f"Ya te enviamos un código. {_wait_text(wait)}"
     elif isinstance(exc, Throttled):
         exc.detail = f"Demasiados intentos. {_wait_text(exc.wait)}"
+    elif isinstance(exc, RequestDataTooBig):
+        exc = RequestTooBig(_too_big_text())
     response = drf_exception_handler(exc, context)
-    if response is not None and isinstance(exc, Conflict):
+    if response is not None and isinstance(exc, Conflict | RequestTooBig):
         response.data["code"] = exc.default_code
     return response

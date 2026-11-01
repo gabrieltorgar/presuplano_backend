@@ -6,6 +6,7 @@ trampa y la política de fallos que declara cada formulario.
 
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from urllib.error import URLError
@@ -15,6 +16,7 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.settings import api_settings
 
 logger = logging.getLogger("apps")
 
@@ -23,6 +25,10 @@ VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 HONEYPOT_FIELD = "website"
 TOKEN_FIELD = "recaptcha_token"  # noqa: S105 -- nombre del campo, no un secreto
 REJECTED = "No pudimos verificar el formulario. Intenta de nuevo."
+#: Un token de v3 mide unos cientos de caracteres; uno de megas no se le manda
+#: a Google (MAN-04, iteracion-26 #17).
+TOKEN_MAX_LENGTH = 8192
+NOT_AN_OBJECT = "Envía el formulario como un objeto JSON."
 
 
 class CaptchaUnavailable(Exception):
@@ -67,6 +73,8 @@ def verify_recaptcha(
         return CaptchaResult(ok=True, reason="disabled")
     if not token:
         return CaptchaResult(ok=False, reason="missing")
+    if not isinstance(token, str) or len(token) > TOKEN_MAX_LENGTH:
+        return CaptchaResult(ok=False, reason="invalid")
     data = _siteverify(token=token, remote_ip=remote_ip)
     if not data.get("success"):
         return CaptchaResult(ok=False, reason="invalid")
@@ -95,8 +103,11 @@ def guard_public_form(
     ``when_unavailable`` es la política del formulario si Google no contesta:
     ``"reject"`` (503, las puertas de la cuenta) o ``"review"`` (se acepta bajo
     su límite de intentos y queda marcado, el contacto). Un token que no pasa
-    responde 400 con un mensaje que no dice por qué.
+    responde 400 con un mensaje que no dice por qué, y un cuerpo que no es un
+    objeto JSON (un arreglo, un texto, ``null``), 400 antes de leer nada.
     """
+    if not isinstance(request.data, Mapping):
+        raise ValidationError({api_settings.NON_FIELD_ERRORS_KEY: [NOT_AN_OBJECT]})
     if str(request.data.get(HONEYPOT_FIELD) or "").strip():
         logger.info("honeypot", extra={"action": action})
         return Verdict.DROP

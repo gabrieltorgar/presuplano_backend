@@ -71,12 +71,18 @@ def test_local_model_is_registered_with_unfold_model_admin(model):
     )
 
 
-def test_vercel_json_follows_the_deploy_standard():
-    """GIT-02: solo main y develop, build sin dev y migraciones por la URL directa.
+# Vercel rechaza todo el vercel.json (y no despliega) con un buildCommand de más
+# de 256 caracteres: así quedaron detenidos los despliegues de la 4.0.0.
+VERCEL_BUILD_COMMAND_MAX = 256
+MANAGE = "uv run --no-sync python src/manage.py"
 
-    La de la función (DATABASE_URL) es el pooler de Neon en modo transacción:
-    migrate y createcachetable van por DATABASE_URL_MIGRATIONS o, si no está,
-    DATABASE_URL_UNPOOLED, y el build falla si no hay ninguna.
+
+def test_vercel_json_follows_the_deploy_standard():
+    """GIT-02: solo main y develop; el build migra con la DATABASE_URL de la app.
+
+    El build no reasigna DATABASE_URL: migrate y createcachetable corren con la
+    misma conexión que la función, y el comando cabe en los 256 caracteres que
+    admite el esquema de vercel.json.
     """
     config = json.loads((REPO / "vercel.json").read_text(encoding="utf-8"))
     build = config["buildCommand"]
@@ -86,11 +92,13 @@ def test_vercel_json_follows_the_deploy_standard():
         "main": True,
         "develop": True,
     }
-    assert "uv sync --frozen --no-dev" in build
-    assert "collectstatic" not in build
-    direct = 'DATABASE_URL="${DATABASE_URL_MIGRATIONS:-'
-    for command in ("migrate --noinput", "createcachetable"):
-        step = next(part for part in build.split("&&") if command in part)
-        assert step.strip().startswith(direct), f"{command}: por la URL directa"
-    assert "${DATABASE_URL_UNPOOLED:?" in build, "sin URL directa, el build falla"
+    assert len(build) <= VERCEL_BUILD_COMMAND_MAX, (
+        f"buildCommand de {len(build)} caracteres: Vercel rechaza más de 256"
+    )
+    assert [step.strip() for step in build.split("&&")] == [
+        "uv sync --frozen --no-dev",
+        f"{MANAGE} migrate --noinput",
+        f"{MANAGE} createcachetable",
+    ]
+    assert "DATABASE_URL" not in build, "el build migra con la DATABASE_URL de la app"
     assert config.get("functions"), "functions.<wsgi>.excludeFiles"

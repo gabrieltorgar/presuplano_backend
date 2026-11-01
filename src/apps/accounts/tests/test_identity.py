@@ -74,13 +74,15 @@ class TestIdentidad:
     def test_the_universal_code_does_not_open_an_account_once_mail_works(
         self, api_client, correo, settings
     ) -> None:
-        """Caso de borde - Quien puede recibir el suyo necesita el suyo."""
+        """Caso de borde - Quien puede recibir el suyo necesita el suyo: fuera de
+        local/develop y de la lista de E2E, el universal no abre (#15)."""
+        settings.OTP_UNIVERSAL_CODE = "123456"
         api_client.post(
             REGISTER, {"email": "ana@estudio.mx", "password": "Tejado-81", **accepted()}
         )
 
         response = api_client.post(
-            VERIFY, {"email": "ana@estudio.mx", "code": settings.OTP_UNIVERSAL_CODE}
+            VERIFY, {"email": "ana@estudio.mx", "code": "123456"}
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST

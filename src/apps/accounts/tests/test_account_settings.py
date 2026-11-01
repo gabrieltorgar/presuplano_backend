@@ -104,8 +104,14 @@ class TestCambiarElCorreo:
         assert user.email == anterior
         assert user.pending_email == "nuevo@estudio.mx"
 
-    def test_the_code_can_be_sent_again(self, authenticated_client, correo) -> None:
-        """Flujo alternativo - Si no llegó, se pide otra vez."""
+    def test_the_code_can_be_sent_again(
+        self, authenticated_client, correo, settings
+    ) -> None:
+        """Flujo alternativo - Si no llegó, se pide otra vez.
+
+        Pasada la espera entre códigos (iteracion-26 #14), que tiene su prueba.
+        """
+        settings.OTP_RESEND_COOLDOWN_SECONDS = 0
         authenticated_client.post(EMAIL, {"email": "nuevo@estudio.mx"})
         primero = ultimo_codigo(correo)
 
@@ -177,18 +183,23 @@ class TestCambiarElCorreo:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Ese correo ya está registrado" in str(response.data)
 
-    def test_without_mail_the_universal_code_confirms(
-        self, authenticated_client, settings
+    def test_the_universal_code_never_confirms_a_new_email(
+        self, authenticated_client, user, settings
     ) -> None:
-        """Caso de borde - Sin correo configurado sirve el código universal."""
+        """Caso de borde - Ni sin correo configurado ni en develop con la cuenta
+        en la lista: el correo nuevo se prueba con su código (iteracion-26 #15).
+        """
         settings.RESEND_API_KEY = ""
+        settings.APP_ENV = "develop"
+        settings.OTP_UNIVERSAL_CODE = "123456"
+        settings.OTP_UNIVERSAL_EMAILS = [user.email]
         authenticated_client.post(EMAIL, {"email": "nuevo@estudio.mx"})
 
-        response = authenticated_client.post(
-            VERIFY, {"code": settings.OTP_UNIVERSAL_CODE}
-        )
+        response = authenticated_client.post(VERIFY, {"code": "123456"})
 
-        assert response.data["email"] == "nuevo@estudio.mx"
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        user.refresh_from_db()
+        assert user.email != "nuevo@estudio.mx"
 
 
 @pytest.mark.django_db
@@ -250,3 +261,22 @@ class TestCambiarLaContrasena:
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestDesistirSobreLaCuentaReleida:
+    """SEC-03.2 · iteracion-26 #20 - Desistir se aplica a la cuenta bloqueada."""
+
+    def test_a_change_requested_meanwhile_is_forgotten_too(self, user) -> None:
+        """Lo que cuenta es la fila releída, no la que la petición leyó antes."""
+        from apps.accounts.models import User
+        from apps.accounts.services import cancel_email_change
+
+        leida_antes = User.objects.get(pk=user.pk)
+        User.objects.filter(pk=user.pk).update(pending_email="nuevo@estudio.mx")
+
+        result = cancel_email_change(user=leida_antes)
+
+        user.refresh_from_db()
+        assert user.pending_email == ""
+        assert result.pending_email == ""

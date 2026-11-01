@@ -232,6 +232,48 @@ class TestCorrectProgress:
 
 
 @pytest.mark.django_db
+class TestAmountsOfAProgressComeFromTheServer:
+    """VAL-05: lo ganado y el precio de mano de obra los pone el servidor."""
+
+    def test_a_progress_ignores_earned_value_and_labor_price(
+        self, authenticated_client, user
+    ) -> None:
+        """VAL-05 · SEC-03.3 - Al registrar y al corregir, con control positivo."""
+        project, muro, _zocalo = make_project(user)
+        juan = worker_who_does(user, muro, "90")
+        forged = {"earned_value": "999999", "labor_unit_price": "5000"}
+
+        created = authenticated_client.post(
+            f"{PROJECTS_URL}{project.id}/progress/",
+            {
+                "quote_item": str(muro.id),
+                "quantity": "4",
+                "date": "2026-01-10",
+                "worker": str(juan.id),
+                **forged,
+            },
+            format="json",
+        )
+
+        assert created.status_code == status.HTTP_201_CREATED
+        assert Decimal(created.data["earned_value"]) == Decimal("1400.00")
+        assert Decimal(created.data["labor_unit_price"]) == Decimal("90")
+
+        corrected = authenticated_client.patch(
+            progress_url(created.data["id"]),
+            {"quantity": "5", **forged},
+            format="json",
+        )
+
+        # Control positivo: la cantidad sí cambió; los importes no.
+        assert corrected.status_code == status.HTTP_200_OK
+        entry = Progress.objects.get(pk=created.data["id"])
+        assert entry.quantity == Decimal("5")
+        assert entry.labor_unit_price == Decimal("90")
+        assert Decimal(corrected.data["earned_value"]) == Decimal("1750.00")
+
+
+@pytest.mark.django_db
 class TestDeleteProgress:
     """US-113: borrar un avance que no ocurrió."""
 

@@ -54,13 +54,14 @@ class TestLimitesPorPuerta:
     @pytest.mark.parametrize(
         ("url", "payload", "veces"),
         [
-            ("/api/auth/verify-otp/", {"email": "a@b.mx", "code": "000000"}, 5),
+            # Verificar: 10 por minuto y dirección (otp_verify, iteracion-26 #16).
+            ("/api/auth/verify-otp/", {"email": "a@b.mx", "code": "000000"}, 10),
             ("/api/auth/resend-otp/", {"email": "a@b.mx"}, 5),
             ("/api/auth/password-reset/", {"email": "a@b.mx"}, 5),
             (
                 "/api/auth/password-reset/confirm/",
                 {"email": "a@b.mx", "code": "000000", "password": "nueva12345"},
-                5,
+                10,
             ),
             (
                 "/api/contact/",
@@ -79,7 +80,10 @@ class TestLimitesPorPuerta:
     def test_sending_documents_has_its_limit(
         self, authenticated_client, settings, mocker
     ) -> None:
-        """Caso de borde - La aplicación no es un relevo de correo masivo."""
+        """Caso de borde - La aplicación no es un relevo de correo masivo.
+
+        Con el alcance de las acciones costosas: 20 por hora (iteracion-26 #16).
+        """
         settings.RESEND_API_KEY = "re_test"
         mocker.patch("common.mail.send_email", return_value=True)
 
@@ -94,10 +98,10 @@ class TestLimitesPorPuerta:
                 format="multipart",
             )
 
-        respuestas = [enviar().status_code for _ in range(31)]
+        respuestas = [enviar().status_code for _ in range(21)]
 
-        assert respuestas[:30] == [status.HTTP_200_OK] * 30
-        assert respuestas[30] == status.HTTP_429_TOO_MANY_REQUESTS
+        assert respuestas[:20] == [status.HTTP_200_OK] * 20
+        assert respuestas[20] == status.HTTP_429_TOO_MANY_REQUESTS
 
     def test_other_doors_are_not_counted_together(self, api_client, user) -> None:
         """Caso de borde - Agotar el acceso no cierra la recuperación."""
@@ -118,10 +122,18 @@ class TestConfiguracionDeLimites:
             "rest_framework.throttling.AnonRateThrottle",
             "rest_framework.throttling.UserRateThrottle",
             "rest_framework.throttling.ScopedRateThrottle",
+            # Por cuenta (iteracion-26 #16): rotar la IP no reinicia un correo.
+            "common.throttling.IdentifierRateThrottle",
         }
-        assert {"anon", "user", "login", "otp", "password_reset", "contact"} <= set(
-            rest["DEFAULT_THROTTLE_RATES"]
-        )
+        assert {
+            "anon",
+            "user",
+            "login",
+            "otp_request",
+            "otp_verify",
+            "password_reset",
+            "contact",
+        } <= set(rest["DEFAULT_THROTTLE_RATES"])
 
     def test_the_counters_live_in_the_database_cache(self) -> None:
         """Flujo principal - En Vercel cada invocación puede ser otra instancia."""
@@ -169,27 +181,23 @@ class TestCodigoConIntentosContados:
 
 @pytest.mark.django_db
 class TestCodigoUniversalCerrado:
-    """El código universal del MVP sólo vive donde se pidió."""
+    """El código universal sólo vive donde se pidió (local/develop, #15)."""
 
     def test_without_mail_in_production_the_universal_code_opens_nothing(
         self, user, settings
     ) -> None:
         """Flujo principal - Si el correo se cae, nadie entra con el de todos."""
         settings.RESEND_API_KEY = ""
-        settings.OTP_UNIVERSAL_CODE_ENABLED = False
+        settings.OTP_UNIVERSAL_CODE = "123456"
+        settings.OTP_UNIVERSAL_EMAILS = [user.email]
 
-        assert not check_otp(
-            user=user,
-            purpose=OtpCode.Purpose.PASSWORD_RESET,
-            code=settings.OTP_UNIVERSAL_CODE,
-        )
+        assert not check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code="123456")
 
     def test_without_mail_in_production_a_real_code_is_issued(
         self, user, settings, mocker
     ) -> None:
         """Caso alternativo - Se intenta mandar el código propio, no se regala."""
         settings.RESEND_API_KEY = ""
-        settings.OTP_UNIVERSAL_CODE_ENABLED = False
         enviar = mocker.patch("apps.accounts.services.send_otp_email")
 
         send_verification_code(user=user)
@@ -200,25 +208,27 @@ class TestCodigoUniversalCerrado:
     def test_in_development_the_universal_code_still_works(
         self, user, settings
     ) -> None:
-        """Caso alternativo - En local, sin correo, se sigue probando con él."""
+        """Caso alternativo - En local, sin correo, la cuenta de la lista se
+        verifica con él."""
         settings.RESEND_API_KEY = ""
-        settings.OTP_UNIVERSAL_CODE_ENABLED = True
+        settings.APP_ENV = "local"
+        settings.OTP_UNIVERSAL_CODE = "123456"
+        settings.OTP_UNIVERSAL_EMAILS = [user.email]
 
-        assert check_otp(
-            user=user, purpose=OtpCode.Purpose.SIGNUP, code=settings.OTP_UNIVERSAL_CODE
-        )
+        assert check_otp(user=user, purpose=OtpCode.Purpose.SIGNUP, code="123456")
 
     def test_it_is_off_by_default_outside_debug(self) -> None:
-        """Caso de borde - En Vercel (DEBUG apagado) hay que pedirlo a propósito."""
+        """Caso de borde - En Vercel (DEBUG apagado) no hay código universal:
+        sin APP_ENV es producción y el código no tiene valor por omisión."""
         entorno = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("DEBUG", "OTP_UNIVERSAL_CODE_ENABLED")
+            if k not in ("DEBUG", "APP_ENV", "OTP_UNIVERSAL_CODE")
         }
         entorno.update(VERCEL="1", DJANGO_SETTINGS_MODULE="core.settings")
         leer = (
             "from django.conf import settings as s;"
-            "print(s.DEBUG, s.OTP_UNIVERSAL_CODE_ENABLED)"
+            "print(s.DEBUG, s.APP_ENV, repr(s.OTP_UNIVERSAL_CODE))"
         )
 
         salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
@@ -230,4 +240,4 @@ class TestCodigoUniversalCerrado:
             check=True,
         )
 
-        assert salida.stdout.split() == ["False", "False"]
+        assert salida.stdout.split() == ["False", "production", "''"]

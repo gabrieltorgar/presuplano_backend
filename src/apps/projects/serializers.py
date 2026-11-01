@@ -55,6 +55,8 @@ class ProgressSerializer(serializers.ModelSerializer):
             "worker",
             "labor_unit_price",
         ]
+        # Lo copia el servicio del reparto de quien lo hizo (VAL-05).
+        read_only_fields = ["labor_unit_price"]
 
 
 class ProgressUpdateSerializer(serializers.Serializer):
@@ -120,6 +122,9 @@ class ProjectListSerializer(serializers.ModelSerializer):
             "progress_percentage",
             "created_at",
         ]
+        # El estado lo cambia sólo finalizar, y la cotización de origen no
+        # cambia nunca: un proyecto nace de una sola (SEC-03).
+        read_only_fields = ["folio", "quote", "status", "created_at"]
 
     def get_quoted_value(self, obj: Project) -> Decimal:
         return quoted_value(obj)
@@ -154,6 +159,7 @@ class ProjectSerializer(ProjectListSerializer):
             "progresses",
             "created_at",
         ]
+        read_only_fields = ["folio", "quote", "status", "created_at"]
 
     def get_progresses(self, obj: Project) -> list[dict]:
         """Lo registrado en obra, avance por avance, con sus fotos.

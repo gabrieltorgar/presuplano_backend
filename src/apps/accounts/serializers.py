@@ -1,6 +1,10 @@
 """Accounts serializers (input validation only; no business logic)."""
 
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.utils import get_md5_hash_password
 
 from apps.accounts.models import HEX_COLOR_VALIDATOR, Organization, Subscription, User
 from apps.legal.serializers import AcceptanceSerializer
@@ -10,6 +14,36 @@ from common.phones import PhoneField
 from common.validators import IMAGES, validate_upload
 
 MIN_PASSWORD_LENGTH = 8
+#: Tope de una contraseña (MAN-04, iteracion-26 #17): sin él, un cuerpo de
+#: megas se deriva con PBKDF2 en cada intento.
+PASSWORD_MAX_LENGTH = 128
+
+#: Seis dígitos ASCII y nada más (iteracion-26 #13): nunca ``\d``, que acepta
+#: dígitos de otras escrituras (``int()`` también los lee).
+OTP_CODE_PATTERN = r"^[0-9]{6}\Z"
+
+
+def password_field() -> serializers.CharField:
+    """La contraseña de un formulario público: sólo de entrada y con tope."""
+    return serializers.CharField(
+        write_only=True,
+        max_length=PASSWORD_MAX_LENGTH,
+        style={"input_type": "password"},
+        error_messages={
+            "max_length": (
+                f"La contraseña puede tener hasta {PASSWORD_MAX_LENGTH} caracteres"
+            )
+        },
+    )
+
+
+def otp_code_field(**error_messages) -> serializers.RegexField:
+    """El campo del código de un solo uso, igual en cada serializer que lo recibe."""
+    return serializers.RegexField(
+        OTP_CODE_PATTERN,
+        max_length=6,
+        error_messages={"invalid": "El código son 6 dígitos", **error_messages},
+    )
 
 
 class RegisterSerializer(AcceptanceSerializer):
@@ -17,13 +51,14 @@ class RegisterSerializer(AcceptanceSerializer):
     acceptance of the legal documents in force."""
 
     email = serializers.EmailField(
+        max_length=254,
         error_messages={
             "required": "Escribe tu correo para registrarte",
             "blank": "Escribe tu correo para registrarte",
             "invalid": "Escribe un correo válido",
-        }
+        },
     )
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password = password_field()
 
     def validate_email(self, value: str) -> str:
         if User.objects.filter(email__iexact=value.strip()).exists():
@@ -74,7 +109,7 @@ class EmailIdentitySerializer(serializers.Serializer):
 class VerifyOtpSerializer(EmailIdentitySerializer):
     """Validates OTP verification input."""
 
-    code = serializers.CharField(max_length=6)
+    code = otp_code_field()
 
     def validate(self, attrs: dict) -> dict:
         code = attrs.get("code", "")
@@ -92,7 +127,7 @@ class PasswordResetRequestSerializer(EmailIdentitySerializer):
 class PasswordResetConfirmSerializer(VerifyOtpSerializer):
     """Confirmar la recuperación con el código y la contraseña nueva."""
 
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password = password_field()
 
     def validate_password(self, value: str) -> str:
         if len(value) < MIN_PASSWORD_LENGTH:
@@ -109,7 +144,7 @@ class PasswordResetConfirmSerializer(VerifyOtpSerializer):
 class LoginSerializer(EmailIdentitySerializer):
     """Validates login input."""
 
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password = password_field()
 
     def validate(self, attrs: dict) -> dict:
         password = attrs.get("password", "")
@@ -131,12 +166,9 @@ class EmailChangeSerializer(serializers.Serializer):
 class EmailChangeConfirmSerializer(serializers.Serializer):
     """El código que llegó al correo nuevo."""
 
-    code = serializers.CharField(
-        max_length=6,
-        error_messages={
-            "required": "Escribe el código que te llegó",
-            "blank": "Escribe el código que te llegó",
-        },
+    code = otp_code_field(
+        required="Escribe el código que te llegó",
+        blank="Escribe el código que te llegó",
     )
 
 
@@ -178,6 +210,29 @@ class DeleteAccountSerializer(serializers.Serializer):
     )
 
 
+class SessionRefreshSerializer(TokenRefreshSerializer):
+    """El refresh de la cookie: de una cuenta que existe y de su contraseña de hoy.
+
+    simplejwt revisa la huella de la contraseña (``CHECK_REVOKE_TOKEN``) al
+    autenticar, no al renovar: sin esto, un refresh de antes de un cambio hecho
+    fuera de la API —o de antes de encender la revisión— daría access que
+    ninguna ruta acepta, y el de una cuenta borrada terminaba en un 500.
+    """
+
+    def validate(self, attrs: dict) -> dict:
+        refresh = self.token_class(attrs["refresh"])
+        user = User.objects.filter(
+            **{api_settings.USER_ID_FIELD: refresh.get(api_settings.USER_ID_CLAIM)}
+        ).first()
+        if user is None:
+            raise InvalidToken("La cuenta de la sesión ya no existe.")
+        if api_settings.CHECK_REVOKE_TOKEN and refresh.get(
+            api_settings.REVOKE_TOKEN_CLAIM
+        ) != get_md5_hash_password(user.password):
+            raise InvalidToken("La contraseña cambió después de la sesión.")
+        return super().validate(attrs)
+
+
 class UserAccountSerializer(serializers.ModelSerializer):
     """Public representation of an account."""
 
@@ -193,7 +248,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = ["plan", "status", "created_at"]
-        read_only_fields = fields
+        # Nombrados uno por uno: así los ve también la auditoría (SEC-03).
+        read_only_fields = ["plan", "status", "created_at"]
 
 
 #: Lo que puede pesar un logotipo. Es una marca, no una fotografía.

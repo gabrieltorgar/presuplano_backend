@@ -10,6 +10,15 @@ from apps.quotes.models import Quote
 MONEY_FIELD = DecimalField(max_digits=20, decimal_places=6)
 
 
+def quotes_of(*, owner) -> QuerySet[Quote]:
+    """Las cotizaciones de la cuenta, sin sumas: las que se bloquean para cambiarlas.
+
+    ``select_for_update`` no admite el ``GROUP BY`` de la lista; los servicios
+    releen aquí la fila que van a cambiar (SEC-03, iteracion-26 #20).
+    """
+    return Quote.objects.filter(owner=owner)
+
+
 def list_quotes_for_owner(*, owner) -> QuerySet[Quote]:
     """Return the owner's quotes with items + client prefetched (no N+1).
 

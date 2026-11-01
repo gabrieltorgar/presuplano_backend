@@ -8,6 +8,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.folios.codes import DocumentType
 from apps.folios.services import assign_folio
+from apps.projects.services import lock_project
 from apps.quotes.models import QuoteItem
 from apps.staff.models import Assignment, Worker, WorkerPayment, WorkerService
 
@@ -87,6 +88,7 @@ def hand_out(*, owner, project, **share) -> Assignment:
     return assign_service(project=project, **share)
 
 
+@transaction.atomic
 def assign_service(
     *,
     project,
@@ -100,12 +102,15 @@ def assign_service(
 
     Handing the same item to the same person twice REPLACES the first share:
     the natural reading of «ahora le tocan 80» is a correction, not a second
-    helping.
+    helping. What is left to hand out is counted with the project locked, so
+    two hand-outs at the same time never exceed the item (SEC-03.2,
+    iteracion-26 #20).
 
     Raises:
         ValidationError: item outside the project, worker from another account,
             non-positive quantity, no price agreed, or more than the item holds.
     """
+    project = lock_project(project)
     if quote_item.quote_id != project.quote_id:
         raise ValidationError("La partida no pertenece a este proyecto.")
     if worker.owner_id != project.owner_id:

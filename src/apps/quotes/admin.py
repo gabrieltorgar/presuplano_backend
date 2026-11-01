@@ -6,6 +6,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from apps.folios.admin import FolioAssignedAdminMixin
 from apps.folios.codes import DocumentType
 from apps.quotes.models import Quote, QuoteItem, QuoteItemRoom
+from common.admin import ProtectedFieldsAdminMixin
 
 
 class QuoteItemInline(TabularInline):
@@ -14,8 +15,11 @@ class QuoteItemInline(TabularInline):
 
 
 @admin.register(Quote)
-class QuoteAdmin(FolioAssignedAdminMixin, ModelAdmin):
+class QuoteAdmin(FolioAssignedAdminMixin, ProtectedFieldsAdminMixin, ModelAdmin):
     folio_document_type = DocumentType.QUOTE
+    # El estado lo cambia sólo volverla proyecto (iteracion-26 #20).
+    protected_fields = ("status",)
+    set_on_create_fields = ("owner",)
     list_display = ("folio", "client", "status", "plan", "owner", "created_at")
     list_filter = ("status",)
     search_fields = ("folio", "client__name")

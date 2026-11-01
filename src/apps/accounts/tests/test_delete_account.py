@@ -11,13 +11,16 @@ from pathlib import Path
 
 import pytest
 from rest_framework import status
+from rest_framework.test import APIClient
 
 from apps.accounts.models import Organization, OtpCode, Subscription, User
 from apps.accounts.services import get_my_organization, issue_otp
 from apps.assets.models import CatalogModel, PlanAsset
 from apps.assets.services import store_asset, store_models
 from apps.catalog.models import Tariff
+from apps.catalog.tests.factories import TariffFactory
 from apps.clients.models import Client
+from apps.clients.tests.factories import ClientFactory
 from apps.legal.models import LegalAcceptance
 from apps.legal.tests.consent import accepted
 from apps.payments.models import Payment
@@ -30,6 +33,7 @@ from apps.quotes.models import Quote, QuoteItem
 from apps.staff.models import Assignment, Worker, WorkerPayment, WorkerService
 from apps.staff.services import assign_service, pay_worker
 from apps.staff.tests.factories import WorkerFactory
+from apps.team.tests.factories import MembershipFactory
 
 DELETE = "/api/auth/me/delete/"
 
@@ -248,3 +252,60 @@ def test_a_file_that_is_already_gone_does_not_stop_the_rest() -> None:
     _remove([(storage, "roto"), (storage, "bien"), (storage, "bien")])
 
     assert storage.deleted == ["bien"]
+
+
+@pytest.mark.django_db
+class TestEliminarConLaRLS:
+    """SEC-01 · iteracion-26 #22 — Con la RLS cada consulta ve sólo la empresa
+    del contexto: la purga pone la de la cuenta que se va, aunque se pida
+    trabajando en otra empresa o desde el admin, o no vería sus filas y el
+    borrado de la cuenta chocaría con ellas. En PostgreSQL lo prueba
+    ``tests/security/test_rls.py``."""
+
+    def test_the_purge_uses_the_own_company_while_working_in_another(
+        self, user, mocker
+    ) -> None:
+        from apps.accounts import deletion
+
+        elsewhere = MembershipFactory(user=user).account
+        user_id = user.pk  # borrada, la instancia se queda sin pk
+        context = mocker.spy(deletion, "set_tenant_context")
+        client = APIClient()
+        client.force_authenticate(user=user)
+        client.credentials(HTTP_X_EMPRESA=str(elsewhere.pk))
+
+        response = client.post(DELETE, {"password": "testpass123"}, format="json")
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        context.assert_called_once_with(company_id=user_id)
+
+    @pytest.mark.parametrize("how", ["one", "selected"])
+    def test_the_admin_deletes_an_account_by_purging_it(
+        self, client, user, user_factory, media, mocker, how
+    ) -> None:
+        from apps.accounts import admin as accounts_admin
+
+        purge = mocker.spy(accounts_admin, "purge_account")
+        # Sin cotizaciones ni proyectos: lo protegido lo frena el admin antes.
+        ClientFactory(owner=user)
+        TariffFactory(owner=user)
+        user_id = user.pk
+        client.force_login(user_factory(is_staff=True, is_superuser=True))
+
+        if how == "one":
+            response = client.post(
+                f"/admin/accounts/user/{user.pk}/delete/", {"post": "yes"}
+            )
+        else:
+            response = client.post(
+                "/admin/accounts/user/",
+                {
+                    "action": "delete_selected",
+                    "_selected_action": [str(user.pk)],
+                    "post": "yes",
+                },
+            )
+
+        assert response.status_code == 302
+        purge.assert_called_once()
+        assert owned_rows(user_id) == dict.fromkeys(owned_rows(user_id), 0)

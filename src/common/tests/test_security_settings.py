@@ -82,11 +82,12 @@ class TestPoliticaDeContenido:
     def test_every_response_carries_a_strict_csp(self, client) -> None:
         response = client.get("/api/health/")
 
+        # La API sirve JSON: nada que cargar (iteracion-26 #18).
         csp = response["Content-Security-Policy"]
-        assert "default-src 'self'" in csp
+        assert "default-src 'none'" in csp
         assert "frame-ancestors 'none'" in csp
-        assert "object-src 'none'" in csp
-        assert "unsafe-inline" not in csp.split("script-src", 1)[-1].split(";")[0]
+        assert "base-uri 'none'" in csp
+        assert "unsafe" not in csp
 
     @pytest.mark.django_db
     def test_only_the_admin_gets_what_unfold_needs(self, client) -> None:
@@ -175,7 +176,12 @@ class TestTopesDeLoQueSePide:
         assert len(response.data["results"]) == 3
 
     def test_the_request_body_has_an_explicit_cap(self) -> None:
-        assert core_settings.DATA_UPLOAD_MAX_MEMORY_SIZE == 5 * 1024 * 1024
+        """API-02 · iteracion-27 #7 — El tope del cuerpo es el de cada archivo
+        (UPLOAD_MAX_BYTES, 4 MiB): cabe en los 4.5 MB de Vercel."""
+        assert (
+            core_settings.DATA_UPLOAD_MAX_MEMORY_SIZE == core_settings.UPLOAD_MAX_BYTES
+        )
+        assert core_settings.DATA_UPLOAD_MAX_MEMORY_SIZE < 4_500_000
         assert core_settings.REST_FRAMEWORK["DEFAULT_PAGINATION_CLASS"] == (
             "common.pagination.DefaultPagination"
         )

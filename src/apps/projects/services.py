@@ -3,52 +3,110 @@
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from apps.folios.codes import DocumentType
 from apps.folios.services import assign_folio
 from apps.projects.models import Evidence, Progress, Project
+from apps.projects.selectors import projects_of
 from apps.quotes.models import Quote, QuoteItem
+from apps.quotes.selectors import quotes_of
+from apps.quotes.services import QUOTE_TRANSITIONS
+from common.state_machine import Transitions, register
 from common.validators import IMAGES, validate_upload
 
 logger = logging.getLogger("apps")
 
-MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 # Una foto de 48 megapíxeles cabe; una bomba de descompresión, no.
 MAX_IMAGE_PIXELS = 50_000_000
 
+#: Un proyecto está en curso hasta que se finaliza, y de ahí ya no sale: ni
+#: avances, ni fotos, ni pagos (SEC-03.1, iteracion-26 #20).
+PROJECT_TRANSITIONS = register(
+    Project,
+    Transitions(
+        field="status",
+        allowed={
+            Project.Status.IN_PROGRESS: frozenset({Project.Status.FINISHED}),
+            Project.Status.FINISHED: frozenset(),
+        },
+        terminal=frozenset({Project.Status.FINISHED}),
+    ),
+)
 
+#: Por qué no cambia nada de un proyecto finalizado.
+FINISHED = "El proyecto está finalizado"
+
+#: Por qué una cotización no se vuelve proyecto dos veces.
+ALREADY_A_PROJECT = "Esta cotización ya tiene un proyecto asociado"
+
+
+@transaction.atomic
 def start_project(*, owner, quote: Quote) -> Project:
-    """Start a project from a quote.
+    """Start a project from a quote: exactly one, whatever the clicks or retries.
 
     Any quote of the account can become a project: its document exists from the
-    moment it does, so there is nothing to generate first.
+    moment it does, so there is nothing to generate first. The quote is read
+    again with its row locked, so a second request —a double click, a retry or
+    a concurrent one that waited on the lock— finds it already in a project;
+    a race that skipped the lock still hits the one-to-one ``Project.quote``
+    (409). SEC-03.2, iteracion-26 #20.
 
     Raises:
         ValidationError: quote not owned, or it already has a project.
     """
-    if quote.owner_id != owner.id:
+    locked = (
+        quotes_of(owner=owner)
+        .select_for_update(of=("self",))
+        .filter(pk=quote.pk)
+        .first()
+    )
+    if locked is None:
         raise ValidationError("Cotización no encontrada.")
-    if Project.objects.filter(quote=quote).exists():
-        raise ValidationError("Esta cotización ya tiene un proyecto asociado")
+    QUOTE_TRANSITIONS.check(
+        locked.status, Quote.Status.IN_PROJECT, message=ALREADY_A_PROJECT
+    )
+    if Project.objects.filter(quote=locked).exists():
+        raise ValidationError(ALREADY_A_PROJECT)
 
-    with transaction.atomic():
-        project = Project.objects.create(
-            owner=owner,
-            quote=quote,
-            folio=assign_folio(owner=owner, document_type=DocumentType.PROJECT),
-        )
-        quote.status = Quote.Status.IN_PROJECT
-        quote.save(update_fields=["status", "updated_at"])
+    project = Project.objects.create(
+        owner=owner,
+        quote=locked,
+        folio=assign_folio(owner=owner, document_type=DocumentType.PROJECT),
+    )
+    locked.status = Quote.Status.IN_PROJECT
+    locked.save(update_fields=["status", "updated_at"])
+    quote.status = locked.status  # quien la pasó la ve como quedó
     logger.info("Project started", extra={"project_id": str(project.pk)})
     return project
 
 
-def _ensure_open(project: Project) -> None:
-    """Un proyecto finalizado ya no cambia: ni avances ni fotos."""
-    if project.status == Project.Status.FINISHED:
-        raise ValidationError("El proyecto está finalizado")
+def lock_project(project: Project) -> Project:
+    """El proyecto releído de su cuenta, con su fila bloqueada hasta el final.
+
+    Lo que cambia bajo un proyecto —sus avances, sus fotos, sus pagos, su
+    reparto— se cuenta y se revisa con él bloqueado: dos peticiones a la vez
+    se forman, y lo que una ve ya incluye lo que hizo la otra. Va dentro de
+    una transacción (SEC-03, iteracion-26 #20).
+    """
+    return (
+        projects_of(owner=project.owner_id)
+        .select_for_update(of=("self",))
+        .get(pk=project.pk)
+    )
+
+
+def lock_open_project(project: Project) -> Project:
+    """El proyecto bloqueado y releído, si sigue en curso.
+
+    Raises:
+        ValidationError: está finalizado, aunque la petición lo leyera abierto.
+    """
+    locked = lock_project(project)
+    PROJECT_TRANSITIONS.ensure_editable(locked, message=FINISHED)
+    return locked
 
 
 def _pending(quote_item: QuoteItem, *, excluding: Progress | None = None) -> Decimal:
@@ -112,7 +170,7 @@ def register_progress(
             advance that would exceed the pending quantity, a worker from another
             account or one with no agreed price; also if the project is finished.
     """
-    _ensure_open(project)
+    project = lock_open_project(project)
     if quote_item.quote_id != project.quote_id:
         raise ValidationError("La partida no pertenece a este proyecto.")
     _check_quantity(quantity, pending=_pending(quote_item))
@@ -150,8 +208,7 @@ def update_progress(
         ValidationError: proyecto finalizado, cantidad no positiva o que
             supera lo que queda de la partida, o una persona sin precio dicho.
     """
-    project = progress.project
-    _ensure_open(project)
+    project = lock_open_project(progress.project)
     fields = ["updated_at"]
 
     if quantity is not None:
@@ -194,13 +251,14 @@ def delete_progress(*, progress: Progress) -> None:
     Raises:
         ValidationError: el proyecto está finalizado.
     """
-    _ensure_open(progress.project)
+    lock_open_project(progress.project)
     _drop_files(progress.evidences.all())
     progress_id = str(progress.pk)
     progress.delete()
     logger.info("Progress deleted", extra={"progress_id": progress_id})
 
 
+@transaction.atomic
 def add_evidence(*, progress: Progress, image) -> Evidence:
     """Attach an image to a progress entry, whenever it arrives.
 
@@ -208,12 +266,13 @@ def add_evidence(*, progress: Progress, image) -> Evidence:
         ValidationError: the project is finished, the file is not an image or
             it exceeds the size limit.
     """
-    _ensure_open(progress.project)
+    lock_open_project(progress.project)
     # Por su contenido, no por el tipo que dice el navegador (iteracion-12).
     ext = validate_upload(
         image,
         allowed=IMAGES,
-        max_bytes=MAX_IMAGE_BYTES,
+        # El tope de la API: cabe en el cuerpo de Vercel (antes 5 MB, iteracion-26 #19).
+        max_bytes=settings.UPLOAD_MAX_BYTES,
         max_pixels=MAX_IMAGE_PIXELS,
         too_big="La imagen supera el tamaño máximo permitido",
         not_allowed="Solo se permiten archivos de imagen",
@@ -229,7 +288,7 @@ def delete_evidence(*, evidence: Evidence) -> None:
     Raises:
         ValidationError: el proyecto está finalizado.
     """
-    _ensure_open(evidence.progress.project)
+    lock_open_project(evidence.progress.project)
     _drop_files([evidence])
     evidence.delete()
 
@@ -265,11 +324,14 @@ def build_project_summary(*, project: Project) -> dict:
     }
 
 
+@transaction.atomic
 def finalize_project(*, project: Project, confirm: bool = False) -> dict:
     """Finalize a project and produce its summary document.
 
     If a pending balance remains and the caller has not confirmed, the project is
-    left open and a warning is raised (the client must confirm explicitly).
+    left open and a warning is raised (the client must confirm explicitly). The
+    project is read again with its row locked: one finished meanwhile is not
+    finished twice, and no progress or payment enters it while it closes.
 
     Raises:
         ValidationError: project already finished, or pending balance without
@@ -277,8 +339,12 @@ def finalize_project(*, project: Project, confirm: bool = False) -> dict:
     """
     from apps.payments.services import pending_balance
 
-    if project.status == Project.Status.FINISHED:
-        raise ValidationError("El proyecto ya está finalizado")
+    project = lock_project(project)
+    PROJECT_TRANSITIONS.check(
+        project.status,
+        Project.Status.FINISHED,
+        message="El proyecto ya está finalizado",
+    )
 
     pending = pending_balance(project)
     if pending > 0 and not confirm:

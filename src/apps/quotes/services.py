@@ -12,8 +12,42 @@ from apps.folios.codes import DocumentType
 from apps.folios.services import assign_folio
 from apps.planner.models import Plan
 from apps.quotes.models import DEFAULT_VALIDITY_DAYS, Quote, QuoteItem, QuoteItemRoom
+from apps.quotes.selectors import quotes_of
+from common.state_machine import Transitions, register
 
 logger = logging.getLogger("apps")
+
+#: Una cotización es borrador hasta que se vuelve proyecto, y de ahí ya no sale:
+#: hay avances medidos contra ella (SEC-03.1, iteracion-26 #20). El paso lo da
+#: ``apps.projects.services.start_project``.
+QUOTE_TRANSITIONS = register(
+    Quote,
+    Transitions(
+        field="status",
+        allowed={
+            Quote.Status.DRAFT: frozenset({Quote.Status.IN_PROJECT}),
+            Quote.Status.IN_PROJECT: frozenset(),
+        },
+        terminal=frozenset({Quote.Status.IN_PROJECT}),
+    ),
+)
+
+#: Por qué no se edita una cotización que ya es proyecto.
+IN_PROJECT_NOT_EDITABLE = (
+    "La cotización ya es un proyecto en marcha; no se puede modificar"
+)
+
+
+def lock_quote(*, quote: Quote) -> Quote:
+    """La cotización releída de su cuenta, con su fila bloqueada hasta el final.
+
+    Lo que se revisa es lo que hay ahora, no lo que la petición leyó antes: si
+    otra la volvió proyecto mientras tanto, se ve aquí (SEC-03). Va dentro de
+    una transacción.
+    """
+    return (
+        quotes_of(owner=quote.owner_id).select_for_update(of=("self",)).get(pk=quote.pk)
+    )
 
 
 def _ensure_owned(
@@ -138,10 +172,8 @@ def update_quote(
     Raises:
         ValidationError: the quote is already a project.
     """
-    if quote.status == Quote.Status.IN_PROJECT:
-        raise ValidationError(
-            "La cotización ya es un proyecto en marcha; no se puede modificar"
-        )
+    quote = lock_quote(quote=quote)
+    QUOTE_TRANSITIONS.ensure_editable(quote, message=IN_PROJECT_NOT_EDITABLE)
     _ensure_owned(owner=quote.owner, client=client, items_data=items_data)
     quote.client = client
     fields = ["client", "updated_at"]
@@ -192,10 +224,13 @@ def sync_quote_with_plan(*, quote: Quote, plan: Plan, items_data: list[dict]) ->
     Raises:
         ValidationError: the quote is already a project, which does not change.
     """
-    if quote.status == Quote.Status.IN_PROJECT:
-        raise ValidationError(
+    quote = lock_quote(quote=quote)
+    QUOTE_TRANSITIONS.ensure_editable(
+        quote,
+        message=(
             "La cotización ya es un proyecto en marcha; crea una nueva desde el plano"
-        )
+        ),
+    )
     _ensure_owned(owner=quote.owner, client=None, items_data=items_data, plan=plan)
 
     current = {item.tariff_id: item for item in quote.items.filter(from_plan=True)}
@@ -240,8 +275,11 @@ def delete_quote(*, quote: Quote) -> None:
     # Import local: los proyectos conocen las cotizaciones, no al revés.
     from apps.projects.models import Project
 
+    in_project = "No se puede borrar: la cotización ya es un proyecto."
+    quote = lock_quote(quote=quote)
+    QUOTE_TRANSITIONS.ensure_editable(quote, message=in_project)
     if Project.objects.filter(quote=quote).exists():
-        raise ValidationError("No se puede borrar: la cotización ya es un proyecto.")
+        raise ValidationError(in_project)
 
     unique_ids = list(
         quote.items.filter(tariff__in_catalog=False).values_list("tariff_id", flat=True)

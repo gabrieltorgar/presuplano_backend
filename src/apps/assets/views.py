@@ -1,9 +1,8 @@
 """Assets views: los binarios del editor y el catálogo de mobiliario."""
 
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -23,21 +22,23 @@ from apps.assets.serializers import (
 from apps.assets.services import remove_models, store_asset, store_models
 from apps.team.tenancy import account_of
 from common.pagination import DefaultPagination
+from common.permissions import IsVerifiedUser
+from common.views import TenantReadOnlyModelViewSet, TenantViewSet
 
 
-class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
+class PlanAssetViewSet(TenantReadOnlyModelViewSet):
     """Los binarios del editor de la cuenta: listarlos, subirlos y cotejarlos."""
 
     serializer_class = PlanAssetSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas —el dispositivo las recorre—, por
     # clase y por ruta.
     filterset_class = PlanAssetFilter
     search_fields = ("path",)
     ordering_fields = ("path", "created_at")
     ordering = ("path", "id")
-    # El binario llega como formulario; el cotejo de rutas, como JSON.
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    # El binario llega como multipart; el cotejo de rutas, como JSON.
+    parser_classes = [MultiPartParser, JSONParser]
 
     def get_queryset(self):
         return list_assets_for_owner(owner=account_of(self.request))
@@ -54,7 +55,7 @@ class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], parser_classes=[JSONParser])
     def missing(self, request: Request) -> Response:
         """De estas rutas, las que la cuenta todavía no tiene."""
         serializer = MissingPathsSerializer(data=request.data)
@@ -68,14 +69,14 @@ class PlanAssetViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class CatalogModelViewSet(viewsets.ViewSet):
+class CatalogModelViewSet(TenantViewSet):
     """El catálogo de mobiliario de la cuenta: leerlo, guardarlo y quitar fichas.
 
     Las fichas van y vienen tal como las escribe el editor, en lote: una
     biblioteca trae decenas de piezas y se importa de una sola vez.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsVerifiedUser]
 
     def list(self, request: Request) -> Response:
         """Las fichas que tiene la cuenta, por páginas (iteracion-17).

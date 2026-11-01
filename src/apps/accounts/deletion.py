@@ -28,6 +28,7 @@ from apps.planner.models import Plan
 from apps.projects.models import Evidence, Project
 from apps.quotes.models import Quote
 from apps.staff.models import Worker, WorkerPayment
+from common.tenancy import set_tenant_context
 
 logger = logging.getLogger("apps")
 
@@ -83,9 +84,15 @@ def _remove(files: list[tuple[object, str]]) -> None:
 def purge_account(*, user: User) -> dict[str, int]:
     """Borra la cuenta y todo lo suyo. No se puede deshacer.
 
+    Con la RLS (iteracion-26 #22) se ve sólo la empresa del contexto: purga con
+    el de la propia cuenta aunque se pida trabajando en otra empresa o desde el
+    admin, o no vería sus filas y borrar la cuenta chocaría con ellas. El
+    contexto queda así hasta el fin de la transacción.
+
     Returns:
         Cuántas filas y archivos se borraron, para el registro.
     """
+    set_tenant_context(company_id=user.pk)
     files = _files_of(user)
     user_id = str(user.pk)
 

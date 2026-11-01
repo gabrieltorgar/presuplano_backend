@@ -14,13 +14,14 @@ from pathlib import Path
 from urllib.error import URLError
 
 import pytest
+from django.core.checks import run_checks
 from rest_framework import status
 
 import core.settings as core_settings
 from apps.accounts.models import User
 from apps.leads.models import Lead
 from apps.legal.tests.consent import accepted
-from common import recaptcha
+from common import checks, recaptcha
 from common.recaptcha import CaptchaUnavailable, verify_recaptcha
 
 HUMANO = {
@@ -109,35 +110,160 @@ class TestVerificarConGoogle:
             recaptcha._siteverify(token="t", remote_ip=None)
 
 
-class TestEncendidoConLaLlave:
-    """Sin llave secreta no se verifica: así no se cierra la puerta sin llaves."""
+SRC = Path(core_settings.__file__).resolve().parents[1]
 
-    def test_it_follows_the_secret_key(self) -> None:
+
+def _settings_en(entorno: dict[str, str], leer: str) -> str:
+    """Lo que ``core.settings`` vale en un intérprete limpio con ese entorno."""
+    base = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"DEBUG", "VERCEL", "VERCEL_ENV"} and not k.startswith("RECAPTCHA_")
+    }
+    salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
+        [sys.executable, "-c", f"from django.conf import settings as s; print({leer})"],
+        cwd=SRC,
+        env={**base, "DJANGO_SETTINGS_MODULE": "core.settings", **entorno},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return salida.stdout.strip()
+
+
+class TestEncendidoFueraDeDebug:
+    """BOT-01 · iteracion-26 #17: fuera de DEBUG se verifica, con llave o sin ella.
+
+    Antes seguía a la llave secreta: un despliegue sin llaves dejaba los cinco
+    formularios públicos sólo con el campo trampa, y nada lo decía.
+    """
+
+    def test_with_debug_it_follows_the_secret_key(self) -> None:
+        """La suite corre con DEBUG: en local, sin llave no hay a quién preguntar."""
+        assert core_settings.DEBUG is True
         assert core_settings.RECAPTCHA_ENABLED is bool(
             core_settings.RECAPTCHA_SECRET_KEY
         )
 
-
-class TestDominioDeLaMarca:
-    """Sin RECAPTCHA_HOSTNAMES configurada, se acepta el dominio de Itzaka."""
-
-    def test_the_default_hostnames_are_the_brand_domain(self) -> None:
-        entorno = {k: v for k, v in os.environ.items() if k != "RECAPTCHA_HOSTNAMES"}
-        entorno["DJANGO_SETTINGS_MODULE"] = "core.settings"
-        salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
-            [
-                sys.executable,
-                "-c",
-                "from django.conf import settings as s; print(*s.RECAPTCHA_HOSTNAMES)",
-            ],
-            cwd=Path(core_settings.__file__).resolve().parents[1],
-            env=entorno,
-            capture_output=True,
-            text=True,
-            check=True,
+    def test_production_turns_it_on_even_without_the_key(self) -> None:
+        """BOT-01 · un despliegue Production de Vercel (VERCEL=1, sin DEBUG)."""
+        valor = _settings_en(
+            {"VERCEL": "1", "VERCEL_ENV": "production"},
+            "s.DEBUG, s.RECAPTCHA_ENABLED, *s.RECAPTCHA_HOSTNAMES",
         )
 
-        assert salida.stdout.split() == ["itzaka.grupotorresmucino.com", "localhost"]
+        assert valor.split() == ["False", "True", "itzaka.com"]
+
+    def test_the_variable_still_wins(self) -> None:
+        """develop sin llaves puede apagarlo a propósito; producción no (E004)."""
+        valor = _settings_en(
+            {"VERCEL": "1", "VERCEL_ENV": "preview", "RECAPTCHA_ENABLED": "False"},
+            "s.RECAPTCHA_ENABLED",
+        )
+
+        assert valor == "False"
+
+
+class TestDominioDeLaMarca:
+    """Sin RECAPTCHA_HOSTNAMES, el dominio de Itzaka; ``localhost`` sólo con DEBUG."""
+
+    @pytest.mark.parametrize(
+        ("entorno", "esperado"),
+        [
+            ({"VERCEL": "1"}, ["itzaka.com"]),
+            ({"DEBUG": "True"}, ["localhost"]),
+        ],
+        ids=["sin-debug", "con-debug"],
+    )
+    def test_the_default_hostnames_are_the_brand_domain(
+        self, entorno, esperado
+    ) -> None:
+        valor = _settings_en(entorno, "*s.RECAPTCHA_HOSTNAMES")
+
+        assert valor.split() == esperado
+
+    def test_develop_sets_its_own(self) -> None:
+        valor = _settings_en(
+            {"VERCEL": "1", "RECAPTCHA_HOSTNAMES": "dev.itzaka.com"},
+            "*s.RECAPTCHA_HOSTNAMES",
+        )
+
+        assert valor.split() == ["dev.itzaka.com"]
+
+
+class TestProduccionNoSaleSinCaptcha:
+    """BOT-01 · iteracion-26 #17: producción no despliega sin reCAPTCHA.
+
+    Como el correo (common.E001): el chequeo corre con ``migrate``, que es parte
+    del build de Vercel, y la versión anterior sigue atendiendo.
+    """
+
+    @pytest.fixture
+    def produccion(self, monkeypatch, settings):
+        monkeypatch.setenv("VERCEL_ENV", "production")
+        settings.RECAPTCHA_SECRET_KEY = "secreta"
+        settings.RECAPTCHA_ENABLED = True
+
+    def test_without_the_secret_key_production_does_not_deploy(
+        self, produccion, settings
+    ) -> None:
+        settings.RECAPTCHA_SECRET_KEY = ""
+
+        errores = checks.recaptcha_in_production(None)
+
+        assert [error.id for error in errores] == ["common.E003"]
+        assert "RECAPTCHA_SECRET_KEY" in errores[0].msg
+        assert "VITE_RECAPTCHA_SITE_KEY" in errores[0].hint
+
+    def test_with_it_turned_off_production_does_not_deploy(
+        self, produccion, settings
+    ) -> None:
+        settings.RECAPTCHA_ENABLED = False
+
+        errores = checks.recaptcha_in_production(None)
+
+        assert [error.id for error in errores] == ["common.E004"]
+        assert "RECAPTCHA_ENABLED" in errores[0].msg
+
+    def test_with_the_key_and_on_production_deploys(self, produccion) -> None:
+        assert checks.recaptcha_in_production(None) == []
+
+    @pytest.mark.parametrize("vercel_env", ["preview", "development", ""])
+    def test_outside_production_it_is_not_required(
+        self, monkeypatch, settings, vercel_env
+    ) -> None:
+        monkeypatch.setenv("VERCEL_ENV", vercel_env)
+        settings.RECAPTCHA_SECRET_KEY = ""
+        settings.RECAPTCHA_ENABLED = False
+
+        assert checks.recaptcha_in_production(None) == []
+
+    def test_the_check_is_registered(self, produccion, settings) -> None:
+        settings.RECAPTCHA_SECRET_KEY = ""
+
+        ids = {error.id for error in run_checks(tags=["security"])}
+
+        assert "common.E003" in ids
+
+    def test_the_build_stops_without_the_keys(self) -> None:
+        """Lo que corre el build (``migrate`` llama a los chequeos): sale con error."""
+        base = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"DEBUG", "VERCEL", "VERCEL_ENV"}
+            and not k.startswith("RECAPTCHA_")
+        }
+        salida = subprocess.run(  # noqa: S603 -- el mismo intérprete, sin shell
+            [sys.executable, "manage.py", "check", "--tag", "security"],
+            cwd=SRC,
+            env={**base, "VERCEL": "1", "VERCEL_ENV": "production"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert salida.returncode != 0
+        assert "common.E003" in salida.stderr
 
 
 REGISTRO = {

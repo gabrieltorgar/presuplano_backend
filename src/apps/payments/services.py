@@ -11,6 +11,7 @@ from apps.folios.services import assign_folio
 from apps.payments.models import Payment
 from apps.projects.models import Project
 from apps.projects.selectors import advanced_value, quoted_value
+from apps.projects.services import lock_open_project
 
 logger = logging.getLogger("apps")
 
@@ -57,8 +58,9 @@ def register_payment(
     """
     if project.owner_id != owner.id:
         raise ValidationError("Proyecto no encontrado.")
-    if project.status == Project.Status.FINISHED:
-        raise ValidationError("El proyecto está finalizado")
+    # Releído y bloqueado: uno finalizado mientras tanto no recibe el pago
+    # (SEC-03, iteracion-26 #20).
+    project = lock_open_project(project)
     if amount <= 0:
         raise ValidationError("El monto del pago debe ser mayor a 0")
 
