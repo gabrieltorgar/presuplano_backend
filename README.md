@@ -362,6 +362,10 @@ arriba con `?ordering=-date,-created_at`); el detalle
 `progresses`. Los cobros de un proyecto son `GET /api/payments/?project=<id>`;
 su resumen, `GET /api/payments/summary/?project=<id>`, trae solo las cifras
 (cotizado, avanzado, pagado, por cobrar y saldo a favor) y el cliente, sin
+`payments`. Los pagos a una persona del personal son
+`GET /api/worker-payments/?worker=<id>` (con `&project=<id>`, los de una
+obra); su resumen, `GET /api/worker-payments/summary/?worker=<id>`, trae su
+nombre y sus cifras (repartido, ejecutado, pagado, saldo y anticipo), sin
 `payments`. Lo que necesita la lista entera, como el documento de estado
 del proyecto, la recorre página por página siguiendo `next`.
 
