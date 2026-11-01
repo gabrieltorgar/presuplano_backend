@@ -346,9 +346,11 @@ class TestAccrualAndPayment:
         resumen = authenticated_client.get(
             f"{WORKER_PAYMENTS_URL}summary/", {"worker": str(juan.id)}
         )
+        # Sus pagos, por páginas en su propio endpoint (iteracion-28 #18).
+        pagos = authenticated_client.get(WORKER_PAYMENTS_URL, {"worker": str(juan.id)})
         assert Decimal(resumen.data["total_paid"]) == Decimal("2500.00")
         assert Decimal(resumen.data["balance"]) == Decimal("3500.00")
-        assert len(resumen.data["payments"]) == 1
+        assert pagos.data["count"] == 1
 
     def test_a_payment_can_be_general(self, authenticated_client, user) -> None:
         """Caso alternativo - Un pago de la semana no es de un proyecto."""

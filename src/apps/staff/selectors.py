@@ -113,16 +113,12 @@ def list_assignments_for_owner(
     return queryset
 
 
-def list_worker_payments_for_owner(
-    *, owner, worker_id: str | None = None, project_id: str | None = None
-) -> QuerySet[WorkerPayment]:
-    """Return the owner's payments to staff, filtered as asked."""
-    queryset = WorkerPayment.objects.filter(owner=owner).select_related("worker")
-    if worker_id:
-        queryset = queryset.filter(worker_id=worker_id)
-    if project_id:
-        queryset = queryset.filter(project_id=project_id)
-    return queryset
+def list_worker_payments_for_owner(*, owner) -> QuerySet[WorkerPayment]:
+    """Return the owner's payments to staff, with who was paid (no N+1).
+
+    The list narrows them with ``?worker=`` and ``?project=``.
+    """
+    return WorkerPayment.objects.filter(owner=owner).select_related("worker")
 
 
 def committed_value(worker: Worker, *, project_id: str | None = None) -> Decimal:

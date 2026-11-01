@@ -29,7 +29,9 @@ class PaymentViewSet(TenantReadOnlyModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas, ``?project=`` y en orden de fecha.
-    # Sin búsqueda: se piden los de un proyecto, no se buscan.
+    # Sin búsqueda: se piden los de un proyecto, no se buscan. Desde
+    # iteracion-28 (#17) es donde «Cobros» y el documento de estado leen los
+    # pagos de un proyecto: el resumen ya no los trae.
     filterset_class = PaymentFilter
     search_fields = ()
     ordering_fields = ("date", "amount", "created_at")
@@ -59,10 +61,12 @@ class PaymentViewSet(TenantReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"])
     def summary(self, request: Request) -> Response:
+        """Las cifras de cobros de un proyecto (US-20), sin sus pagos.
+
+        Los pagos se piden por páginas a ``GET /api/payments/?project=``
+        (iteracion-28 #17): antes llegaban todos aquí.
+        """
         project = self._get_project()
-        payments = list_payments_for_owner(
-            owner=account_of(request), project_id=project.id
-        )
         return Response(
             {
                 "advanced_value": advanced_value(project),
@@ -71,11 +75,11 @@ class PaymentViewSet(TenantReadOnlyModelViewSet):
                 "pending_balance": receivable_balance(project),
                 "credit_balance": credit_balance(project),
                 "client_name": project.quote.client.name,
-                "payments": PaymentSerializer(payments, many=True).data,
             }
         )
 
     @action(detail=False, methods=["get"])
     def voucher(self, request: Request) -> Response:
+        """El comprobante del último pago: un pago, nunca una lista."""
         project = self._get_project()
         return Response(build_voucher(project=project))

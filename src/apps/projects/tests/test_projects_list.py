@@ -111,14 +111,21 @@ class TestLaListaDeProyectos:
     def test_abrir_un_proyecto_pide_solo_ese_proyecto(
         self, user, authenticated_client
     ) -> None:
-        """Cambio iteracion-17 - Abrir un proyecto pide solo ese proyecto."""
+        """Cambio iteracion-17 - Abrir un proyecto pide solo ese proyecto.
+
+        Sus avances, a su propia lista por páginas (iteracion-28 #16).
+        """
         project = obra(user, cliente="Reyes", avanzado="3")
 
         response = authenticated_client.get(f"{URL}{project.id}/")
+        progresses = authenticated_client.get(
+            "/api/progresses/", {"project": str(project.id)}
+        )
 
         assert response.data["client_name"] == "Reyes"
         assert len(response.data["items"]) == 1
-        assert len(response.data["progresses"]) == 1
+        assert "progresses" not in response.data
+        assert progresses.data["count"] == 1
 
     def test_el_de_otra_cuenta_no_aparece(
         self, user, authenticated_client, user_factory

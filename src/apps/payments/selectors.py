@@ -6,14 +6,9 @@ from apps.payments.models import Payment
 from apps.projects.models import Project
 
 
-def list_payments_for_owner(
-    *, owner, project_id: str | None = None
-) -> QuerySet[Payment]:
-    """Return the owner's payments, optionally filtered by project."""
-    queryset = Payment.objects.filter(owner=owner)
-    if project_id:
-        queryset = queryset.filter(project_id=project_id)
-    return queryset
+def list_payments_for_owner(*, owner) -> QuerySet[Payment]:
+    """Return the owner's payments; the list narrows them with ``?project=``."""
+    return Payment.objects.filter(owner=owner)
 
 
 def get_owned_project(*, owner, project_id: str | None) -> Project | None:
