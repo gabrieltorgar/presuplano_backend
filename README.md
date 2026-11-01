@@ -353,6 +353,22 @@ con lista blanca y desempate por id). Las acciones sobre varios registros son
 `{"select_all": true, "exclude_ids": [...]}` más la query string de la lista, y
 responden `{requested, processed, failed}` (`common/bulk.py`).
 
+Lo que crece con el uso nunca llega dentro de otra respuesta: se pide por
+páginas a su propia lista (desde la 7.0.0, iteracion-28; el frontend anterior
+no lo lee). Los avances de un proyecto, con su servicio, quién lo hizo y sus
+fotos en cada fila, son `GET /api/progresses/?project=<id>` (el más reciente
+arriba con `?ordering=-date,-created_at`); el detalle
+`GET /api/projects/{id}/` trae el proyecto, sus cifras y sus partidas, sin
+`progresses`. Los cobros de un proyecto son `GET /api/payments/?project=<id>`;
+su resumen, `GET /api/payments/summary/?project=<id>`, trae solo las cifras
+(cotizado, avanzado, pagado, por cobrar y saldo a favor) y el cliente, sin
+`payments`. Los pagos a una persona del personal son
+`GET /api/worker-payments/?worker=<id>` (con `&project=<id>`, los de una
+obra); su resumen, `GET /api/worker-payments/summary/?worker=<id>`, trae su
+nombre y sus cifras (repartido, ejecutado, pagado, saldo y anticipo), sin
+`payments`. Lo que necesita la lista entera, como el documento de estado
+del proyecto, la recorre página por página siguiendo `next`.
+
 Estados, importes y dueño nunca los escribe el cliente: van de solo lectura en
 cada serializer (y lo que el cuerpo mande de más se ignora), los importes los
 calcula el servidor (el total y los subtotales de una cotización, lo ganado y

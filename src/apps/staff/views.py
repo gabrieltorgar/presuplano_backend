@@ -126,7 +126,8 @@ class WorkerPaymentViewSet(TenantReadOnlyModelViewSet):
     serializer_class = WorkerPaymentSerializer
     permission_classes = [IsVerifiedUser]
     # La lista (iteracion-17): por páginas, ``?worker=`` y ``?project=``, en
-    # orden de fecha.
+    # orden de fecha. Desde iteracion-28 (#18) es donde el panel de una persona
+    # lee sus pagos: el resumen ya no los trae.
     filterset_class = WorkerPaymentFilter
     search_fields = ("worker__name", "note")
     ordering_fields = ("date", "amount", "created_at")
@@ -147,20 +148,20 @@ class WorkerPaymentViewSet(TenantReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"])
     def summary(self, request: Request) -> Response:
-        """Las cuatro cifras de una persona, con sus pagos."""
+        """Las cuatro cifras de una persona y su anticipo, sin sus pagos.
+
+        Los pagos se piden por páginas a ``GET /api/worker-payments/?worker=``
+        (y ``&project=``), iteracion-28 #18: antes llegaban todos aquí.
+        """
         worker_id = request.query_params.get("worker")
         worker = get_owned_worker(owner=account_of(request), worker_id=worker_id)
         if worker is None:
             raise NotFound("Personal no encontrado.")
 
         project_id = request.query_params.get("project")
-        payments = list_worker_payments_for_owner(
-            owner=account_of(request), worker_id=worker_id, project_id=project_id
-        )
         return Response(
             {
                 "worker_name": worker.name,
                 **worker_totals(worker, project_id=project_id),
-                "payments": WorkerPaymentSerializer(payments, many=True).data,
             }
         )
