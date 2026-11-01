@@ -42,7 +42,8 @@ def worker_who_does(user, item, price: str, name: str = "Juan Pérez"):
 
 @pytest.mark.django_db
 class TestProgressHistoryIsReadable:
-    """US-113: el proyecto trae cada avance con lo necesario para mostrarlo."""
+    """US-113: la lista de avances del proyecto trae cada uno con lo necesario
+    para mostrarlo (iteracion-28 #16: por páginas, ya no dentro del proyecto)."""
 
     def test_each_progress_says_what_who_and_how_much(
         self, authenticated_client, user
@@ -52,9 +53,11 @@ class TestProgressHistoryIsReadable:
         worker = worker_who_does(user, muro, "90")
         entry = advance(project, muro, "4", worker=worker)
 
-        response = authenticated_client.get(f"{PROJECTS_URL}{project.id}/")
+        response = authenticated_client.get(
+            PROGRESSES_URL, {"project": str(project.id)}
+        )
 
-        [row] = response.data["progresses"]
+        [row] = response.json()["results"]
         assert row["id"] == str(entry.id)
         assert row["quote_item"] == str(muro.id)
         assert row["item"] == "Muro de tablaroca"
@@ -68,15 +71,17 @@ class TestProgressHistoryIsReadable:
     def test_each_progress_brings_its_photos(
         self, authenticated_client, user, settings, tmp_path
     ) -> None:
-        """US-16 - Las fotos de un avance vuelven con el proyecto."""
+        """US-16 - Las fotos de un avance vuelven con su avance."""
         settings.MEDIA_ROOT = str(tmp_path)
         project, muro, _zocalo = make_project(user)
         entry = advance(project, muro, "4")
         photo = add_evidence(progress=entry, image=png_file("obra.png"))
 
-        response = authenticated_client.get(f"{PROJECTS_URL}{project.id}/")
+        response = authenticated_client.get(
+            PROGRESSES_URL, {"project": str(project.id)}
+        )
 
-        [shot] = response.data["progresses"][0]["evidence"]
+        [shot] = response.data["results"][0]["evidence"]
         assert shot["id"] == str(photo.id)
         assert shot["image"].startswith("http")
         assert shot["image"].endswith(".png")

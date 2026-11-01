@@ -10,12 +10,14 @@ from apps.projects.filters import ProgressFilter, ProjectFilter
 from apps.projects.selectors import (
     evidences_for_owner,
     list_projects_for_owner,
+    progress_rows_for_owner,
     progresses_for_owner,
     project_rows_for_owner,
 )
 from apps.projects.serializers import (
     EvidenceSerializer,
     ProgressInputSerializer,
+    ProgressRowSerializer,
     ProgressSerializer,
     ProgressUpdateSerializer,
     ProjectListSerializer,
@@ -42,7 +44,8 @@ class ProjectViewSet(TenantReadOnlyModelViewSet):
     The list (US-67, iteracion-17) brings rows without progress entries or
     photos: ``?status=a,b`` and ``?id=a,b``; searches by client; orders by
     progress, quoted value or client, least progress first by default. Each
-    project is asked for on its own, with everything its screen shows.
+    project is asked for on its own, with its values and lines; its progress
+    entries come by pages from ``/api/progresses/?project=`` (iteracion-28 #16).
     """
 
     serializer_class = ProjectSerializer
@@ -103,19 +106,33 @@ class ProjectViewSet(TenantReadOnlyModelViewSet):
 
 
 class ProgressViewSet(TenantReadOnlyModelViewSet):
-    """Retrieve, correct or delete a progress entry; attach its photos."""
+    """List, retrieve, correct or delete progress entries; attach their photos.
+
+    La lista (iteracion-17): por páginas, por proyecto, partida o persona, y en
+    el orden en que se trabajó. Desde iteracion-28 (#16) los avances de un
+    proyecto se leen aquí y ya no en su detalle: cada fila trae lo que pinta
+    «Avances registrados» (US-113), que la pide con
+    ``?ordering=-date,-created_at`` (el más reciente arriba), y el documento de
+    estado (US-23) la recorre página por página en el orden por omisión.
+    """
 
     serializer_class = ProgressSerializer
     permission_classes = [IsVerifiedUser]
-    # La lista (iteracion-17): por páginas, por proyecto, partida o persona, y en
-    # el orden en que se trabajó.
     filterset_class = ProgressFilter
     search_fields = ("quote_item__name", "worker__name")
     ordering_fields = ("date", "quantity", "created_at")
     ordering = ("date", "created_at", "id")
 
     def get_queryset(self):
-        return progresses_for_owner(owner=account_of(self.request))
+        owner = account_of(self.request)
+        if self.action in ("list", "retrieve"):
+            return progress_rows_for_owner(owner=owner)
+        return progresses_for_owner(owner=owner)
+
+    def get_serializer_class(self):
+        if self.action in ("list", "retrieve"):
+            return ProgressRowSerializer
+        return ProgressSerializer
 
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
         progress = self.get_object()
